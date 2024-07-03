@@ -1,1 +1,1 @@
-from poulet_py.session.logger import SessionLogger
+from poulet_py.utils.logger import SessionLogger

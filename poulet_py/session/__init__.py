@@ -1,1 +1,0 @@
-from poulet_py.session.logger import SessionLogger

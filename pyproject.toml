@@ -58,9 +58,28 @@ testing = [
 ]
 hardware = [
 "pypylon>=3.0.1,<=4.0.0",
+"opencv-python==4.9.0.80",
+"numpy==1.26.4",
+"scipy==1.13.1",
+"matplotlib==3.9.0",
+"matplotlib-inline==0.1.7",
+"h5py==3.11.0",
+"keyboard==0.13.5"
 ]
+
+tools = [
+
+]
+
+utils = [
+"pandas==2.2.2",
+]
+
+
 all = [
 "poulet_py[hardware]",
+"poulet_py[tools]",
+"poulet_py[utils]"
 ]
 
 [tool.hatch.envs.default.scripts]
