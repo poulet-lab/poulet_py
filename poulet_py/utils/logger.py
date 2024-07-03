@@ -528,6 +528,8 @@ class SessionLogger:
         [new_subject.update({"weight": ""}) for new_subject in new_subjects]
         [new_subject.update({"notes": ""}) for new_subject in new_subjects]
         [new_subject.update({"repository": ""}) for new_subject in new_subjects]
+        [new_subject.update({"active": True}) for new_subject in new_subjects]
+        [new_subject.update({"logged_out": False}) for new_subject in new_subjects]
 
         # Append new subjects to the CSV
         print(new_subjects)
