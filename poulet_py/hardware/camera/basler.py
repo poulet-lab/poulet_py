@@ -4,6 +4,7 @@ import os
 import time
 import csv
 import json
+import logging
 
 
 class BaslerCamera:
@@ -43,6 +44,15 @@ class BaslerCamera:
         self.frames_per_second = frames_per_second
         self.basler_camera.AcquisitionFrameRateEnable.SetValue(True)
         self.basler_camera.AcquisitionFrameRate.SetValue(self.frames_per_second)
+
+    def set_error_log_path(self, path, file_name):
+        """
+        Sets the path for the error log file.
+
+        Args:
+            path (str): The directory where the error log file will be saved.
+        """
+        self.error_log_file = os.path.join(path, file_name)
 
     def set_output_file(self, path, extra_name, base_file_name="basler-camera"):
         """
@@ -140,7 +150,7 @@ class BaslerCamera:
                 self.frame_number += 1
             grab_result.Release()
         except Exception as e:
-            print(f"Error during Basler capture: {e}")
+            self.log_error(e)
 
     def save_metadata(self):
         """
@@ -194,3 +204,15 @@ class BaslerCamera:
             grab_result.Release()
 
         cv2.destroyAllWindows()
+
+    @staticmethod
+    def log_error(self, error_message):
+        """
+        Logs an error message to the error log file.
+        """
+        if self.error_log_file is not None:
+            logging.error(error_message)
+        else:
+            print(f"An error occurred: {error_message}")
+            print("Set the error log file path to log the error with set_error_log_path().")
+        
