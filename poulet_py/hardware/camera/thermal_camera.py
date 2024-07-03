@@ -8,6 +8,7 @@ import matplotlib as mpl
 from datetime import datetime
 import time
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+
 try:
     import keyboard
 except ImportError:
@@ -26,10 +27,11 @@ import numpy as np
 import pythoncom
 import signal
 
+
 def py_frame_callback(frame, userptr):
     """
     Callback function to handle frames from the camera.
-    
+
     Args:
         frame: The frame data from the camera.
         userptr: User pointer.
@@ -57,7 +59,9 @@ if not platform.system() == "Windows":
 
     BUF_SIZE = 2
     q = Queue(BUF_SIZE)
-    PTR_PY_FRAME_CALLBACK = CFUNCTYPE(None, POINTER(uvc_frame), c_void_p)(py_frame_callback)
+    PTR_PY_FRAME_CALLBACK = CFUNCTYPE(None, POINTER(uvc_frame), c_void_p)(
+        py_frame_callback
+    )
     tiff_frame = 1
     colorMapType = 0
 
@@ -91,7 +95,6 @@ class ThermalCamera:
 
         print("Object thermal camera initialized")
         print(f"vminT = {self.vminT} and vmaxT = {self.vmaxT}")
-
 
     def start_streaming(self):
         global devh
@@ -170,7 +173,6 @@ class ThermalCamera:
                 print("Failed to Find Device")
                 exit(1)
 
-
     def set_timer(self, start_time):
         """
         Sets the timer for the camera.
@@ -180,8 +182,14 @@ class ThermalCamera:
         """
         self.start_time = start_time
 
-
-    def set_output_file(self, path, extra_name, base_file_name='thermal-camera', video_format='hdf5', png=False):
+    def set_output_file(
+        self,
+        path,
+        extra_name,
+        base_file_name="thermal-camera",
+        video_format="hdf5",
+        png=False,
+    ):
         """
         Sets the output file for recording the video.
 
@@ -196,7 +204,6 @@ class ThermalCamera:
         self.output_file_name = f"{base_file_name}_{extra_name}.{video_format}"
         self.output_path = os.path.join(path, self.output_file_name)
         self.png = png
-
 
     def set_shutter_manual(self):
         """
@@ -215,7 +222,6 @@ class ThermalCamera:
         finally:
             self.shutter_manual = True
 
-
     def perform_manual_ffc(self):
         """
         Performs a manual Flat Field Correction (FFC).
@@ -228,7 +234,6 @@ class ThermalCamera:
         else:
             perform_manual_ffc(devh)
             print_shutter_info(devh)
-
 
     def stop_streaming(self):
         """
@@ -245,8 +250,7 @@ class ThermalCamera:
             self.windows_camera.stop_streaming()
         else:
             libuvc.uvc_stop_streaminging(devh)
-    
-    
+
     def create_hdf5_file(self):
         """
         Creates an HDF5 file to store the thermal image data.
@@ -257,17 +261,16 @@ class ThermalCamera:
         else:
             assert False, "Invalid video format. Please set the video format to 'hdf5'."
 
-
     def capture_frame(self):
         """
         Captures a single frame from the thermal camera, converts it to Celsius,
         and writes it to the output file.
         """
 
-        #Warning if hdf5 file is not created
+        # Warning if hdf5 file is not created
         if self.video_format != "hdf5":
             assert False, "Invalid video format. Please set the video format to 'hdf5'."
-        
+
         if self.windows:
             thermal_image_kelvin_data = self.windows_camera.get_frame()
         else:
@@ -276,16 +279,17 @@ class ThermalCamera:
         if thermal_image_kelvin_data is not None:
             thermal_image_celsius_data = (thermal_image_kelvin_data - 27315) / 100
 
-            self.hpy_file.create_dataset((f"frame{self.frame_number}"), data = thermal_image_celsius_data)
+            self.hpy_file.create_dataset(
+                (f"frame{self.frame_number}"), data=thermal_image_celsius_data
+            )
 
             # get current time
             timestamp = time.time() - self.start_time
-            self.hpy_file.create_dataset((f"time{self.frame_number}"), data = [timestamp])
+            self.hpy_file.create_dataset((f"time{self.frame_number}"), data=[timestamp])
 
             self.frame_number += 1
         else:
             print("Thermal data is none")
-
 
     def grab_data_func(self, func, **kwargs):
         """
@@ -301,20 +305,20 @@ class ThermalCamera:
         """
         end = False
 
-        #Warning if hdf5 file is not created
+        # Warning if hdf5 file is not created
         if self.video_format != "hdf5":
             assert False, "Invalid video format. Please set the video format to 'hdf5'."
 
-        print('Starting to grab data')
+        print("Starting to grab data")
         try:
             while not end:
                 if self.windows:
                     thermal_image_kelvin_data = self.windows_camera.get_frame()
                 else:
-                    thermal_image_kelvin_data = q.get(True, 500) 
+                    thermal_image_kelvin_data = q.get(True, 500)
                 if thermal_image_kelvin_data is None:
                     print("Data is none")
-                    #make an empty frame
+                    # make an empty frame
                     thermal_image_celsius_data = np.zeros([120, 160])
 
                 thermal_image_celsius_data = (thermal_image_kelvin_data - 27315) / 100
@@ -324,7 +328,7 @@ class ThermalCamera:
                     hpy_file=self.hpy_file,
                     frame_number=self.frame_number,
                     cam=self,
-                    **kwargs
+                    **kwargs,
                 )
 
                 self.frame_number += 1
@@ -333,12 +337,11 @@ class ThermalCamera:
             print(e)
             self.stop_streaming()
 
-
     def plot_live(self):
         """
-            Method to plot the thermal camera as a 2-D raster (imshow, heatmap).
-            The min and max values of the heatmap are specified.
-            You can take a pic too.
+        Method to plot the thermal camera as a 2-D raster (imshow, heatmap).
+        The min and max values of the heatmap are specified.
+        You can take a pic too.
         """
         print('Press "r" to refresh the shutter.')
         print('Press "t" to take a thermal pic.')
@@ -354,8 +357,7 @@ class ThermalCamera:
         fig = plt.figure()
         ax = plt.axes()
         div = make_axes_locatable(ax)
-        cax = div.append_axes('right', '5%', '5%')
-
+        cax = div.append_axes("right", "5%", "5%")
 
         dummy = np.zeros([120, 160])
 
@@ -384,7 +386,7 @@ class ThermalCamera:
                     data = q.get(True, 500)
                 if data is None:
                     print("Data is none")
-                    #make an empty frame
+                    # make an empty frame
                     data = np.zeros([120, 160])
 
                 data = (data - 27315) / 100
@@ -415,9 +417,14 @@ class ThermalCamera:
                             f = h5py.File(f"{self.pathset}/{dt_string}.hdf5", "w")
                             f.create_dataset("image", data=data)
                             f = None
-                            print('Thermal pic saved as hdf5')
+                            print("Thermal pic saved as hdf5")
                             if self.png:
-                                plt.imsave(f'{self.pathset}/{dt_string}.png', data, vmin=self.vminT, vmax=self.vmaxT)
+                                plt.imsave(
+                                    f"{self.pathset}/{dt_string}.png",
+                                    data,
+                                    vmin=self.vminT,
+                                    vmax=self.vmaxT,
+                                )
 
                         except Exception as e:
                             print(e)
@@ -446,13 +453,14 @@ class ThermalCamera:
                 plt.ioff()
                 plt.close(fig)
 
-    
     def save_metadata(self):
         """
         Saves metadata about the recording to a JSON file in the output directory.
         """
         metadata_file_name = f"{self.output_file_name.split('.')[0]}.json"
-        metadata_path = os.path.join(os.path.dirname(self.output_path), metadata_file_name)
+        metadata_path = os.path.join(
+            os.path.dirname(self.output_path), metadata_file_name
+        )
 
         data = {
             "camera": "thermal",
@@ -464,17 +472,17 @@ class ThermalCamera:
             "temperature_max": self.vmaxT,
             "video_format": self.video_format,
             "png_frames": self.png,
-            "shutter_manual": self.shutter_manual
+            "shutter_manual": self.shutter_manual,
         }
 
         if self.video_format == "hdf5":
             data["number_of_frames"] = self.frame_number
 
-        with open(metadata_path, 'w') as f:
+        with open(metadata_path, "w") as f:
             json.dump(data, f, indent=4)
 
-# imports
 
+# imports
 
 
 # Initialize COM
@@ -489,9 +497,11 @@ clr.AddReference("ManagedIR16Filters")
 from Lepton import CCI
 from IR16Filters import IR16Capture, NewBytesFrameEvent
 
+
 def handle_exit(sig, frame):
     print("Exiting and cleaning up...")
     pythoncom.CoUninitialize()
+
 
 # Register signal handlers for clean exit
 signal.signal(signal.SIGINT, handle_exit)
@@ -509,7 +519,7 @@ class CameraWindows:
 
     def add_frame(self, array, width, height):
         """
-          Add a new frame to the buffer of read data.
+        Add a new frame to the buffer of read data.
         """
         img = np.fromiter(array, dtype="uint16").reshape(height, width)  # parse
         img = ndimage.rotate(img, angle=0, reshape=True)  # rotation
@@ -517,7 +527,7 @@ class CameraWindows:
 
     def initialise_camera(self):
         """
-           Initialize the camera and start capturing frames.
+        Initialize the camera and start capturing frames.
         """
         devices = []
         for i in self.CCI.GetDevices():
@@ -551,20 +561,19 @@ class CameraWindows:
 
         self.device.sys.SetGainMode(self.CCI.Sys.GainMode.HIGH)
 
-
         self.reader = self.IR16Capture()
         callback = self.NewBytesFrameEvent(self.add_frame)
         self.reader.SetupGraphWithBytesCallback(callback)
 
     def start_streaming(self):
         """
-            Start capturing frames.
+        Start capturing frames.
         """
         self.reader.RunGraph()
 
     def set_shutter_manual(self):
         """
-            Set the shutter mode to manual.
+        Set the shutter mode to manual.
         """
         new_shutter_mode_obj = self.device.sys.GetFfcShutterModeObj()
         new_shutter_mode_obj.shutterMode = self.CCI.Sys.FfcShutterMode.AUTO
@@ -573,13 +582,13 @@ class CameraWindows:
 
     def perform_manualff(self):
         """
-            Perform a manual flat field correction.
+        Perform a manual flat field correction.
         """
         self.device.sys.RunFFCNormalization()
 
     def stop_streaming(self):
         """
-            Stop capturing frames.
+        Stop capturing frames.
         """
         self.reader.StopGraph()
         pythoncom.CoUninitialize()
