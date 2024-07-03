@@ -50,13 +50,12 @@ class SessionLogger:
         Prompts user to enter the subject ID and retrieves the corresponding subject number.
         """
         subjects_data_dict = self.get_csv_data(self.paths["subjects"])
-        # remove the subjects in which active is False
         subjects_data_dict = {
             k: v for k, v in subjects_data_dict.items() if v["active"] == True
         }
         subjects_options = [f"{key}" for key, _ in subjects_data_dict.items()]
         subject_id = self.get_input(
-            "Enter the ID of the subject", subjects_options, start=0
+            "Enter the ID of the subject", subjects_options
         )
         self.subject_id = subject_id.split()[0]
 
@@ -91,7 +90,13 @@ class SessionLogger:
         if self.subproject is None:
             license_data = self.get_csv_data(self.paths["licenses"])
             subprojects = eval(license_data[self.license]["subprojects"])
-            self.subproject = self.get_input("Enter the subproject", subprojects)
+            print(subprojects)
+            if len(subprojects) == 1:
+                self.subproject = subprojects[0]
+            elif len(subprojects) == 0:
+                self.subproject = ""
+            else:
+                self.subproject = self.get_input("Enter the subproject", subprojects)
             # update the current subproject in the subjects.csv file
             subjects_data_csv = pd.read_csv(self.paths["subjects"])
             subjects_data_csv.loc[
@@ -543,6 +548,9 @@ class SessionLogger:
         """
         self.clear_input_buffer()
         subjects_data_dict = self.get_csv_data(self.paths["subjects"])
+        subjects_data_dict = {
+            k: v for k, v in subjects_data_dict.items() if v["active"] == True
+        }
         subjects_options = [f"{key}" for key, _ in subjects_data_dict.items()]
 
         printme("Select the IDs of the subjects (separated by commas):")
