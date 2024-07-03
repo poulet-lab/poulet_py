@@ -5,7 +5,9 @@ import pandas as pd
 import os
 import ast
 import platform
-
+import tkinter as tk
+from tkinter import messagebox
+import sys
 
 def printme(message):
     print(f"\n{message}\n")
@@ -26,6 +28,7 @@ class SessionLogger:
             "experimenters.csv",
             "experimental_designs.csv",
             "genotypes.csv",
+            "drugs.csv",
         ]
         self.path = path
         self.paths = {
@@ -47,20 +50,51 @@ class SessionLogger:
 
     def get_subject_id(self):
         """
-        Prompts user to enter the subject ID and retrieves the corresponding subject number.
+        Prompts user to select multiple subject IDs and retrieves the corresponding subject numbers.
         """
         subjects_data_dict = self.get_csv_data(self.paths["subjects"])
-        # remove the subjects in which active is False
-        subjects_data_dict = {
-            k: v for k, v in subjects_data_dict.items() if v["active"] == True
-        }
-        subjects_options = [f"{key}" for key, _ in subjects_data_dict.items()]
-        subject_id = self.get_input(
-            "Enter the ID of the subject", subjects_options, start=0
-        )
-        self.subject_id = subject_id.split()[0]
+        subjects_data_dict = {k: v for k, v in subjects_data_dict.items() if v["active"]}
 
-        printme(f"Subject ID: {self.subject_id}")
+        root = tk.Tk()
+        root.title("Select Subject IDs")
+
+        self.subject_ids = []
+
+        def toggle_selection(subject_id, button):
+            if subject_id in self.subject_ids:
+                self.subject_ids.remove(subject_id)
+                button.config(relief="raised", bg="lightyellow")
+            else:
+                self.subject_ids.append(subject_id)
+                button.config(relief="sunken", bg="lightgreen")
+
+        def submit():
+            result = ', '.join(self.subject_ids)
+            print(f"Selected Subject IDs: {result}")
+            root.destroy()
+
+        def on_closing():
+            if messagebox.askokcancel("Quit", "Do you want to quit?"):
+                root.destroy()
+                sys.exit()
+
+        root.protocol("WM_DELETE_WINDOW", on_closing)
+
+        row = 0
+        for subject_id, details in subjects_data_dict.items():
+            def create_button(sid):
+                button = tk.Button(root, text=sid, width=20,
+                                   command=lambda: toggle_selection(sid, button),
+                                   bg = "lightyellow")
+                button.grid(row=row, column=0, padx=5, pady=5)
+                return button
+            
+            create_button(subject_id)
+            row += 1
+
+        tk.Button(root, text="Accept", command=submit).grid(row=row, column=0, pady=10)
+
+        root.mainloop()
 
     def get_license_data(self):
         """
@@ -108,8 +142,17 @@ class SessionLogger:
         if self.method is None:
             method_data = self.get_csv_data(self.paths["methods"])
             self.method = self.get_input("Enter the method", list(method_data.keys()))
+            # check whether the method requires drugs
+            methods_data_csv = pd.read_csv(self.paths["methods"])
+            self.drugs_required = methods_data_csv.loc[
+                methods_data_csv["name"] == self.method, "drugs"
+            ].iloc[0]
+            #check whether the method means logging out
+            self.logged_out = methods_data_csv.loc[
+                methods_data_csv["name"] == self.method, "logging_out"
+            ].iloc[0]
 
-        printme(f"Method: {self.method}")
+        printme(f"Method: {self.method} ({'drugs required' if self.drugs_required else 'no drugs required'}) ({'logged out' if self.logged_out else 'not logged out'})")
 
     def get_method_version_data(self):
         """
@@ -181,28 +224,94 @@ class SessionLogger:
         Logs a session by collecting various data points from the user and writing them to a logbook.
         """
         self.clear_input_buffer()
-
-        self.get_subject_id()
-
         self.get_method_data()
-
-        if self.method == "weighing":
-            self.log_weight()
-            return
-
-        self.get_license_data()
-
-        self.get_subproject_data()
-
         self.get_method_version_data()
-
+        if self.drugs_required:
+            self.get_drugs_data()
         self.get_experimenter_data()
-
-        self.get_condition_data()
-
         self.get_duration_data()
-
         self.get_notes_data()
+
+        for self.subject_id in self.subject_ids:            
+            if self.method == "weighing":
+                self.log_weight()
+                break
+        
+            self.get_license_data()
+
+            self.get_subproject_data()
+
+            self.get_condition_data()
+
+            if self.logged_out:
+                self.update_logged_out()
+
+            self.log_session()
+
+
+    def get_drugs_data(self):
+        drugs_data_csv = pd.read_csv(self.paths["drugs"])
+        
+        # Create the main window
+        root = tk.Tk()
+        root.title("Drug Quantity Input")
+
+        # Dictionary to hold the repeat values for each drug
+        repeat_values = {row['name']: 0 for _, row in drugs_data_csv.iterrows()}
+        labels = []  # List to hold references to label widgets
+
+        def update_label(name, label):
+            label.config(text=str(repeat_values[name]))
+
+        def increment(name, label):
+            repeat_values[name] += 1
+            update_label(name, label)
+
+        def decrement(name, label):
+            if repeat_values[name] > 0:
+                repeat_values[name] -= 1
+                update_label(name, label)
+
+        def submit():
+            drugs_info = []
+            for _, row in drugs_data_csv.iterrows():
+                name = row['name']
+                default_quantity = row['default_quantity']
+                unit = row['unit']
+                repeat = repeat_values[name]
+                if repeat > 0:
+                    drugs_info.append(f"{name}: {repeat} ({repeat * default_quantity} {unit})")
+
+            result = '; '.join(drugs_info)
+            print(result)
+            root.destroy()  # Properly close the window and end the application
+
+        # Create and place widgets for each drug
+        for idx, (_, row) in enumerate(drugs_data_csv.iterrows()):
+            name = row['name']
+            default_quantity = row['default_quantity']
+            unit = row['unit']
+
+            tk.Label(root, text=f"{name} ({default_quantity} {unit})").grid(row=idx, column=0)
+            tk.Button(root, text="-", command=lambda n=name, l=idx: decrement(n, labels[l])).grid(row=idx, column=1)
+            label = tk.Label(root, text="0")
+            label.grid(row=idx, column=2)
+            labels.append(label)
+            tk.Button(root, text="+", command=lambda n=name, l=idx: increment(n, labels[l])).grid(row=idx, column=3)
+
+        tk.Button(root, text="Accept", command=submit).grid(row=len(drugs_data_csv), columnspan=4)
+
+        root.mainloop()
+
+    def update_logged_out(self):
+        """
+        Updates the logged_out field in the subjects.csv file.
+        """
+        subjects_data_csv = pd.read_csv(self.paths["subjects"])
+        subjects_data_csv.loc[
+            subjects_data_csv["subject_id"] == self.subject_id, "logged_out"
+        ] = True
+        subjects_data_csv.to_csv(self.paths["subjects"], index=False)
 
     def define_multiple_sessions(self):
         """
