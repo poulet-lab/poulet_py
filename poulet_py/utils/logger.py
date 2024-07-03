@@ -480,6 +480,9 @@ class SessionLogger:
         """
         self.clear_input_buffer()
         subjects_data_dict = self.get_csv_data(self.paths['subjects'])
+        subjects_data_dict = {
+            k: v for k, v in subjects_data_dict.items() if v["active"] == True
+        }
         subjects_options = [f"{key}" for key, _ in subjects_data_dict.items()]
 
         printme("Select the IDs of the subjects (separated by commas):")
