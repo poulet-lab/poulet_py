@@ -77,9 +77,7 @@ utils = [
 
 
 all = [
-"poulet_py[hardware]",
-"poulet_py[tools]",
-"poulet_py[utils]"
+"poulet_py[hardware,tools,utils]"
 ]
 
 [tool.hatch.envs.default.scripts]
