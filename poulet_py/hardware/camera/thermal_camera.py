@@ -26,6 +26,7 @@ import platform
 import numpy as np
 import pythoncom
 import signal
+import logging
 
 
 def py_frame_callback(frame, userptr):
@@ -182,6 +183,15 @@ class ThermalCamera:
         """
         self.start_time = start_time
 
+    def set_error_log_path(self, path, file_name):
+        """
+        Sets the path for the error log file.
+
+        Args:
+            path (str): The path to the error log file.
+        """
+        self.error_log_file = os.path.join(path, file_name)
+
     def set_output_file(
         self,
         path,
@@ -334,7 +344,7 @@ class ThermalCamera:
                 self.frame_number += 1
 
         except Exception as e:
-            print(e)
+            self.log_error(e)
             self.stop_streaming()
 
     def plot_live(self):
@@ -427,7 +437,7 @@ class ThermalCamera:
                                 )
 
                         except Exception as e:
-                            print(e)
+                            self.log_error(e)
                             print("There isn't a set path!")
 
                     pressed = True
@@ -441,7 +451,7 @@ class ThermalCamera:
                     pressed = False
 
         except Exception as e:
-            print(e)
+            self.log_error(e)
             if platform.system() == "Windows":
                 plt.ioff()
                 plt.close(fig)
@@ -480,7 +490,18 @@ class ThermalCamera:
 
         with open(metadata_path, "w") as f:
             json.dump(data, f, indent=4)
-
+    
+    @staticmethod
+    def log_error(self, error_message):
+        """
+        Logs an error message to the error log file.
+        """
+        if self.error_log_file is not None:
+            logging.error(error_message)
+        else:
+            print(f"An error occurred: {error_message}")
+            print("Set the error log file path to log the error with set_error_log_path().")
+        
 
 # imports
 
