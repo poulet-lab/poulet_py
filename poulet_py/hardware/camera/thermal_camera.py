@@ -68,7 +68,7 @@ if not platform.system() == "Windows":
 
 class ThermalCamera:
     """
-    A class to interact with a thermal camera.
+    A class to interact with the Lepton 3.5 thermal camera.
     """
 
     def __init__(self, vminT=30, vmaxT=34):
