@@ -125,13 +125,14 @@ class SessionLogger:
         if self.subproject is None:
             license_data = self.get_csv_data(self.paths["licenses"])
             subprojects = eval(license_data[self.license]["subprojects"])
-            print(subprojects)
+            
             if len(subprojects) == 1:
                 self.subproject = subprojects[0]
             elif len(subprojects) == 0:
                 self.subproject = ""
             else:
                 self.subproject = self.get_input("Enter the subproject", subprojects)
+                
             # update the current subproject in the subjects.csv file
             subjects_data_csv = pd.read_csv(self.paths["subjects"])
             subjects_data_csv.loc[
@@ -208,13 +209,55 @@ class SessionLogger:
 
     def get_duration_data(self):
         """
-        Prompts user to enter duration of the experiment and returns it.
+        Prompts user to enter duration of the experiment and select a time unit, then returns it.
         """
-        if self.duration_s is None:
-            duration = input("Enter the duration of the experiment (in seconds): ")
-            self.duration_s = int(duration) if duration.isdigit() else None
+        def convert_to_seconds(value, unit):
+            if unit == "seconds":
+                return value
+            elif unit == "minutes":
+                return value * 60
+            elif unit == "hours":
+                return value * 3600
+            elif unit == "days":
+                return value * 86400
 
-        printme(f"Duration: {self.duration_s} seconds")
+        root = tk.Tk()
+        root.title("Enter Duration of the Experiment")
+
+        duration_var = tk.StringVar()
+        unit_var = tk.StringVar(value="seconds")
+
+        tk.Label(root, text="Enter duration:").grid(row=0, column=0, padx=5, pady=5)
+        tk.Entry(root, textvariable=duration_var).grid(row=0, column=1, padx=5, pady=5)
+
+        tk.Label(root, text="Select unit:").grid(row=1, column=0, padx=5, pady=5)
+        
+        unit_options = [("seconds", "seconds"), ("minutes", "minutes"), ("hours", "hours"), ("days", "days")]
+        row = 1
+        for text, value in unit_options:
+            row += 1
+            tk.Radiobutton(root, text=text, variable=unit_var, value=value).grid(row=row, column=1, sticky="w")
+
+        def submit():
+            try:
+                duration_value = int(duration_var.get())
+                duration_unit = unit_var.get()
+                self.duration_s = convert_to_seconds(duration_value, duration_unit)
+                print(f"Duration: {self.duration_s} seconds")
+                root.destroy()
+            except ValueError:
+                messagebox.showerror("Invalid Input", "Please enter a valid number for duration.")
+
+        def on_closing():
+            if messagebox.askokcancel("Quit", "Do you want to quit?"):
+                root.destroy()
+                sys.exit()
+
+        root.protocol("WM_DELETE_WINDOW", on_closing)
+
+        tk.Button(root, text="Accept", command=submit).grid(row=row + 1, column=0, columnspan=2, pady=10)
+
+        root.mainloop()
 
     def get_notes_data(self):
         """
