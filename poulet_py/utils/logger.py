@@ -205,6 +205,29 @@ class SessionLogger:
             print(condition_data)
             self.condition = self.get_input("Enter the condition", list(condition_data))
 
+            # update the mouse in the experimental_designs.csv file
+            # find the row in which the self.condition is in the column condition
+            condition_row = conditions_data_csv[
+                (conditions_data_csv["condition"] == self.condition)
+            ]
+
+            # get the subjects column from the row
+            subjects = condition_row["subjects"].apply(
+                ast.literal_eval
+            )
+
+            # add the new subject_id to the subjects column
+            subjects = subjects.iloc[0]
+            subjects.append(self.subject_id)
+
+            # update the subjects column in the row
+            conditions_data_csv.loc[
+                conditions_data_csv["condition"] == self.condition, "subjects"
+            ] = str(subjects)
+
+            # write the updated data to the CSV
+            conditions_data_csv.to_csv(self.paths["experimental_designs"], index=False)
+
         printme(f"Condition: {self.condition}")
 
     def get_duration_data(self):
@@ -513,8 +536,7 @@ class SessionLogger:
 
         if (
             self.license != "ZH_139"
-            or self.license != "X9016_21"
-            or self.license != "G0167_23"
+            or self.license != "X9016/21"
         ):
 
             # Read the CSV file into a DataFrame
@@ -527,7 +549,7 @@ class SessionLogger:
             subproject_rows = license_rows[
                 license_rows["subproject"] == self.subproject
             ]
-            print(subproject_rows)
+            
             # Convert the 'subjects' column from string to list
             subproject_rows["subjects"] = subproject_rows["subjects"].apply(
                 ast.literal_eval
@@ -543,6 +565,10 @@ class SessionLogger:
                 return subject_row.iloc[0]["condition"]
             else:
                 return None
+        elif self.license == "ZH_139":
+            return 'killing'
+        elif self.license == "X9016/21":
+            return 'teaching'
 
     def log_session(self):
         """
