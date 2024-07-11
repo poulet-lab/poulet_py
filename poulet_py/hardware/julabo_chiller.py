@@ -5,7 +5,7 @@ import time
 class JulaboChiller:
     """Class to interact with a Julabo water chiller via serial port."""
 
-    def __init__(self, port, baudrate=9600, timeout=1):
+    def __init__(self, port=None, baudrate=9600, timeout=1):
         """
         Initialize the JulaboChiller with the given serial port configuration.
 
@@ -14,7 +14,17 @@ class JulaboChiller:
             baudrate (int, optional): The baud rate for the serial communication. Default is 9600.
             timeout (int or float, optional): The read timeout value. Default is 1 second.
         """
-        self.port = port
+        if port is None:
+            # check in env cariable
+            from dotenv import load_dotenv, find_dotenv
+            import os
+            dotenv_path = find_dotenv(usecwd=True)
+            load_dotenv(dotenv_path)
+            self.port = os.getenv('CHILLER_PORT')
+            if self.port is None:
+                raise ValueError("No serial port specified in .env file or argument.")
+        else:
+            self.port = port
         self.baudrate = baudrate
         self.timeout = timeout
         self.ser = self._configure_serial_port()
@@ -59,7 +69,7 @@ class JulaboChiller:
         except Exception as e:
             print(f"Error writing to serial port: {e}")
 
-    def close(self):
+    def close_port(self):
         """Close the serial port connection."""
         self.ser.close()
 
@@ -81,11 +91,11 @@ class JulaboChiller:
         self.write('IN_PV_00')
         return self.read()
 
-    def turn_on(self):
+    def start(self):
         """Turn on the chiller."""
         self.write('OUT_MODE_05 1')
 
-    def turn_off(self):
+    def stop(self):
         """Turn off the chiller."""
         self.write('OUT_MODE_05 0')
 
