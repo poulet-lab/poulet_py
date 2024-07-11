@@ -383,6 +383,10 @@ class SessionLogger:
         subjects_data_csv.loc[
             subjects_data_csv["subject_id"] == self.subject_id, "logged_out"
         ] = True
+        #add logged out date
+        subjects_data_csv.loc[
+            subjects_data_csv["subject_id"] == self.subject_id, "logged_out_date"
+        ] = datetime.now().strftime("%d/%m/%Y")
         subjects_data_csv.to_csv(self.paths["subjects"], index=False)
 
     def define_multiple_sessions(self):
