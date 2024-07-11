@@ -125,7 +125,14 @@ class SessionLogger:
         if self.subproject is None:
             license_data = self.get_csv_data(self.paths["licenses"])
             subprojects = eval(license_data[self.license]["subprojects"])
-            self.subproject = self.get_input("Enter the subproject", subprojects)
+            
+            if len(subprojects) == 1:
+                self.subproject = subprojects[0]
+            elif len(subprojects) == 0:
+                self.subproject = ""
+            else:
+                self.subproject = self.get_input("Enter the subproject", subprojects)
+                
             # update the current subproject in the subjects.csv file
             subjects_data_csv = pd.read_csv(self.paths["subjects"])
             subjects_data_csv.loc[
