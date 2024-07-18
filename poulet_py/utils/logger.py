@@ -37,6 +37,7 @@ class SessionLogger:
         }
 
         self.subject_id = None
+        self.subject_ids = []
         self.license = None
         self.subproject = None
         self.method = None
@@ -146,18 +147,20 @@ class SessionLogger:
         """
         Prompts user to select method and returns it.
         """
+        # print(self.method)
         if self.method is None:
             method_data = self.get_csv_data(self.paths["methods"])
             self.method = self.get_input("Enter the method", list(method_data.keys()))
-            # check whether the method requires drugs
-            methods_data_csv = pd.read_csv(self.paths["methods"])
-            self.drugs_required = methods_data_csv.loc[
-                methods_data_csv["name"] == self.method, "drugs"
-            ].iloc[0]
-            #check whether the method means logging out
-            self.logged_out = methods_data_csv.loc[
-                methods_data_csv["name"] == self.method, "logging_out"
-            ].iloc[0]
+        # check whether the method requires drugs
+        methods_data_csv = pd.read_csv(self.paths["methods"])
+        # print(methods_data_csv)
+        self.drugs_required = methods_data_csv.loc[
+            methods_data_csv["name"] == self.method, "drugs"
+        ].iloc[0]
+        #check whether the method means logging out
+        self.logged_out = methods_data_csv.loc[
+            methods_data_csv["name"] == self.method, "logging_out"
+        ].iloc[0]
 
         printme(f"Method: {self.method} ({'drugs required' if self.drugs_required else 'no drugs required'}) ({'logged out' if self.logged_out else 'not logged out'})")
 
@@ -234,53 +237,58 @@ class SessionLogger:
         """
         Prompts user to enter duration of the experiment and select a time unit, then returns it.
         """
-        def convert_to_seconds(value, unit):
-            if unit == "seconds":
-                return value
-            elif unit == "minutes":
-                return value * 60
-            elif unit == "hours":
-                return value * 3600
-            elif unit == "days":
-                return value * 86400
+        if self.duration_s is None:
+            def convert_to_seconds(value, unit):
+                if unit == "seconds":
+                    return value
+                elif unit == "minutes":
+                    return value * 60
+                elif unit == "hours":
+                    return value * 3600
+                elif unit == "days":
+                    return value * 86400
 
-        root = tk.Tk()
-        root.title("Enter Duration of the Experiment")
+            root = tk.Tk()
+            root.title("Enter Duration of the Experiment")
 
-        duration_var = tk.StringVar()
-        unit_var = tk.StringVar(value="seconds")
+            duration_var = tk.StringVar()
+            unit_var = tk.StringVar(value="seconds")
 
-        tk.Label(root, text="Enter duration:").grid(row=0, column=0, padx=5, pady=5)
-        tk.Entry(root, textvariable=duration_var).grid(row=0, column=1, padx=5, pady=5)
+            tk.Label(root, text="Enter duration:").grid(row=0, column=0, padx=5, pady=5)
+            tk.Entry(root, textvariable=duration_var).grid(row=0, column=1, padx=5, pady=5)
 
-        tk.Label(root, text="Select unit:").grid(row=1, column=0, padx=5, pady=5)
-        
-        unit_options = [("seconds", "seconds"), ("minutes", "minutes"), ("hours", "hours"), ("days", "days")]
-        row = 1
-        for text, value in unit_options:
-            row += 1
-            tk.Radiobutton(root, text=text, variable=unit_var, value=value).grid(row=row, column=1, sticky="w")
+            tk.Label(root, text="Select unit:").grid(row=1, column=0, padx=5, pady=5)
+            
+            unit_options = [("seconds", "seconds"), ("minutes", "minutes"), ("hours", "hours"), ("days", "days")]
+            row = 1
+            for text, value in unit_options:
+                row += 1
+                tk.Radiobutton(root, text=text, variable=unit_var, value=value).grid(row=row, column=1, sticky="w")
 
-        def submit():
-            try:
-                duration_value = int(duration_var.get())
-                duration_unit = unit_var.get()
-                self.duration_s = convert_to_seconds(duration_value, duration_unit)
-                print(f"Duration: {self.duration_s} seconds")
-                root.destroy()
-            except ValueError:
-                messagebox.showerror("Invalid Input", "Please enter a valid number for duration.")
+            def submit():
+                try:
+                    duration_value = int(duration_var.get())
+                    duration_unit = unit_var.get()
+                    self.duration_s = convert_to_seconds(duration_value, duration_unit)
+                    
+                    root.destroy()
+                except ValueError:
+                    messagebox.showerror("Invalid Input", "Please enter a valid number for duration.")
 
-        def on_closing():
-            if messagebox.askokcancel("Quit", "Do you want to quit?"):
-                root.destroy()
-                sys.exit()
+            def on_closing():
+                if messagebox.askokcancel("Quit", "Do you want to quit?"):
+                    root.destroy()
+                    sys.exit()
 
-        root.protocol("WM_DELETE_WINDOW", on_closing)
+            root.protocol("WM_DELETE_WINDOW", on_closing)
 
-        tk.Button(root, text="Accept", command=submit).grid(row=row + 1, column=0, columnspan=2, pady=10)
+            tk.Button(root, text="Accept", command=submit).grid(row=row + 1, column=0, columnspan=2, pady=10)
 
-        root.mainloop()
+            root.mainloop()
+        else:
+            printme(f"Duration defined in script")
+
+        printme(f"Duration: {self.duration_s} seconds")
 
     def get_notes_data(self):
         """
@@ -297,26 +305,28 @@ class SessionLogger:
         """
         self.clear_input_buffer()
         self.get_method_data()
-        self.get_method_version_data()
+        if self.method != "weighing":
+            self.get_duration_data()
+            self.get_method_version_data()
+
+        self.get_experimenter_data()
+        self.get_notes_data()
+
         if self.drugs_required:
             self.get_drugs_data()
-        self.get_experimenter_data()
-        self.get_duration_data()
-        self.get_notes_data()
 
         for self.subject_id in self.subject_ids:            
             if self.method == "weighing":
                 self.log_weight()
-                break
-        
-            self.get_license_data()
+            else:
+                self.get_license_data()
 
-            self.get_subproject_data()
+                self.get_subproject_data()
 
-            self.get_condition_data()
+                self.get_condition_data()
 
-            if self.logged_out:
-                self.update_logged_out()
+                if self.logged_out:
+                    self.update_logged_out()
 
             self.log_session()
 
@@ -472,11 +482,9 @@ class SessionLogger:
 
             self.license = self.get_current_license()
             self.subproject = self.get_current_subproject()
-            self.method = "weighing"
             self.method_version = "101"
             self.duration_s = 60
             self.condition = self.get_mouse_condition()
-            self.experimenter = "IER"
             self.notes = f"Weight of {str(self.weight)} grams"
 
             print(
