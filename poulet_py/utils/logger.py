@@ -29,6 +29,7 @@ class SessionLogger:
             "experimental_designs.csv",
             "genotypes.csv",
             "drugs.csv",
+            "todos.csv",
         ]
         self.path = path
         self.paths = {
@@ -45,6 +46,7 @@ class SessionLogger:
         self.duration_s = None
         self.condition = None
         self.experimenter = None
+        self.todo = None
         self.notes = None
 
         self.clear_input_buffer()
@@ -161,6 +163,19 @@ class SessionLogger:
         self.logged_out = methods_data_csv.loc[
             methods_data_csv["name"] == self.method, "logging_out"
         ].iloc[0]
+
+        # check whether the method requiers a todo
+        self.todo = methods_data_csv.loc[
+            methods_data_csv["name"] == self.method, "todo"
+        ].iloc[0]
+        #if the method requiers a todo, get the todo_message
+        if self.todo:
+            self.todo_message = methods_data_csv.loc[
+                methods_data_csv["name"] == self.method, "todo_message"
+            ].iloc[0]
+            self.todo_deadline = methods_data_csv.loc[
+                methods_data_csv["name"] == self.method, "todo_deadline_h"
+            ].iloc[0]
 
         printme(f"Method: {self.method} ({'drugs required' if self.drugs_required else 'no drugs required'}) ({'logged out' if self.logged_out else 'not logged out'})")
 
@@ -329,6 +344,49 @@ class SessionLogger:
                     self.update_logged_out()
 
             self.log_session()
+            self.set_todo()
+
+    def set_todo(self):
+        """
+        Set a todo for the selected subject IDs.
+        """
+        if self.todo:
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            # get the time and date now
+            now = datetime.now()
+            # get the date of the deadline
+            if self.todo_deadline != "open" and self.todo_deadline is not None:
+                #transform the striong to integers
+                deadline = int(self.todo_deadline)
+
+                # add the hours of the deadline to the current time
+                notification_time = now + pd.Timedelta(hours=deadline)
+
+                # if the notification time is not within 9am and 5pm, set it to 9am if it's after midnight and to 5pm if it's before midnight
+                if notification_time.hour < 9:
+                    notification_time = notification_time.replace(hour=9, minute=0, second=0)
+                elif notification_time.hour >= 17:
+                    notification_time = notification_time.replace(hour=15, minute=0, second=0)
+                
+                # format the notification time to the format YY-MM-DD HH:MM:SS
+                self.todo_deadline = notification_time.strftime("%Y-%m-%d %H:%M:%S")
+
+            # append to the todos.csv file timestamp,subject_id,deadline,message
+            file_exists = os.path.isfile(self.paths["todos"])
+            todo_entry = [timestamp, self.subject_id, self.todo_deadline, self.todo_message]
+
+            with open(self.paths["logbook"], mode="a", newline="") as file:
+                writer = csv.writer(file)
+                if not file_exists:
+                    writer.writerow(
+                        [
+                            "timestamp",
+                            "subject_id",
+                            "deadline",
+                            "message"
+                        ]
+                    )
+                writer.writerow(todo_entry)
 
 
     def get_drugs_data(self):
@@ -419,6 +477,7 @@ class SessionLogger:
 
             # Subproject data
             self.get_subproject_data()
+
             # Condition data
             self.condition = self.get_mouse_condition()
 
@@ -626,6 +685,7 @@ class SessionLogger:
                     )
                 writer.writerow(log_entry_with_timestamp)
             print(f"Log entry added: {log_entry_with_timestamp}")
+
         except Exception as e:
             print(f"Error adding log entry: {e}")
 
@@ -684,10 +744,12 @@ class SessionLogger:
                 printme("Invalid date format. Please enter in DD/MM/YYYY format.")
 
         # Add cage number
-        existing_cage_numbers = subjects_data_csv["cage_number"].unique().tolist()
+        # first get the rows in which active is True
+        active_subjects = subjects_data_csv[subjects_data_csv["active"] == True]
+        active_existing_cage_numbers = active_subjects["cage_number"].unique().tolist()
         cage_number = self.get_input(
             "Enter the cage number or select from existing:",
-            existing_cage_numbers + ["Enter new value"],
+            active_existing_cage_numbers + ["Enter new value"],
         )
         if cage_number == "Enter new value":
             cage_number = input("Enter new cage number: ")
