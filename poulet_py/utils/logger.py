@@ -375,7 +375,7 @@ class SessionLogger:
             file_exists = os.path.isfile(self.paths["todos"])
             todo_entry = [timestamp, self.subject_id, self.todo_deadline, self.todo_message]
 
-            with open(self.paths["logbook"], mode="a", newline="") as file:
+            with open(self.paths["todos"], mode="a", newline="") as file:
                 writer = csv.writer(file)
                 if not file_exists:
                     writer.writerow(
