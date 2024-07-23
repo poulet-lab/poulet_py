@@ -8,6 +8,9 @@ import platform
 import tkinter as tk
 from tkinter import messagebox
 import sys
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 def printme(message):
     print(f"\n{message}\n")
@@ -47,9 +50,18 @@ class SessionLogger:
         self.condition = None
         self.experimenter = None
         self.todo = None
+        self.emails = None
+        self.email_mfa_password = None
         self.notes = None
 
         self.clear_input_buffer()
+
+    def set_email_details(self, emails, email_mfa_password):
+        """
+        Set the email details for sending emails.
+        """
+        self.emails = emails
+        self.email_mfa_password = email_mfa_password
 
     def get_subject_id(self):
         """
@@ -117,7 +129,49 @@ class SessionLogger:
             ] = self.license
             subjects_data_csv.to_csv(self.paths["subjects"], index=False)
 
+            if self.emails is not None and self.email_mfa_password is not None:
+                subject = 'Mouse changes of license'
+                self.send_email(subject, f"Mouse {self.subject_id} has been assigned a new license: {self.license}")
+
         printme(f"License: {self.license}")
+    
+    def send_email(self, subject, body, smtp_user = 'ivan.eromano@gmail.com'):
+        """
+            Send an email with the specified subject and body to the list of recipients.
+
+            Args:
+                subject (str): Subject of the email.
+                body (str): Body of the email.
+                to_emails (list): List of recipient email addresses.
+        """
+        # SMTP server configuration for Gmail
+        smtp_server = "smtp.gmail.com"
+        smtp_port = 587  # TLS
+        smtp_password = self.email_mfa_password
+
+        # Create the email
+        msg = MIMEMultipart()
+        msg['From'] = smtp_user
+        msg['To'] = ", ".join(self.emails)
+        msg['Subject'] = subject
+
+        # Attach the email body
+        msg.attach(MIMEText(body, 'plain'))
+
+        try:
+            # Connect to the SMTP server
+            server = smtplib.SMTP(smtp_server, smtp_port)
+            server.starttls()  # Upgrade the connection to a secure encrypted SSL/TLS connection
+            server.login(smtp_user, smtp_password)
+            
+            # Send the email
+            server.sendmail(smtp_user, self.emails, msg.as_string())
+            print(f"Email sent to {', '.join(self.emails)}")
+        except Exception as e:
+            print(f"Failed to send email. Error: {e}")
+        finally:
+            # Close the connection
+            server.quit()
 
     def get_subproject_data(self):
         """
@@ -387,7 +441,6 @@ class SessionLogger:
                         ]
                     )
                 writer.writerow(todo_entry)
-
 
     def get_drugs_data(self):
         drugs_data_csv = pd.read_csv(self.paths["drugs"])
