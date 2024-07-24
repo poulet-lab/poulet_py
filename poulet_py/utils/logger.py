@@ -150,11 +150,22 @@ class SessionLogger:
             subjects_data_csv.loc[
                 subjects_data_csv["subject_id"] == self.subject_id, "current_license"
             ] = self.license
+            #get the genotype of the mouse
+            genotype = subjects_data_csv.loc[
+                subjects_data_csv["subject_id"] == self.subject_id, "genotype"
+            ].iloc[0]
+            # get the cage number of the mouse
+            cage_number = subjects_data_csv.loc[
+                subjects_data_csv["subject_id"] == self.subject_id, "cage_number"
+            ].iloc[0]
+
             subjects_data_csv.to_csv(self.paths["subjects"], index=False)
 
             if self.emails is not None and self.email_mfa_password is not None:
-                subject = 'Mouse changes of license'
-                self.send_email(subject, f"Mouse {self.subject_id} has been assigned a new license: {self.license}")
+                subject = 'Mouse change of license'
+                #get the date as dd/mm/yyyy
+                date = datetime.now().strftime("%d/%m/%Y")
+                self.send_email(subject, f"On {date}, the mouse {self.subject_id} with genotype {genotype} has been assigned the license {self.license}. This mouse is in cage {cage_number}.\n\n- Date: {date}\n- License: {self.license}\n- Genotype: {genotype}\n- Cage number: {cage_number}\n\nThanks!")
 
         printme(f"License: {self.license}")
     
