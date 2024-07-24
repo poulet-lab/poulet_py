@@ -11,6 +11,7 @@ import sys
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from PIL import Image, ImageTk
 
 def printme(message):
     print(f"\n{message}\n")
@@ -33,6 +34,7 @@ class SessionLogger:
             "genotypes.csv",
             "drugs.csv",
             "todos.csv",
+            "ear_marks.png",
         ]
         self.path = path
         self.paths = {
@@ -73,8 +75,6 @@ class SessionLogger:
         root = tk.Tk()
         root.title("Select Subject IDs")
 
-        self.subject_ids = []
-
         def toggle_selection(subject_id, button):
             if subject_id in self.subject_ids:
                 self.subject_ids.remove(subject_id)
@@ -95,19 +95,42 @@ class SessionLogger:
 
         root.protocol("WM_DELETE_WINDOW", on_closing)
 
-        row = 0
-        for subject_id, details in subjects_data_dict.items():
-            def create_button(sid):
-                button = tk.Button(root, text=sid, width=20,
-                                   command=lambda: toggle_selection(sid, button),
-                                   bg = "lightyellow")
-                button.grid(row=row, column=0, padx=5, pady=5)
-                return button
-            
-            create_button(subject_id)
-            row += 1
+        frame = tk.Frame(root)
+        frame.pack(side=tk.LEFT, padx=10, pady=10)
 
-        tk.Button(root, text="Accept", command=submit).grid(row=row, column=0, pady=10)
+        max_columns = 3  # Set the maximum number of columns
+        row = 0
+        column = 0
+
+        def create_button(subject_id, row, column):
+            button = tk.Button(frame, text=subject_id, width=20,
+                               command=lambda: toggle_selection(subject_id, button),
+                               bg="lightyellow")
+            button.grid(row=row, column=column, padx=5, pady=5)
+            return button
+
+        for subject_id, details in subjects_data_dict.items():
+            create_button(subject_id, row, column)
+            column += 1
+            if column >= max_columns:
+                column = 0
+                row += 1
+
+        tk.Button(frame, text="Accept", command=submit).grid(row=row+1, column=0, columnspan=max_columns, pady=10)
+
+        # Load and display the image
+        image_frame = tk.Frame(root)
+        image_frame.pack(side=tk.RIGHT, padx=10, pady=10)
+
+        img = Image.open(self.paths["ear_marks"])
+        max_size = (600, 600)
+        img.thumbnail(max_size, Image.Resampling.LANCZOS)
+
+        photo = ImageTk.PhotoImage(img)
+
+        label = tk.Label(image_frame, image=photo)
+        label.image = photo  # Keep a reference to avoid garbage collection
+        label.pack()
 
         root.mainloop()
 
@@ -203,26 +226,63 @@ class SessionLogger:
         """
         Prompts user to select method and returns it.
         """
-        # print(self.method)
         if self.method is None:
-            method_data = self.get_csv_data(self.paths["methods"])
-            self.method = self.get_input("Enter the method", list(method_data.keys()))
+            method_data_dict = self.get_csv_data(self.paths["methods"])
+            root = tk.Tk()
+
+            selected_method = tk.StringVar()
+
+            def select_method(method, button):
+                selected_method.set(method)
+                for btn in buttons:
+                    btn.config(relief="raised", bg="lightyellow")
+                button.config(relief="sunken", bg="lightgreen")
+
+            def submit():
+                self.method = selected_method.get()
+                root.destroy()
+
+            def on_closing():
+                if messagebox.askokcancel("Quit", "Do you want to quit?"):
+                    root.destroy()
+                    sys.exit()
+
+            root.protocol("WM_DELETE_WINDOW", on_closing)
+
+            frame = tk.Frame(root)
+            frame.pack(padx=10, pady=10)
+
+            buttons = []
+            row = 0
+            for method in method_data_dict.keys():
+                def create_button(method, row):
+                    button = tk.Button(frame, text=method, width=20,
+                                       command=lambda: select_method(method, button),
+                                       bg="lightyellow")
+                    button.grid(row=row, column=0, padx=5, pady=5)
+                    return button
+                
+                buttons.append(create_button(method, row))
+                row += 1
+
+            tk.Button(frame, text="Accept", command=submit).grid(row=row, column=0, pady=10)
+
+            root.mainloop()
+
         # check whether the method requires drugs
         methods_data_csv = pd.read_csv(self.paths["methods"])
-        # print(methods_data_csv)
         self.drugs_required = methods_data_csv.loc[
             methods_data_csv["name"] == self.method, "drugs"
         ].iloc[0]
-        #check whether the method means logging out
+        # check whether the method means logging out
         self.logged_out = methods_data_csv.loc[
             methods_data_csv["name"] == self.method, "logging_out"
         ].iloc[0]
-
-        # check whether the method requiers a todo
+        # check whether the method requires a todo
         self.todo = methods_data_csv.loc[
             methods_data_csv["name"] == self.method, "todo"
         ].iloc[0]
-        #if the method requiers a todo, get the todo_message
+        # if the method requires a todo, get the todo_message
         if self.todo:
             self.todo_message = methods_data_csv.loc[
                 methods_data_csv["name"] == self.method, "todo_message"
@@ -231,7 +291,7 @@ class SessionLogger:
                 methods_data_csv["name"] == self.method, "todo_deadline_h"
             ].iloc[0]
 
-        printme(f"Method: {self.method} ({'drugs required' if self.drugs_required else 'no drugs required'}) ({'logged out' if self.logged_out else 'not logged out'})")
+        print(f"Method: {self.method} ({'drugs required' if self.drugs_required else 'no drugs required'}) ({'logged out' if self.logged_out else 'not logged out'})")
 
     def get_method_version_data(self):
         """
