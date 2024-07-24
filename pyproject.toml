@@ -56,6 +56,29 @@ testing = [
     "pytest>=7.2.2,<9.0.0",
     "pytest-cov>=4.0.0,<5.0.0",
 ]
+hardware = [
+"pypylon>=3.0.1,<=4.0.0",
+"opencv-python==4.9.0.80",
+"numpy==1.26.4",
+"scipy==1.13.1",
+"matplotlib==3.9.0",
+"matplotlib-inline==0.1.7",
+"h5py==3.11.0",
+"keyboard==0.13.5"
+]
+
+tools = [
+
+]
+
+utils = [
+"pandas==2.2.2",
+]
+
+
+all = [
+"poulet_py[hardware,tools,utils]"
+]
 
 tools = [
     "scikit-learn==1.5.0"
