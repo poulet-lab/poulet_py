@@ -860,7 +860,6 @@ class SessionLogger:
             # Read the CSV file into a DataFrame
             df = pd.read_csv(self.paths["experimental_designs"])
 
-            print(df)
             # Get the rows in which the license_number is self.license
             license_rows = df[df["license_number"] == self.license]
 
@@ -868,7 +867,7 @@ class SessionLogger:
             subproject_rows = license_rows[
                 license_rows["subproject"] == self.subproject
             ]
-            print(subproject_rows["subjects"])
+
             # Convert the 'subjects' column from string to list
             subproject_rows["subjects"] = subproject_rows["subjects"].apply(
                 ast.literal_eval
@@ -878,7 +877,6 @@ class SessionLogger:
                 subproject_rows["subjects"].apply(lambda x: self.subject_id in x)
             ]
 
-            print(self.subject_id)
 
             if not subject_row.empty:
                 return subject_row.iloc[0]["condition"]
