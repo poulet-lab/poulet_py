@@ -64,7 +64,9 @@ hardware = [
 "matplotlib==3.9.0",
 "matplotlib-inline==0.1.7",
 "h5py==3.11.0",
-"keyboard==0.13.5"
+"keyboard==0.13.5",
+"clr>=1.0.3",
+"pywin32==306; platform_system == 'Windows'",
 ]
 
 tools = [
