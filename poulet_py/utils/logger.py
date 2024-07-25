@@ -740,10 +740,10 @@ class SessionLogger:
                 subjects_data_csv["subject_id"] == self.subject_id, "weight"
             ].iloc[0]
             # get the age of the mouse
-            date_of_birth = self.calculate_age(subjects_data_csv.loc[
+            self.age_in_weeks = self.calculate_age(subjects_data_csv.loc[
                 subjects_data_csv["subject_id"] == self.subject_id, "date_of_birth"
             ].iloc[0])
-            self.age_in_weeks = self.calculate_age(date_of_birth)
+
             # get the sex
             sex = subjects_data_csv.loc[
                 subjects_data_csv["subject_id"] == self.subject_id, "sex"
