@@ -562,11 +562,11 @@ class SessionLogger:
                     notification_time = notification_time.replace(hour=15, minute=0, second=0)
                 
                 # format the notification time to the format YY-MM-DD HH:MM:SS
-                self.todo_deadline = notification_time.strftime("%Y-%m-%d %H:%M:%S")
+                self.todo_deadline_date = notification_time.strftime("%Y-%m-%d %H:%M:%S")
 
             # append to the todos.csv file timestamp,subject_id,deadline,message
             file_exists = os.path.isfile(self.paths["todos"])
-            todo_entry = [timestamp, self.subject_id, self.todo_deadline, self.todo_message]
+            todo_entry = [timestamp, self.subject_id, self.todo_deadline_date, self.todo_message]
 
             with open(self.paths["todos"], mode="a", newline="") as file:
                 writer = csv.writer(file)
@@ -860,7 +860,6 @@ class SessionLogger:
             # Read the CSV file into a DataFrame
             df = pd.read_csv(self.paths["experimental_designs"])
 
-            print(df)
             # Get the rows in which the license_number is self.license
             license_rows = df[df["license_number"] == self.license]
 
@@ -868,7 +867,6 @@ class SessionLogger:
             subproject_rows = license_rows[
                 license_rows["subproject"] == self.subproject
             ]
-            print(subproject_rows["subjects"])
             # Convert the 'subjects' column from string to list
             subproject_rows["subjects"] = subproject_rows["subjects"].apply(
                 ast.literal_eval
@@ -877,8 +875,6 @@ class SessionLogger:
             subject_row = subproject_rows[
                 subproject_rows["subjects"].apply(lambda x: self.subject_id in x)
             ]
-
-            print(self.subject_id)
 
             if not subject_row.empty:
                 return subject_row.iloc[0]["condition"]
