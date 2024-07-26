@@ -867,6 +867,7 @@ class SessionLogger:
             subproject_rows = license_rows[
                 license_rows["subproject"] == self.subproject
             ]
+
             # Convert the 'subjects' column from string to list
             subproject_rows["subjects"] = subproject_rows["subjects"].apply(
                 ast.literal_eval
@@ -875,6 +876,7 @@ class SessionLogger:
             subject_row = subproject_rows[
                 subproject_rows["subjects"].apply(lambda x: self.subject_id in x)
             ]
+
 
             if not subject_row.empty:
                 return subject_row.iloc[0]["condition"]
