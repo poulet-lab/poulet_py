@@ -333,7 +333,7 @@ class SessionLogger:
 
             buttons = []
             row = 0
-            for method in method_data_dict.keys():
+            for method in sorted(method_data_dict.keys()):
                 def create_button(method, row):
                     button = tk.Button(frame, text=method, width=20,
                                        command=lambda: select_method(method, button),
