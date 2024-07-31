@@ -563,6 +563,8 @@ class SessionLogger:
                 
                 # format the notification time to the format YY-MM-DD HH:MM:SS
                 self.todo_deadline_date = notification_time.strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                self.todo_deadline_date = "open"
 
             # append to the todos.csv file timestamp,subject_id,deadline,message
             file_exists = os.path.isfile(self.paths["todos"])
