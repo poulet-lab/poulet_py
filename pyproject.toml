@@ -46,6 +46,7 @@ dependencies = [
     "ipython",
     "ptpython",
     "twine",
+    "pydantic",
 ]
 
 [project.optional-dependencies]
@@ -64,7 +65,8 @@ hardware = [
 "matplotlib==3.9.0",
 "matplotlib-inline==0.1.7",
 "h5py==3.11.0",
-"keyboard==0.13.5"
+"keyboard==0.13.5",
+"pythonnet"
 ]
 
 tools = [
