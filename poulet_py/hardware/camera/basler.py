@@ -24,17 +24,17 @@ class BaslerCamera:
         tlFactory = pylon.TlFactory.GetInstance()
 
         # Get all attached devices and exit application if no device is found.
-        devices = tlFactory.EnumerateDevices()
-        if len(devices) == 0:
+        self.devices = tlFactory.EnumerateDevices()
+        if len(self.devices) == 0:
             raise pylon.RuntimeException("No camera present.")
 
         # Limit the number of cameras to the available devices or max_cameras.
-        self.max_cameras = min(len(devices), max_cameras)
+        self.max_cameras = min(len(self.devices), max_cameras)
 
         # Create an InstantCameraArray for the found devices.
         self.cameras = pylon.InstantCameraArray(self.max_cameras)
         for i in range(self.max_cameras):
-            self.cameras[i].Attach(tlFactory.CreateDevice(devices[i]))
+            self.cameras[i].Attach(tlFactory.CreateDevice(self.devices[i]))
             print("Using device", self.cameras[i].GetDeviceInfo().GetModelName())
 
         self.frames_per_second = None
