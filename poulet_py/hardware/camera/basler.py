@@ -37,6 +37,8 @@ class BaslerCamera:
             self.cameras[i].Attach(tlFactory.CreateDevice(self.devices[i]))
             print("Using device", self.cameras[i].GetDeviceInfo().GetModelName())
 
+        print('I am here')
+
         self.frames_per_second = None
         self.outs = {}              # VideoWriter objects keyed by camera index
         self.timestamps_files = {}  # Timestamps CSV file path per camera
@@ -91,10 +93,10 @@ class BaslerCamera:
             frame_height = int(cam.Height.Value)
 
             # Construct the video output file name and path for this camera.
-            output_file_name = f"{base_file_name}_{extra_name}_cam{i}.mp4"
-            output_path = os.path.join(path, output_file_name)
+            self.output_file_name = f"{base_file_name}_{extra_name}_cam{i}.mp4"
+            self.output_path = os.path.join(path, self.output_file_name)
             self.outs[i] = cv2.VideoWriter(
-                output_path,
+                self.output_path,
                 fourcc,
                 self.frames_per_second,
                 (frame_width, frame_height),
@@ -219,7 +221,7 @@ class BaslerCamera:
 
         cv2.destroyAllWindows()
 
-    def save_metadata(self, path, base_file_name="basler-camera", extra_name=""):
+    def save_metadata(self, base_file_name="basler-camera", extra_name=""):
         """
         Saves metadata about the recording for each camera to a JSON file.
 
@@ -230,7 +232,7 @@ class BaslerCamera:
         """
         for i, cam in enumerate(self.cameras):
             metadata_file_name = f"{base_file_name}_{extra_name}_cam{i}.json"
-            metadata_path = os.path.join(path, metadata_file_name)
+            metadata_path = os.path.join(self.output_path, metadata_file_name)
 
             # Re-open camera if needed to read properties.
             if not cam.IsOpen():
