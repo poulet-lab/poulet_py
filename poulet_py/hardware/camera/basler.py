@@ -1,3 +1,4 @@
+from typing import Literal
 from pypylon import pylon
 import cv2
 import os
@@ -5,6 +6,8 @@ import time
 import csv
 import json
 import logging
+from poulet_py.tools import save_metadata_exp
+import datetime
 
 
 class BaslerCamera:
@@ -82,6 +85,8 @@ class BaslerCamera:
             extra_name (str): Extra name to add to the file names.
             base_file_name (str): Base name for the files.
         """
+        os.makedirs(path, exist_ok=True)
+
         fourcc = cv2.VideoWriter_fourcc(*"MP4V")
 
         for i, cam in enumerate(self.cameras):
@@ -248,7 +253,79 @@ class BaslerCamera:
             with open(metadata_path, "w") as f:
                 json.dump(data, f, indent=4)
             cam.Close()
+            
+    def recording(
+        self,
+        data_save_folder: str,
+        cage_id: str,
+        n_mouse: int,
+        condition: str,
+        mouse_ids: list = [],
+        duration_s: int = 10,
+        buffer_s=10,
+        total_rec=4,
+        fps: int = 30,
+        video_format: Literal["mp4", "avi"] = "mp4",
+    ):
 
+        # Metadata to be saved in the JSON file
+        metadata = {
+            "cage ID": cage_id,
+            "total no of mice in a cage": n_mouse,
+            "Mouse ID": mouse_ids,
+            "duration_s": duration_s,
+            "condition": condition,
+            "fps": fps,
+            "video format": video_format,
+        }
+
+        # Save initial metadata
+        save_metadata_exp(metadata, data_save_folder, "Video_metadata")
+
+        # Setup the Basler camera outside of the loop to ensure the preview is shown before any recording starts
+
+        self.set_frames_per_second(30)
+        self.start_streaming()
+
+        try:
+            print("Stream preview started...")
+            time.sleep(5)  # Display the preview for 5 seconds (adjust as needed)
+
+            for rec_count in range(total_rec):
+                start_time = time.time()
+                print("Recording started....")
+
+                current_time = datetime.datetime.now().strftime("%H%M%S")
+                self.set_output_file(
+                    data_save_folder, f"recording_{rec_count + 1}_{current_time}"
+                )
+
+                try:
+                    print("Starting capture...")
+                    self.set_timer(start_time)
+                    print("Recording finished")
+
+                except Exception as e:
+                    print(f"Error during capture: {e}")
+
+                finally:
+                    print(f"Frames captured: {self.frame_number}")
+                    self.save_metadata()
+
+                    # Save metadata for each recording
+                    save_metadata_exp(
+                        metadata, data_save_folder, f"test_{rec_count + 1}"
+                    )
+
+                    # Buffer period before the next recording
+                    if rec_count < total_rec - 1:
+                        print("Buffer period")
+                        time.sleep(buffer_s)
+
+        finally:
+            self.stop_streaming()
+
+    @staticmethod
     def log_error(self, error_message):
         """
         Logs an error message to the error log file if set;
@@ -261,4 +338,6 @@ class BaslerCamera:
             logging.error(error_message)
         else:
             print(f"An error occurred: {error_message}")
-            print("Set the error log file path with set_error_log_path() to log errors automatically.")
+            print(
+                "Set the error log file path to log the error with set_error_log_path()."
+            )
