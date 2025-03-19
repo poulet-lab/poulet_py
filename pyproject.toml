@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "poulet_py"
 description = "A library which hosts various neuroscience python methods"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 dynamic = ['version']
 license = "GPL-3.0-or-later"
 authors = [
@@ -18,13 +18,15 @@ classifiers = [
     "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
-dependencies = []
+
+dependencies = [
+    "poulet_py[all]"
+]
+
 keywords = ["poulet_py"]
 
 [project.urls]
@@ -37,26 +39,7 @@ Source = "https://github.com/poulet-lab/poulet_py"
 [tool.hatch.version]
 path = "poulet_py/__init__.py"
 
-[tool.hatch.envs.default]
-dependencies = [
-    "mypy==1.9.0",
-    "ruff>=0.3.0,<5.0.0",
-    "pre-commit>=3.3.1,<4.0.0",
-    "devtools>=0.12.2",
-    "ipython",
-    "ptpython",
-    "twine",
-    "pydantic",
-]
-
 [project.optional-dependencies]
-testing = [
-    "autoflake>=2.0.2,<3.0.0",
-    "black==24.1.1,<25.0",
-    "isort>=5.12.0,<6.0.0",
-    "pytest>=7.2.2,<9.0.0",
-    "pytest-cov>=4.0.0,<5.0.0",
-]
 hardware = [
 "pypylon>=3.0.1,<=4.0.0",
 "opencv-python==4.9.0.80",
@@ -77,94 +60,118 @@ utils = [
 "pandas==2.2.2",
 ]
 
-
 all = [
 "poulet_py[hardware,tools,utils]"
 ]
 
-[tool.hatch.envs.default.scripts]
-clean_pyc = "find . -type f -name \"*.pyc\" -delete"
-clean_pyi = "find . -type f -name \"*.pyi\" -delete"
-clean_pycache = "find . -type d -name \"*__pycache__*\" -delete"
-build_with_check = "hatch build; twine check dist/*"
-lint = "ruff check --fix --line-length 99  poulet_py tests {args}"
 
-[tool.hatch.envs.docs]
-dependencies = [
-    "griffe-typingdoc>=0.2.2,<1.0",
-    "mkautodoc>=0.2.0,<0.3.0",
-    "mkdocs>=1.1.2,<2.0.0",
-    "mkdocs-material>=9.4.4,<10.0.0",
-    "mdx-include>=1.4.2,<2.0.0",
-    "mkdocs-macros-plugin>=0.4.0",
-    "mkdocs-meta-descriptions-plugin>=2.3.0",
-    "mkdocstrings[python]>=0.23.0,<0.30.0",
-    "pyyaml>=6.0,<7.0.0",
-]
+[tool.hatch.envs.lint]
+detached = true
+require = ["default"]
+dependencies = ["mypy", "ruff"]
 
-[tool.hatch.envs.docs.scripts]
-build = "mkdocs build"
-serve = "mkdocs serve --dev-addr localhost:8000"
-
-[tool.hatch.envs.test]
-dependencies = ["poulet_py[testing]"]
-
-[tool.hatch.envs.test.scripts]
-test = "pytest {args}"
-check_types = "mypy -p poulet_py"
-
-[tool.isort]
-profile = "black"
-known_third_party = []
-src_paths = ["poulet_py"]
+[tool.hatch.envs.lint.scripts]
+typing = "mypy --install-types --non-interactive {args:neu_sdk tests}"
+style = "ruff check"
+fmt = "ruff format"
+all = ["style", "typing"]
 
 [tool.mypy]
 strict = true
-warn_unused_configs = true
-warn_unreachable = true
-warn_return_any = true
-disallow_untyped_decorators = true
-disallow_any_generics = false
-implicit_reexport = false
-show_error_codes = true
-disallow_incomplete_defs = true
-warn_unused_ignores = true
-warn_redundant_casts = true
-no_implicit_optional = false
-strict_equality = false
-strict_optional = false
+ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 120
+indent-width = 4
+exclude = [
+  ".bzr",
+  ".direnv",
+  ".eggs",
+  ".git",
+  ".git-rewrite",
+  ".hg",
+  ".ipynb_checkpoints",
+  ".mypy_cache",
+  ".nox",
+  ".pants.d",
+  ".pyenv",
+  ".pytest_cache",
+  ".pytype",
+  ".ruff_cache",
+  ".svn",
+  ".tox",
+  ".venv",
+  ".vscode",
+  "__pypackages__",
+  "_build",
+  "buck-out",
+  "build",
+  "dist",
+  "node_modules",
+  "site-packages",
+  "venv",
+]
 
 [tool.ruff.lint]
-select = ["E", "W", "F", "C", "B", "I"]
-ignore = ["E501", "B008", "C901", "B026"]
+select = [
+  "A",
+  "ARG",
+  "B",
+  "C",
+  "DTZ",
+  "E",
+  "EM",
+  "F",
+  "FBT",
+  "I",
+  "ICN",
+  "ISC",
+  "N",
+  "PLC",
+  "PLE",
+  "PLR",
+  "PLW",
+  "Q",
+  "RUF",
+  "S",
+  "T",
+  "TID",
+  "UP",
+  "W",
+  "YTT",
+  "I",
+]
+ignore = ["ISC001"]
 
-exclude = ["docs_src/"]
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["E402"]
+"**/{tests,docs,tools}/*" = ["E402", "PLR2004", "S101", "TID252"]
+
+[tool.ruff.format]
+docstring-code-format = true
+line-ending = "auto"
+docstring-code-line-length = "dynamic"
 
 [tool.ruff.lint.isort]
-combine-as-imports = true
+known-first-party = ["neu_sdk"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[[tool.hatch.envs.hatch-test.matrix]]
+python = ["3.8", "3.9", "3.10", "3.11", "3.12"]
 
 [tool.coverage.run]
+source_pkgs = ["neu_sdk", "tests"]
+branch = true
 parallel = true
-context = '${CONTEXT}'
-source = ["tests", "poulet_py"]
-# omit = []
 
-[[tool.mypy.overrides]]
-module = "poulet_py.tests.*"
-ignore_missing_imports = true
-check_untyped_defs = true
+[tool.coverage.paths]
+neu_sdk = ["neu_sdk", "*/neu-sdk/neu_sdk"]
+tests = ["tests", "*/neu-sdk/tests"]
 
-[[tool.mypy.overrides]]
-module = "docs_src.*"
-ignore_errors = true
-
-[tool.pytest.ini_options]
-addopts = ["--strict-config", "--strict-markers"]
-xfail_strict = true
-junit_family = "xunit2"
-
-[tool.hatch.build.targets.sdist]
-include = ["/poulet_py"]
+[tool.coverage.report]
+exclude_lines = ["no cov", "if __name__ == .__main__.:", "if TYPE_CHECKING:"]
