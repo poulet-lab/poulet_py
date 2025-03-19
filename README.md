@@ -8,4 +8,3 @@ pip install -U -e .[all]
 # Install specific, choose one or more
 pip install -U -e .[hardware,tools,utils]
 ```
-# TODO
