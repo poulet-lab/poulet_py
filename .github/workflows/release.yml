@@ -1,0 +1,50 @@
+name: Release on Version Change
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Allows manual triggering of the workflow
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+        with:
+          fetch-tags: true
+
+      - name: Install Hatch
+        uses: pypa/hatch@install
+
+      - name: Extract current version
+        run: |
+          version=$(hatch version)
+          echo "version=$version" >> $GITHUB_ENV
+
+      - name: Get latest tag
+        run: |
+          latest_tag=$(git describe --tags --abbrev=0 || echo "0.0.0")
+          echo "latest_tag=$latest_tag" >> $GITHUB_ENV
+
+      - name: Compare versions
+        run: |
+          if [ "${{ env.version }}" != "${{ env.latest_tag }}" ]; then
+            echo "new_version=true" >> $GITHUB_ENV
+          else
+            echo "new_version=false" >> $GITHUB_ENV
+          fi
+
+      - name: Create a new tag and release
+        if: env.new_version == 'true'
+        env:
+          VERSION: ${{ env.version }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          git tag -a "$VERSION" -m "Release $VERSION"
+          git push origin "$VERSION"
+          gh release create "$VERSION" --title "Release $VERSION" --notes "Automated release for version $VERSION"

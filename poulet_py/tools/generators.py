@@ -2,9 +2,7 @@ from random import shuffle
 from typing import Any, Literal
 
 
-def generate_trials(
-    n: int, *, stimuli_options: list[Any], mode: Literal["random", "fixed"] = "random"
-) -> list[Any]:
+def generate_trials(n: int, *, stimuli_options: list[Any], mode: Literal["random", "fixed"] = "random") -> list[Any]:
     """
     Generates a list of trials, randomly or fixed, based on a list of options.
 

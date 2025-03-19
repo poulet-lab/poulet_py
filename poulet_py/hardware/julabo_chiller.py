@@ -1,5 +1,7 @@
 import serial
 import time
+import os
+import csv
 
 
 class JulaboChiller:
@@ -18,15 +20,17 @@ class JulaboChiller:
             # check in env cariable
             from dotenv import load_dotenv, find_dotenv
             import os
+
             dotenv_path = find_dotenv(usecwd=True)
             load_dotenv(dotenv_path)
-            self.port = os.getenv('CHILLER_PORT')
+            self.port = os.getenv("CHILLER_PORT")
             if self.port is None:
                 raise ValueError("No serial port specified in .env file or argument.")
         else:
             self.port = port
         self.baudrate = baudrate
         self.timeout = timeout
+        self.start_time = None
         self.ser = self._configure_serial_port()
 
     def _configure_serial_port(self):
@@ -37,8 +41,54 @@ class JulaboChiller:
             timeout=self.timeout,
             parity=serial.PARITY_NONE,
             stopbits=serial.STOPBITS_ONE,
-            bytesize=serial.EIGHTBITS
+            bytesize=serial.EIGHTBITS,
         )
+
+    def set_timer(self, start_time):
+        """Set the timer for the chiller.
+
+        Args:
+            start_time (float): The start time of the experiment.
+        """
+        self.start_time = start_time
+
+    def set_error_log_path(self, path, file_name):
+        """
+        Sets the path for the error log file.
+
+        Args:
+            path (str): The directory where the error log file will be saved.
+        """
+        self.error_log_file = os.path.join(path, file_name)
+
+    def set_output_file(self, path, extra_name, base_file_name="julabo_chiller"):
+        """
+        Sets the output file for recording the video.
+
+        Args:
+            path (str): The directory where the output file will be saved.
+        """
+        self.output_file = os.path.join(path, f"{base_file_name}-{extra_name}.csv")
+
+        if not os.path.isfile(self.output_file):
+            with open(self.output_file, mode="w", newline="") as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow(["timestamp", "temperature"])
+
+    def save_temperature(self, timestamp, temperature):
+        """
+        Save the temperature to a CSV file.
+
+        Args:
+            timestamp: The timestamp to be saved.
+            temperature: The temperature to be saved.
+        """
+        try:
+            with open(self.output_file, mode="a", newline="") as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow([timestamp, temperature])
+        except Exception as e:
+            print(f"Error saving temperature: {e}")
 
     def read(self):
         """Read data from the chiller.
@@ -49,7 +99,9 @@ class JulaboChiller:
         try:
             time.sleep(0.1)  # Give the device some time to respond
             if self.ser.in_waiting > 0:
-                data = self.ser.readline().decode('ascii').strip()
+                data = self.ser.readline().decode("ascii").strip()
+                if self.start_time:
+                    self.latest_timestamp = time.time() - self.start_time
                 return data
             else:
                 return None
@@ -64,7 +116,7 @@ class JulaboChiller:
             command (str): The command to send to the chiller.
         """
         try:
-            self.ser.write(command.encode('ascii') + b'\r\n')
+            self.ser.write(command.encode("ascii") + b"\r\n")
             time.sleep(0.1)  # Give the device some time to process the command
         except Exception as e:
             print(f"Error writing to serial port: {e}")
@@ -79,7 +131,7 @@ class JulaboChiller:
         Args:
             temperature (float): The temperature to set (in Celsius).
         """
-        command = f'OUT_SP_00 {temperature:.1f}'
+        command = f"OUT_SP_00 {temperature:.1f}"
         self.write(command)
 
     def get_temperature(self):
@@ -88,16 +140,18 @@ class JulaboChiller:
         Returns:
             str: The current temperature reported by the chiller.
         """
-        self.write('IN_PV_00')
-        return self.read()
+        self.write("IN_PV_00")
+        self.latest_temperature = self.read()
+
+        return self.latest_temperature
 
     def start(self):
         """Turn on the chiller."""
-        self.write('OUT_MODE_05 1')
+        self.write("OUT_MODE_05 1")
 
     def stop(self):
         """Turn off the chiller."""
-        self.write('OUT_MODE_05 0')
+        self.write("OUT_MODE_05 0")
 
     def check_version(self):
         """Check the version of the chiller.
@@ -105,7 +159,7 @@ class JulaboChiller:
         Returns:
             str: The version information.
         """
-        self.write('VERSION')
+        self.write("VERSION")
         return self.read()
 
     def check_status(self):
@@ -114,7 +168,7 @@ class JulaboChiller:
         Returns:
             str: The status information.
         """
-        self.write('STATUS')
+        self.write("STATUS")
         return self.read()
 
     def check_started(self):
@@ -123,7 +177,7 @@ class JulaboChiller:
         Returns:
             str: The started status.
         """
-        self.write('IN_MODE_05')
+        self.write("IN_MODE_05")
         return self.read()
 
     def get_target_temperature(self):
@@ -132,5 +186,5 @@ class JulaboChiller:
         Returns:
             str: The target temperature.
         """
-        self.write('IN_SP_00')
+        self.write("IN_SP_00")
         return self.read()

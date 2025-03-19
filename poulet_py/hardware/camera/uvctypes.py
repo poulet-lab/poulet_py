@@ -316,33 +316,19 @@ UVC_FRAME_FORMAT_RGB = 7
 UVC_FRAME_FORMAT_BGR = 8
 UVC_FRAME_FORMAT_Y16 = 13
 
-VS_FMT_GUID_GREY = create_string_buffer(
-    b"Y8  \x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71", 16
-)
+VS_FMT_GUID_GREY = create_string_buffer(b"Y8  \x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71", 16)
 
-VS_FMT_GUID_Y16 = create_string_buffer(
-    b"Y16 \x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71", 16
-)
+VS_FMT_GUID_Y16 = create_string_buffer(b"Y16 \x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71", 16)
 
-VS_FMT_GUID_YUYV = create_string_buffer(
-    b"UYVY\x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71", 16
-)
+VS_FMT_GUID_YUYV = create_string_buffer(b"UYVY\x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71", 16)
 
-VS_FMT_GUID_NV12 = create_string_buffer(
-    b"NV12\x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71", 16
-)
+VS_FMT_GUID_NV12 = create_string_buffer(b"NV12\x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71", 16)
 
-VS_FMT_GUID_YU12 = create_string_buffer(
-    b"I420\x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71", 16
-)
+VS_FMT_GUID_YU12 = create_string_buffer(b"I420\x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71", 16)
 
-VS_FMT_GUID_BGR3 = create_string_buffer(
-    b"\x7d\xeb\x36\xe4\x4f\x52\xce\x11\x9f\x53\x00\x20\xaf\x0b\xa7\x70", 16
-)
+VS_FMT_GUID_BGR3 = create_string_buffer(b"\x7d\xeb\x36\xe4\x4f\x52\xce\x11\x9f\x53\x00\x20\xaf\x0b\xa7\x70", 16)
 
-VS_FMT_GUID_RGB565 = create_string_buffer(
-    b"RGBP\x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71", 16
-)
+VS_FMT_GUID_RGB565 = create_string_buffer(b"RGBP\x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71", 16)
 
 libuvc.uvc_get_format_descs.restype = POINTER(uvc_format_desc)
 
@@ -435,15 +421,12 @@ def set_auto_ffc(devh):
 
 
 def set_external_ffc(devh):
-
     sizeData = 32
     # shutter_mode = (c_uint16)(2) #2 = external
     getSDK = 0x3D
     controlID = (getSDK >> 2) + 1  # formula from Kurt Kiefer
     print("controlID: " + str(controlID))
-    set_extension_unit(
-        devh, SYS_UNIT_ID, controlID, byref(sysShutterExternal), sizeData
-    )
+    set_extension_unit(devh, SYS_UNIT_ID, controlID, byref(sysShutterExternal), sizeData)
 
 
 shutter = lep_sys_shutter_mode()
