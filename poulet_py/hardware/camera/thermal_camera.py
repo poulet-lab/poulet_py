@@ -24,7 +24,6 @@ import sys
 import os
 import platform
 import numpy as np
-import pythoncom
 import signal
 import logging
 
@@ -61,7 +60,8 @@ if not platform.system() == "Windows":
     PTR_PY_FRAME_CALLBACK = CFUNCTYPE(None, POINTER(uvc_frame), c_void_p)(py_frame_callback)
     tiff_frame = 1
     colorMapType = 0
-
+else:
+    import pythoncom
 
 class ThermalCamera:
     """
