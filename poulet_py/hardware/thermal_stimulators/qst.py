@@ -14,9 +14,7 @@ class TCSIIStimulus(BaseModel):
     target: int = Field(description="target temperature in C ")
     rise_rate: int = Field(description="rise rate in C/s")
     return_rate: int = Field(description="return rate in C/s")
-    dur_ms: int | None = Field(
-        None, description="duration in ms. Phases duration depends on dur_mode."
-    )
+    dur_ms: int | None = Field(None, description="duration in ms. Phases duration depends on dur_mode.")
     dur_mode: Literal["fix_stim", "fixed_plateau", "fixed_total"] = Field(
         "fixed_stim",
         description="""
@@ -40,15 +38,11 @@ class TCSIIController(tcsii_serial):
         trigger_in=True,
         temp_profile=False,
     ):
-        super().__init__(
-            port, baseline, surfaces, max_temp, beep, trigger_in, temp_profile
-        )
+        super().__init__(port, baseline, surfaces, max_temp, beep, trigger_in, temp_profile)
 
         self.data = DataFrame()
 
-    def trials(
-        self, n: int, stimuli: list[TCSIIStimulus], mode: Literal["random", "fixed"]
-    ) -> Self:
+    def trials(self, n: int, stimuli: list[TCSIIStimulus], mode: Literal["random", "fixed"]) -> Self:
         self.trials = generate_trials(n=n, stimuli_options=stimuli, mode=mode)
         return self
 

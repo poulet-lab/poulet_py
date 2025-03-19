@@ -1,10 +1,13 @@
 # Poulet Python Library
 # How to install
 ```shell
-# Install everything
-pip install -U .[all]
-# Install editable
-pip install -U -e .[all]
+# Install everything (default)
+pip install -U .
 # Install specific, choose one or more
-pip install -U -e .[hardware,tools,utils]
+pip install -U .[hardware,tools,utils]
+# Install editable for developement
+pip install -U -e .
 ```
+
+# TODO
+=======

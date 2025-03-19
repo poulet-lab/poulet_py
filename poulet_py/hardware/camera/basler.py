@@ -15,6 +15,7 @@ class BaslerCamera:
     A class to interact with multiple Basler cameras using pypylon and OpenCV.
     Each camera will record to its own video file and log timestamps to a CSV.
     """
+
     def __init__(self, max_cameras=2):
         """
         Initializes the BaslerCamera object by enumerating devices and
@@ -40,12 +41,12 @@ class BaslerCamera:
             self.cameras[i].Attach(tlFactory.CreateDevice(self.devices[i]))
             print("Using device", self.cameras[i].GetDeviceInfo().GetModelName())
 
-        print('I am here')
+        print("I am here")
 
         self.frames_per_second = None
-        self.outs = {}              # VideoWriter objects keyed by camera index
+        self.outs = {}  # VideoWriter objects keyed by camera index
         self.timestamps_files = {}  # Timestamps CSV file path per camera
-        self.frame_numbers = {}     # Frame count for each camera
+        self.frame_numbers = {}  # Frame count for each camera
         self.start_time = None
         self.error_log_file = None
 
@@ -108,9 +109,7 @@ class BaslerCamera:
             )
 
             # Setup the timestamps CSV file.
-            timestamps_file = os.path.join(
-                path, f"{base_file_name}_{extra_name}_cam{i}_timestamps.csv"
-            )
+            timestamps_file = os.path.join(path, f"{base_file_name}_{extra_name}_cam{i}_timestamps.csv")
             self.timestamps_files[i] = timestamps_file
 
             if not os.path.isfile(timestamps_file):
@@ -253,7 +252,7 @@ class BaslerCamera:
             with open(metadata_path, "w") as f:
                 json.dump(data, f, indent=4)
             cam.Close()
-            
+
     def recording(
         self,
         data_save_folder: str,
@@ -267,7 +266,6 @@ class BaslerCamera:
         fps: int = 30,
         video_format: Literal["mp4", "avi"] = "mp4",
     ):
-
         # Metadata to be saved in the JSON file
         metadata = {
             "cage ID": cage_id,
@@ -296,9 +294,7 @@ class BaslerCamera:
                 print("Recording started....")
 
                 current_time = datetime.datetime.now().strftime("%H%M%S")
-                self.set_output_file(
-                    data_save_folder, f"recording_{rec_count + 1}_{current_time}"
-                )
+                self.set_output_file(data_save_folder, f"recording_{rec_count + 1}_{current_time}")
 
                 try:
                     print("Starting capture...")
@@ -313,9 +309,7 @@ class BaslerCamera:
                     self.save_metadata()
 
                     # Save metadata for each recording
-                    save_metadata_exp(
-                        metadata, data_save_folder, f"test_{rec_count + 1}"
-                    )
+                    save_metadata_exp(metadata, data_save_folder, f"test_{rec_count + 1}")
 
                     # Buffer period before the next recording
                     if rec_count < total_rec - 1:
@@ -338,6 +332,4 @@ class BaslerCamera:
             logging.error(error_message)
         else:
             print(f"An error occurred: {error_message}")
-            print(
-                "Set the error log file path to log the error with set_error_log_path()."
-            )
+            print("Set the error log file path to log the error with set_error_log_path().")

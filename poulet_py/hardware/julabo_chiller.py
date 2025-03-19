@@ -3,6 +3,7 @@ import time
 import os
 import csv
 
+
 class JulaboChiller:
     """Class to interact with a Julabo water chiller via serial port."""
 
@@ -19,9 +20,10 @@ class JulaboChiller:
             # check in env cariable
             from dotenv import load_dotenv, find_dotenv
             import os
+
             dotenv_path = find_dotenv(usecwd=True)
             load_dotenv(dotenv_path)
-            self.port = os.getenv('CHILLER_PORT')
+            self.port = os.getenv("CHILLER_PORT")
             if self.port is None:
                 raise ValueError("No serial port specified in .env file or argument.")
         else:
@@ -39,9 +41,9 @@ class JulaboChiller:
             timeout=self.timeout,
             parity=serial.PARITY_NONE,
             stopbits=serial.STOPBITS_ONE,
-            bytesize=serial.EIGHTBITS
+            bytesize=serial.EIGHTBITS,
         )
-    
+
     def set_timer(self, start_time):
         """Set the timer for the chiller.
 
@@ -97,7 +99,7 @@ class JulaboChiller:
         try:
             time.sleep(0.1)  # Give the device some time to respond
             if self.ser.in_waiting > 0:
-                data = self.ser.readline().decode('ascii').strip()
+                data = self.ser.readline().decode("ascii").strip()
                 if self.start_time:
                     self.latest_timestamp = time.time() - self.start_time
                 return data
@@ -114,7 +116,7 @@ class JulaboChiller:
             command (str): The command to send to the chiller.
         """
         try:
-            self.ser.write(command.encode('ascii') + b'\r\n')
+            self.ser.write(command.encode("ascii") + b"\r\n")
             time.sleep(0.1)  # Give the device some time to process the command
         except Exception as e:
             print(f"Error writing to serial port: {e}")
@@ -129,7 +131,7 @@ class JulaboChiller:
         Args:
             temperature (float): The temperature to set (in Celsius).
         """
-        command = f'OUT_SP_00 {temperature:.1f}'
+        command = f"OUT_SP_00 {temperature:.1f}"
         self.write(command)
 
     def get_temperature(self):
@@ -138,18 +140,18 @@ class JulaboChiller:
         Returns:
             str: The current temperature reported by the chiller.
         """
-        self.write('IN_PV_00')
+        self.write("IN_PV_00")
         self.latest_temperature = self.read()
 
         return self.latest_temperature
 
     def start(self):
         """Turn on the chiller."""
-        self.write('OUT_MODE_05 1')
+        self.write("OUT_MODE_05 1")
 
     def stop(self):
         """Turn off the chiller."""
-        self.write('OUT_MODE_05 0')
+        self.write("OUT_MODE_05 0")
 
     def check_version(self):
         """Check the version of the chiller.
@@ -157,7 +159,7 @@ class JulaboChiller:
         Returns:
             str: The version information.
         """
-        self.write('VERSION')
+        self.write("VERSION")
         return self.read()
 
     def check_status(self):
@@ -166,7 +168,7 @@ class JulaboChiller:
         Returns:
             str: The status information.
         """
-        self.write('STATUS')
+        self.write("STATUS")
         return self.read()
 
     def check_started(self):
@@ -175,7 +177,7 @@ class JulaboChiller:
         Returns:
             str: The started status.
         """
-        self.write('IN_MODE_05')
+        self.write("IN_MODE_05")
         return self.read()
 
     def get_target_temperature(self):
@@ -184,5 +186,5 @@ class JulaboChiller:
         Returns:
             str: The target temperature.
         """
-        self.write('IN_SP_00')
+        self.write("IN_SP_00")
         return self.read()

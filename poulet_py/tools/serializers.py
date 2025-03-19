@@ -3,7 +3,7 @@ import json
 
 
 def save_metadata_exp(metadata, path, name):
-    os.makedirs(path,exist_ok=True)
+    os.makedirs(path, exist_ok=True)
     metadata_file_name = f"{name}.json"
     metadata_path = os.path.join(path, metadata_file_name)
 
