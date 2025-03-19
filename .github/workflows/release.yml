@@ -23,28 +23,28 @@ jobs:
           version=$(hatch version)
           echo "version=$version" >> $GITHUB_ENV
 
-      - name: Get latest tag
+      - name: Delete existing tag and release if exists
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          latest_tag=$(git describe --tags --abbrev=0 || echo "0.0.0")
-          echo "latest_tag=$latest_tag" >> $GITHUB_ENV
-
-      - name: Compare versions
-        run: |
-          if [ "${{ env.version }}" != "${{ env.latest_tag }}" ]; then
-            echo "new_version=true" >> $GITHUB_ENV
+          git fetch --tags
+          echo "Version is: $version"
+          if git rev-parse "$version" >/dev/null 2>&1; then
+              echo "Deleting existing tag and release for $version"
+              git tag -d "$version"
+              git push --delete origin "$version"
+              gh release delete "$version" --yes
           else
-            echo "new_version=false" >> $GITHUB_ENV
+              echo "Tag $version does not exist"
           fi
 
       - name: Create a new tag and release
-        if: env.new_version == 'true'
         env:
-          VERSION: ${{ env.version }}
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          git tag -a "$VERSION" -m "Release $VERSION"
-          git push origin "$VERSION"
-          gh release create "$VERSION" --title "Release $VERSION" --notes "Automated release for version $VERSION"
+          git tag -a "$version" -m "Release $version"
+          git push origin "$version"
+          gh release create "$version" --title "Release $version" --notes "Automated release for version $version"
