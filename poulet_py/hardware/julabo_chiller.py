@@ -3,6 +3,7 @@ import time
 import os
 import csv
 
+
 class JulaboChiller:
     """Class to interact with a Julabo water chiller via serial port."""
 
@@ -42,7 +43,7 @@ class JulaboChiller:
             stopbits=serial.STOPBITS_ONE,
             bytesize=serial.EIGHTBITS,
         )
-    
+
     def set_timer(self, start_time):
         """Set the timer for the chiller.
 
@@ -98,7 +99,7 @@ class JulaboChiller:
         try:
             time.sleep(0.1)  # Give the device some time to respond
             if self.ser.in_waiting > 0:
-                data = self.ser.readline().decode('ascii').strip()
+                data = self.ser.readline().decode("ascii").strip()
                 if self.start_time:
                     self.latest_timestamp = time.time() - self.start_time
                 return data
@@ -139,11 +140,10 @@ class JulaboChiller:
         Returns:
             str: The current temperature reported by the chiller.
         """
-        self.write('IN_PV_00')
+        self.write("IN_PV_00")
         self.latest_temperature = self.read()
 
         return self.latest_temperature
-
 
     def start(self):
         """Turn on the chiller."""

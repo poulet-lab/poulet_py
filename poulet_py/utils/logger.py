@@ -55,53 +55,53 @@ class SessionLogger:
         self.notes = None
 
         self.body_weight_trends_C57BL_6J = {
-        'male': {
-            'week_3': {'low_bound': 8.7, 'high_bound': 12.5},
-            'week_4': {'low_bound': 13.9, 'high_bound': 19.1},
-            'week_5': {'low_bound': 18.9, 'high_bound': 22.5},
-            'week_6': {'low_bound': 20.1, 'high_bound': 23.7},
-            'week_7': {'low_bound': 22.1, 'high_bound': 25.1},
-            'week_8': {'low_bound': 23.6, 'high_bound': 26.4},
-            'week_9': {'low_bound': 24.5, 'high_bound': 27.7},
-            'week_10': {'low_bound': 25.2, 'high_bound': 28.6},
-            'week_11': {'low_bound': 25.8, 'high_bound': 29.6},
-            'week_12': {'low_bound': 26.9, 'high_bound': 30.9},
-            'week_13': {'low_bound': 27.9, 'high_bound': 32.1},
-            'week_14': {'low_bound': 28.6, 'high_bound': 33.0},
-            'week_15': {'low_bound': 29.2, 'high_bound': 34.0},
-            'week_16': {'low_bound': 29.7, 'high_bound': 34.5},
-            'week_17': {'low_bound': 30.2, 'high_bound': 35.4},
-            'week_18': {'low_bound': 30.5, 'high_bound': 36.1},
-            'week_19': {'low_bound': 30.9, 'high_bound': 36.5},
-            'week_20': {'low_bound': 31.3, 'high_bound': 37.1},
-            'week_21': {'low_bound': 31.7, 'high_bound': 37.5},
-            'week_22': {'low_bound': 31.9, 'high_bound': 38.3},
-            'week_23': {'low_bound': 32.6, 'high_bound': 39.0},
-            'week_24': {'low_bound': 32.9, 'high_bound': 39.7},
+            "male": {
+                "week_3": {"low_bound": 8.7, "high_bound": 12.5},
+                "week_4": {"low_bound": 13.9, "high_bound": 19.1},
+                "week_5": {"low_bound": 18.9, "high_bound": 22.5},
+                "week_6": {"low_bound": 20.1, "high_bound": 23.7},
+                "week_7": {"low_bound": 22.1, "high_bound": 25.1},
+                "week_8": {"low_bound": 23.6, "high_bound": 26.4},
+                "week_9": {"low_bound": 24.5, "high_bound": 27.7},
+                "week_10": {"low_bound": 25.2, "high_bound": 28.6},
+                "week_11": {"low_bound": 25.8, "high_bound": 29.6},
+                "week_12": {"low_bound": 26.9, "high_bound": 30.9},
+                "week_13": {"low_bound": 27.9, "high_bound": 32.1},
+                "week_14": {"low_bound": 28.6, "high_bound": 33.0},
+                "week_15": {"low_bound": 29.2, "high_bound": 34.0},
+                "week_16": {"low_bound": 29.7, "high_bound": 34.5},
+                "week_17": {"low_bound": 30.2, "high_bound": 35.4},
+                "week_18": {"low_bound": 30.5, "high_bound": 36.1},
+                "week_19": {"low_bound": 30.9, "high_bound": 36.5},
+                "week_20": {"low_bound": 31.3, "high_bound": 37.1},
+                "week_21": {"low_bound": 31.7, "high_bound": 37.5},
+                "week_22": {"low_bound": 31.9, "high_bound": 38.3},
+                "week_23": {"low_bound": 32.6, "high_bound": 39.0},
+                "week_24": {"low_bound": 32.9, "high_bound": 39.7},
             },
-        'female': {
-            'week_3': {'low_bound': 8.4, 'high_bound': 11.8},
-            'week_4': {'low_bound': 12.9, 'high_bound': 16.5},
-            'week_5': {'low_bound': 16.7, 'high_bound': 18.9},
-            'week_6': {'low_bound': 17.6, 'high_bound': 19.4},
-            'week_7': {'low_bound': 18.0, 'high_bound': 20.0},
-            'week_8': {'low_bound': 18.4, 'high_bound': 20.8},
-            'week_9': {'low_bound': 19.0, 'high_bound': 21.6},
-            'week_10': {'low_bound': 19.3, 'high_bound': 22.1},
-            'week_11': {'low_bound': 19.8, 'high_bound': 22.8},
-            'week_12': {'low_bound': 20.3, 'high_bound': 23.5},
-            'week_13': {'low_bound': 20.7, 'high_bound': 24.5},
-            'week_14': {'low_bound': 21.0, 'high_bound': 25.0},
-            'week_15': {'low_bound': 21.2, 'high_bound': 25.8},
-            'week_16': {'low_bound': 21.6, 'high_bound': 26.2},
-            'week_17': {'low_bound': 21.6, 'high_bound': 26.6},
-            'week_18': {'low_bound': 21.9, 'high_bound': 27.1},
-            'week_19': {'low_bound': 22.0, 'high_bound': 27.6},
-            'week_20': {'low_bound': 22.5, 'high_bound': 28.1},
-            'week_21': {'low_bound': 22.6, 'high_bound': 29.0},
-            'week_22': {'low_bound': 22.9, 'high_bound': 29.3},
-            'week_23': {'low_bound': 23.2, 'high_bound': 29.8},
-            'week_24': {'low_bound': 23.5, 'high_bound': 30.3},
+            "female": {
+                "week_3": {"low_bound": 8.4, "high_bound": 11.8},
+                "week_4": {"low_bound": 12.9, "high_bound": 16.5},
+                "week_5": {"low_bound": 16.7, "high_bound": 18.9},
+                "week_6": {"low_bound": 17.6, "high_bound": 19.4},
+                "week_7": {"low_bound": 18.0, "high_bound": 20.0},
+                "week_8": {"low_bound": 18.4, "high_bound": 20.8},
+                "week_9": {"low_bound": 19.0, "high_bound": 21.6},
+                "week_10": {"low_bound": 19.3, "high_bound": 22.1},
+                "week_11": {"low_bound": 19.8, "high_bound": 22.8},
+                "week_12": {"low_bound": 20.3, "high_bound": 23.5},
+                "week_13": {"low_bound": 20.7, "high_bound": 24.5},
+                "week_14": {"low_bound": 21.0, "high_bound": 25.0},
+                "week_15": {"low_bound": 21.2, "high_bound": 25.8},
+                "week_16": {"low_bound": 21.6, "high_bound": 26.2},
+                "week_17": {"low_bound": 21.6, "high_bound": 26.6},
+                "week_18": {"low_bound": 21.9, "high_bound": 27.1},
+                "week_19": {"low_bound": 22.0, "high_bound": 27.6},
+                "week_20": {"low_bound": 22.5, "high_bound": 28.1},
+                "week_21": {"low_bound": 22.6, "high_bound": 29.0},
+                "week_22": {"low_bound": 22.9, "high_bound": 29.3},
+                "week_23": {"low_bound": 23.2, "high_bound": 29.8},
+                "week_24": {"low_bound": 23.5, "high_bound": 30.3},
             },
         }
 
@@ -152,9 +152,9 @@ class SessionLogger:
         column = 0
 
         def create_button(subject_id, row, column):
-            button = tk.Button(frame, text=subject_id, width=20,
-                               command=lambda: toggle_selection(subject_id, button),
-                               bg="lightyellow")
+            button = tk.Button(
+                frame, text=subject_id, width=20, command=lambda: toggle_selection(subject_id, button), bg="lightyellow"
+            )
             button.grid(row=row, column=column, padx=5, pady=5)
             return button
 
@@ -165,7 +165,7 @@ class SessionLogger:
                 column = 0
                 row += 1
 
-        tk.Button(frame, text="Accept", command=submit).grid(row=row+1, column=0, columnspan=max_columns, pady=10)
+        tk.Button(frame, text="Accept", command=submit).grid(row=row + 1, column=0, columnspan=max_columns, pady=10)
 
         # Load and display the image
         image_frame = tk.Frame(root)
@@ -195,25 +195,24 @@ class SessionLogger:
             # update the current license in the subjects.csv file
             subjects_data_csv = pd.read_csv(self.paths["subjects"])
 
-            subjects_data_csv.loc[
-                subjects_data_csv["subject_id"] == self.subject_id, "current_license"
-            ] = self.license
-            #get the genotype of the mouse
-            genotype = subjects_data_csv.loc[
-                subjects_data_csv["subject_id"] == self.subject_id, "genotype"
-            ].iloc[0]
+            subjects_data_csv.loc[subjects_data_csv["subject_id"] == self.subject_id, "current_license"] = self.license
+            # get the genotype of the mouse
+            genotype = subjects_data_csv.loc[subjects_data_csv["subject_id"] == self.subject_id, "genotype"].iloc[0]
             # get the cage number of the mouse
-            cage_number = subjects_data_csv.loc[
-                subjects_data_csv["subject_id"] == self.subject_id, "cage_number"
-            ].iloc[0]
+            cage_number = subjects_data_csv.loc[subjects_data_csv["subject_id"] == self.subject_id, "cage_number"].iloc[
+                0
+            ]
 
             subjects_data_csv.to_csv(self.paths["subjects"], index=False)
 
             if self.emails is not None and self.email_mfa_password is not None:
-                subject = 'Mouse change of license'
-                #get the date as dd/mm/yyyy
+                subject = "Mouse change of license"
+                # get the date as dd/mm/yyyy
                 date = datetime.now().strftime("%d/%m/%Y")
-                self.send_email(subject, f"On {date}, the mouse {self.subject_id} with genotype {genotype} has been assigned the license {self.license}. This mouse is in cage {cage_number}.\n\n- Date: {date}\n- License: {self.license}\n- Genotype: {genotype}\n- Cage number: {cage_number}\n\nThanks!")
+                self.send_email(
+                    subject,
+                    f"On {date}, the mouse {self.subject_id} with genotype {genotype} has been assigned the license {self.license}. This mouse is in cage {cage_number}.\n\n- Date: {date}\n- License: {self.license}\n- Genotype: {genotype}\n- Cage number: {cage_number}\n\nThanks!",
+                )
 
         printme(f"License: {self.license}")
 
@@ -228,20 +227,20 @@ class SessionLogger:
         Returns:
             int: The age of the mouse in days.
         """
-        birth_date = datetime.strptime(date_of_birth, '%d/%m/%Y')
+        birth_date = datetime.strptime(date_of_birth, "%d/%m/%Y")
         current_date = datetime.now()
         age_in_days = (current_date - birth_date).days
         age_in_weeks = age_in_days / 7
         return int(age_in_weeks) if age_in_weeks - int(age_in_weeks) < 0.5 else int(age_in_weeks) + 1
 
-    def send_email(self, subject, body, smtp_user = 'ivan.eromano@gmail.com'):
+    def send_email(self, subject, body, smtp_user="ivan.eromano@gmail.com"):
         """
-            Send an email with the specified subject and body to the list of recipients.
+        Send an email with the specified subject and body to the list of recipients.
 
-            Args:
-                subject (str): Subject of the email.
-                body (str): Body of the email.
-                to_emails (list): List of recipient email addresses.
+        Args:
+            subject (str): Subject of the email.
+            body (str): Body of the email.
+            to_emails (list): List of recipient email addresses.
         """
         # SMTP server configuration for Gmail
         smtp_server = "smtp.gmail.com"
@@ -250,19 +249,19 @@ class SessionLogger:
 
         # Create the email
         msg = MIMEMultipart()
-        msg['From'] = smtp_user
-        msg['To'] = ", ".join(self.emails)
-        msg['Subject'] = subject
+        msg["From"] = smtp_user
+        msg["To"] = ", ".join(self.emails)
+        msg["Subject"] = subject
 
         # Attach the email body
-        msg.attach(MIMEText(body, 'plain'))
+        msg.attach(MIMEText(body, "plain"))
 
         try:
             # Connect to the SMTP server
             server = smtplib.SMTP(smtp_server, smtp_port)
             server.starttls()  # Upgrade the connection to a secure encrypted SSL/TLS connection
             server.login(smtp_user, smtp_password)
-            
+
             # Send the email
             server.sendmail(smtp_user, self.emails, msg.as_string())
             print(f"Email sent to {', '.join(self.emails)}")
@@ -331,13 +330,14 @@ class SessionLogger:
             buttons = []
             row = 0
             for method in sorted(method_data_dict.keys()):
+
                 def create_button(method, row):
-                    button = tk.Button(frame, text=method, width=20,
-                                       command=lambda: select_method(method, button),
-                                       bg="lightyellow")
+                    button = tk.Button(
+                        frame, text=method, width=20, command=lambda: select_method(method, button), bg="lightyellow"
+                    )
                     button.grid(row=row, column=0, padx=5, pady=5)
                     return button
-                
+
                 buttons.append(create_button(method, row))
                 row += 1
 
@@ -347,27 +347,21 @@ class SessionLogger:
 
         # check whether the method requires drugs
         methods_data_csv = pd.read_csv(self.paths["methods"])
-        self.drugs_required = methods_data_csv.loc[
-            methods_data_csv["name"] == self.method, "drugs"
-        ].iloc[0]
+        self.drugs_required = methods_data_csv.loc[methods_data_csv["name"] == self.method, "drugs"].iloc[0]
         # check whether the method means logging out
-        self.logged_out = methods_data_csv.loc[
-            methods_data_csv["name"] == self.method, "logging_out"
-        ].iloc[0]
+        self.logged_out = methods_data_csv.loc[methods_data_csv["name"] == self.method, "logging_out"].iloc[0]
         # check whether the method requires a todo
-        self.todo = methods_data_csv.loc[
-            methods_data_csv["name"] == self.method, "todo"
-        ].iloc[0]
+        self.todo = methods_data_csv.loc[methods_data_csv["name"] == self.method, "todo"].iloc[0]
         # if the method requires a todo, get the todo_message
         if self.todo:
-            self.todo_message = methods_data_csv.loc[
-                methods_data_csv["name"] == self.method, "todo_message"
-            ].iloc[0]
-            self.todo_deadline = methods_data_csv.loc[
-                methods_data_csv["name"] == self.method, "todo_deadline_h"
-            ].iloc[0]
+            self.todo_message = methods_data_csv.loc[methods_data_csv["name"] == self.method, "todo_message"].iloc[0]
+            self.todo_deadline = methods_data_csv.loc[methods_data_csv["name"] == self.method, "todo_deadline_h"].iloc[
+                0
+            ]
 
-        print(f"Method: {self.method} ({'drugs required' if self.drugs_required else 'no drugs required'}) ({'logged out' if self.logged_out else 'not logged out'})")
+        print(
+            f"Method: {self.method} ({'drugs required' if self.drugs_required else 'no drugs required'}) ({'logged out' if self.logged_out else 'not logged out'})"
+        )
 
     def get_method_version_data(self):
         """
@@ -431,6 +425,7 @@ class SessionLogger:
         Prompts user to enter duration of the experiment and select a time unit, then returns it.
         """
         if self.duration_s is None:
+
             def convert_to_seconds(value, unit):
                 if unit == "seconds":
                     return value
@@ -451,7 +446,7 @@ class SessionLogger:
             tk.Entry(root, textvariable=duration_var).grid(row=0, column=1, padx=5, pady=5)
 
             tk.Label(root, text="Select unit:").grid(row=1, column=0, padx=5, pady=5)
-            
+
             unit_options = [("seconds", "seconds"), ("minutes", "minutes"), ("hours", "hours"), ("days", "days")]
             row = 1
             for text, value in unit_options:
@@ -463,7 +458,7 @@ class SessionLogger:
                     duration_value = int(duration_var.get())
                     duration_unit = unit_var.get()
                     self.duration_s = convert_to_seconds(duration_value, duration_unit)
-                    
+
                     root.destroy()
                 except ValueError:
                     messagebox.showerror("Invalid Input", "Please enter a valid number for duration.")
@@ -508,7 +503,7 @@ class SessionLogger:
         if self.drugs_required:
             self.get_drugs_data()
 
-        for self.subject_id in self.subject_ids:            
+        for self.subject_id in self.subject_ids:
             if self.method == "weighing":
                 self.log_weight()
             else:
@@ -534,7 +529,7 @@ class SessionLogger:
             now = datetime.now()
             # get the date of the deadline
             if self.todo_deadline != "open" and self.todo_deadline is not None:
-                #transform the striong to integers
+                # transform the striong to integers
                 deadline = int(self.todo_deadline)
 
                 # add the hours of the deadline to the current time
@@ -545,7 +540,7 @@ class SessionLogger:
                     notification_time = notification_time.replace(hour=9, minute=0, second=0)
                 elif notification_time.hour >= 17:
                     notification_time = notification_time.replace(hour=15, minute=0, second=0)
-                
+
                 # format the notification time to the format YY-MM-DD HH:MM:SS
                 self.todo_deadline_date = notification_time.strftime("%Y-%m-%d %H:%M:%S")
             else:
@@ -558,14 +553,7 @@ class SessionLogger:
             with open(self.paths["todos"], mode="a", newline="") as file:
                 writer = csv.writer(file)
                 if not file_exists:
-                    writer.writerow(
-                        [
-                            "timestamp",
-                            "subject_id",
-                            "deadline",
-                            "message"
-                        ]
-                    )
+                    writer.writerow(["timestamp", "subject_id", "deadline", "message"])
                 writer.writerow(todo_entry)
 
     def get_drugs_data(self):
@@ -628,13 +616,11 @@ class SessionLogger:
         """
         subjects_data_csv = pd.read_csv(self.paths["subjects"])
 
-        subjects_data_csv.loc[
-            subjects_data_csv["subject_id"] == self.subject_id, "logged_out"
-        ] = True
-        #add logged out date
-        subjects_data_csv.loc[
-            subjects_data_csv["subject_id"] == self.subject_id, "logged_out_date"
-        ] = datetime.now().strftime("%d/%m/%Y")
+        subjects_data_csv.loc[subjects_data_csv["subject_id"] == self.subject_id, "logged_out"] = True
+        # add logged out date
+        subjects_data_csv.loc[subjects_data_csv["subject_id"] == self.subject_id, "logged_out_date"] = (
+            datetime.now().strftime("%d/%m/%Y")
+        )
 
         subjects_data_csv.to_csv(self.paths["subjects"], index=False)
 
@@ -680,18 +666,19 @@ class SessionLogger:
         trends = body_weight_trends_C57BL_6J[sex.lower()]
 
         if week_key in trends:
-            low_bound = trends[week_key]['low_bound']
-            high_bound = trends[week_key]['high_bound']
+            low_bound = trends[week_key]["low_bound"]
+            high_bound = trends[week_key]["high_bound"]
 
             if weight < low_bound or weight > high_bound:
                 diff_low = weight - low_bound
                 diff_high = high_bound - weight
-                alert_message = (f"\n\nSubject of sex '{sex}' and age '{week}' weeks has a weight of '{weight}' grams.\n"
-                                f"Expected weight bounds are {low_bound} to {high_bound} grams.\n"
-                                f"Weight is {'below' if weight < low_bound else 'above'} the expected range by "
-                                f"{abs(diff_low) if weight < low_bound else abs(diff_high)} grams.\n\n")
+                alert_message = (
+                    f"\n\nSubject of sex '{sex}' and age '{week}' weeks has a weight of '{weight}' grams.\n"
+                    f"Expected weight bounds are {low_bound} to {high_bound} grams.\n"
+                    f"Weight is {'below' if weight < low_bound else 'above'} the expected range by "
+                    f"{abs(diff_low) if weight < low_bound else abs(diff_high)} grams.\n\n"
+                )
                 show_alert(sex, alert_message)
-
 
     def log_weight(self):
         """
@@ -724,18 +711,14 @@ class SessionLogger:
         if subjects_data_csv["subject_id"].isin([self.subject_id]).any():
             # Retrieve the current cell value
 
-            current_value = subjects_data_csv.loc[
-                subjects_data_csv["subject_id"] == self.subject_id, "weight"
-            ].iloc[0]
+            current_value = subjects_data_csv.loc[subjects_data_csv["subject_id"] == self.subject_id, "weight"].iloc[0]
             # get the age of the mouse
-            self.age_in_weeks = self.calculate_age(subjects_data_csv.loc[
-                subjects_data_csv["subject_id"] == self.subject_id, "date_of_birth"
-            ].iloc[0])
+            self.age_in_weeks = self.calculate_age(
+                subjects_data_csv.loc[subjects_data_csv["subject_id"] == self.subject_id, "date_of_birth"].iloc[0]
+            )
 
             # get the sex
-            sex = subjects_data_csv.loc[
-                subjects_data_csv["subject_id"] == self.subject_id, "sex"
-            ].iloc[0]
+            sex = subjects_data_csv.loc[subjects_data_csv["subject_id"] == self.subject_id, "sex"].iloc[0]
 
             self.check_weight_bounds(sex, self.age_in_weeks, self.weight, self.body_weight_trends_C57BL_6J)
 
@@ -757,14 +740,14 @@ class SessionLogger:
                 last_two_weights = list(current_dict.values())[-2:]
                 # check whether the subject has lost more than 25% of its weight in the last two entries
                 factor_weight_loss = (last_two_weights[1] - last_two_weights[0]) / last_two_weights[0]
-                if  factor_weight_loss < -0.25:
-                    alert_message = (f"\n\nSubject {self.subject_id} has lost more than 25% of its weight "
-                                    f"in the last two dates.\n\n")
+                if factor_weight_loss < -0.25:
+                    alert_message = (
+                        f"\n\nSubject {self.subject_id} has lost more than 25% of its weight in the last two dates.\n\n"
+                    )
                     show_alert(self.subject_id, alert_message)
                 else:
                     weight_diff = last_two_weights[1] - last_two_weights[0]
                     print(f"\n\nThe weight difference of subject {self.subject_id} is {weight_diff} grams.\n\n")
-
 
             # Convert the dictionary back to a string and update the DataFrame
             subjects_data_csv.loc[subjects_data_csv["subject_id"] == self.subject_id, "weight"] = str(current_dict)
@@ -845,15 +828,12 @@ class SessionLogger:
 
             # Get the rows in which the subproject is self.subproject
 
-            subproject_rows = license_rows[
-                license_rows["subproject"] == self.subproject
-            ]
+            subproject_rows = license_rows[license_rows["subproject"] == self.subproject]
 
             # Convert the 'subjects' column from string to list
             subproject_rows["subjects"] = subproject_rows["subjects"].apply(ast.literal_eval)
 
             subject_row = subproject_rows[subproject_rows["subjects"].apply(lambda x: self.subject_id in x)]
-
 
             if not subject_row.empty:
                 return subject_row.iloc[0]["condition"]

@@ -63,6 +63,7 @@ if not platform.system() == "Windows":
 else:
     import pythoncom
 
+
 class ThermalCamera:
     """
     A class to interact with the Lepton 3.5 thermal camera.
