@@ -25,17 +25,13 @@ class BaslerCamera:
         while self.basler_camera is None:
             try:
                 # Try to create and open the camera
-                self.basler_camera = pylon.InstantCamera(
-                    pylon.TlFactory.GetInstance().CreateFirstDevice()
-                )
+                self.basler_camera = pylon.InstantCamera(pylon.TlFactory.GetInstance().CreateFirstDevice())
                 self.basler_camera.Open()
                 print("Camera opened successfully.")
             except pylon.RuntimeException as e:
                 # Handle the case where the camera is busy or not available
                 print(f"Failed to open camera: {e}")
-                input(
-                    "Please make the camera available and press Enter to try again..."
-                )
+                input("Please make the camera available and press Enter to try again...")
 
     def set_frames_per_second(self, frames_per_second):
         """
@@ -85,9 +81,7 @@ class BaslerCamera:
             (frame_width, frame_height),
         )
 
-        self.timestamps_file = os.path.join(
-            path, f"{base_file_name}_{extra_name}_timestamps.csv"
-        )
+        self.timestamps_file = os.path.join(path, f"{base_file_name}_{extra_name}_timestamps.csv")
 
         # Create the CSV file and write the header if it doesn't exist
         if not os.path.isfile(self.timestamps_file):
@@ -141,9 +135,7 @@ class BaslerCamera:
         and writes it to the output file.
         """
         try:
-            grab_result = self.basler_camera.RetrieveResult(
-                5000, pylon.TimeoutHandling_ThrowException
-            )
+            grab_result = self.basler_camera.RetrieveResult(5000, pylon.TimeoutHandling_ThrowException)
             if grab_result.GrabSucceeded():
                 img = grab_result.Array
                 img_bgr = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
@@ -162,9 +154,7 @@ class BaslerCamera:
         Saves metadata about the recording to a JSON file in the output directory.
         """
         metadata_file_name = f"{self.output_file_name.split('.')[0]}.json"
-        metadata_path = os.path.join(
-            os.path.dirname(self.output_path), metadata_file_name
-        )
+        metadata_path = os.path.join(os.path.dirname(self.output_path), metadata_file_name)
 
         data = {
             "camera": "basler",
@@ -187,18 +177,14 @@ class BaslerCamera:
         window_name = "Basler camera"
 
         while True:
-            grab_result = self.basler_camera.RetrieveResult(
-                5000, pylon.TimeoutHandling_ThrowException
-            )
+            grab_result = self.basler_camera.RetrieveResult(5000, pylon.TimeoutHandling_ThrowException)
             if grab_result.GrabSucceeded():
                 img = grab_result.Array
                 img_bgr = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
 
                 # Resize the image if window size is specified
                 if window_width is not None and window_height is not None:
-                    img_bgr = cv2.resize(
-                        img_bgr, (round(window_width), round(window_height))
-                    )
+                    img_bgr = cv2.resize(img_bgr, (round(window_width), round(window_height)))
 
                 cv2.imshow(window_name, img_bgr)
 
@@ -223,7 +209,6 @@ class BaslerCamera:
         fps: int = 30,
         video_format: Literal["mp4", "avi"] = "mp4",
     ):
-
         # Metadata to be saved in the JSON file
         metadata = {
             "cage ID": cage_id,
@@ -252,9 +237,7 @@ class BaslerCamera:
                 print("Recording started....")
 
                 current_time = datetime.datetime.now().strftime("%H%M%S")
-                self.set_output_file(
-                    data_save_folder, f"recording_{rec_count + 1}_{current_time}"
-                )
+                self.set_output_file(data_save_folder, f"recording_{rec_count + 1}_{current_time}")
 
                 try:
                     print("Starting capture...")
@@ -269,9 +252,7 @@ class BaslerCamera:
                     self.save_metadata()
 
                     # Save metadata for each recording
-                    save_metadata_exp(
-                        metadata, data_save_folder, f"test_{rec_count + 1}"
-                    )
+                    save_metadata_exp(metadata, data_save_folder, f"test_{rec_count + 1}")
 
                     # Buffer period before the next recording
                     if rec_count < total_rec - 1:
@@ -290,6 +271,4 @@ class BaslerCamera:
             logging.error(error_message)
         else:
             print(f"An error occurred: {error_message}")
-            print(
-                "Set the error log file path to log the error with set_error_log_path()."
-            )
+            print("Set the error log file path to log the error with set_error_log_path().")

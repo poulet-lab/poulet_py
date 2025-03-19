@@ -9,6 +9,7 @@ import tkinter as tk
 from tkinter import messagebox
 import sys
 
+
 def printme(message):
     print(f"\n{message}\n")
 
@@ -31,10 +32,7 @@ class SessionLogger:
             "drugs.csv",
         ]
         self.path = path
-        self.paths = {
-            os.path.splitext(file_name)[0]: os.path.join(path, file_name)
-            for file_name in self.file_names
-        }
+        self.paths = {os.path.splitext(file_name)[0]: os.path.join(path, file_name) for file_name in self.file_names}
 
         self.subject_id = None
         self.license = None
@@ -69,7 +67,7 @@ class SessionLogger:
                 button.config(relief="sunken", bg="lightgreen")
 
         def submit():
-            result = ', '.join(self.subject_ids)
+            result = ", ".join(self.subject_ids)
             print(f"Selected Subject IDs: {result}")
             root.destroy()
 
@@ -82,13 +80,14 @@ class SessionLogger:
 
         row = 0
         for subject_id, details in subjects_data_dict.items():
+
             def create_button(sid):
-                button = tk.Button(root, text=sid, width=20,
-                                   command=lambda: toggle_selection(sid, button),
-                                   bg = "lightyellow")
+                button = tk.Button(
+                    root, text=sid, width=20, command=lambda: toggle_selection(sid, button), bg="lightyellow"
+                )
                 button.grid(row=row, column=0, padx=5, pady=5)
                 return button
-            
+
             create_button(subject_id)
             row += 1
 
@@ -104,14 +103,10 @@ class SessionLogger:
         self.license = self.get_current_license()
         if self.license in ["ZH_139", "X9016_21", "G0167_23"]:
             license_data = self.get_csv_data(self.paths["licenses"])
-            self.license = self.get_input(
-                "Enter the license", list(license_data.keys())
-            )
+            self.license = self.get_input("Enter the license", list(license_data.keys()))
             # update the current license in the subjects.csv file
             subjects_data_csv = pd.read_csv(self.paths["subjects"])
-            subjects_data_csv.loc[
-                subjects_data_csv["subject_id"] == self.subject_id, "current_license"
-            ] = self.license
+            subjects_data_csv.loc[subjects_data_csv["subject_id"] == self.subject_id, "current_license"] = self.license
             subjects_data_csv.to_csv(self.paths["subjects"], index=False)
 
         printme(f"License: {self.license}")
@@ -125,19 +120,19 @@ class SessionLogger:
         if self.subproject is None:
             license_data = self.get_csv_data(self.paths["licenses"])
             subprojects = eval(license_data[self.license]["subprojects"])
-            
+
             if len(subprojects) == 1:
                 self.subproject = subprojects[0]
             elif len(subprojects) == 0:
                 self.subproject = ""
             else:
                 self.subproject = self.get_input("Enter the subproject", subprojects)
-                
+
             # update the current subproject in the subjects.csv file
             subjects_data_csv = pd.read_csv(self.paths["subjects"])
-            subjects_data_csv.loc[
-                subjects_data_csv["subject_id"] == self.subject_id, "current_subproject"
-            ] = self.subproject
+            subjects_data_csv.loc[subjects_data_csv["subject_id"] == self.subject_id, "current_subproject"] = (
+                self.subproject
+            )
             subjects_data_csv.to_csv(self.paths["subjects"], index=False)
 
         printme(f"Subproject: {self.subproject}")
@@ -151,15 +146,13 @@ class SessionLogger:
             self.method = self.get_input("Enter the method", list(method_data.keys()))
             # check whether the method requires drugs
             methods_data_csv = pd.read_csv(self.paths["methods"])
-            self.drugs_required = methods_data_csv.loc[
-                methods_data_csv["name"] == self.method, "drugs"
-            ].iloc[0]
-            #check whether the method means logging out
-            self.logged_out = methods_data_csv.loc[
-                methods_data_csv["name"] == self.method, "logging_out"
-            ].iloc[0]
+            self.drugs_required = methods_data_csv.loc[methods_data_csv["name"] == self.method, "drugs"].iloc[0]
+            # check whether the method means logging out
+            self.logged_out = methods_data_csv.loc[methods_data_csv["name"] == self.method, "logging_out"].iloc[0]
 
-        printme(f"Method: {self.method} ({'drugs required' if self.drugs_required else 'no drugs required'}) ({'logged out' if self.logged_out else 'not logged out'})")
+        printme(
+            f"Method: {self.method} ({'drugs required' if self.drugs_required else 'no drugs required'}) ({'logged out' if self.logged_out else 'not logged out'})"
+        )
 
     def get_method_version_data(self):
         """
@@ -178,9 +171,7 @@ class SessionLogger:
         """
         if self.experimenter is None:
             experimenter_data = self.get_csv_data(self.paths["experimenters"])
-            self.experimenter = self.get_input(
-                "Enter the experimenter", list(experimenter_data.keys())
-            )
+            self.experimenter = self.get_input("Enter the experimenter", list(experimenter_data.keys()))
 
         printme(f"Experimenter: {self.experimenter}")
 
@@ -192,13 +183,9 @@ class SessionLogger:
         if self.condition is None:
             conditions_data_csv = pd.read_csv(self.paths["experimental_designs"])
             # get the rows with license_numner is self.license
-            license_rows = conditions_data_csv[
-                conditions_data_csv["license_number"] == self.license
-            ]
+            license_rows = conditions_data_csv[conditions_data_csv["license_number"] == self.license]
             # get the rows with subproject is self.subproject
-            subproject_rows = license_rows[
-                license_rows["subproject"] == self.subproject
-            ]
+            subproject_rows = license_rows[license_rows["subproject"] == self.subproject]
             # get the values in the column condition
             condition_data = subproject_rows["condition"].unique().tolist()
 
@@ -207,23 +194,17 @@ class SessionLogger:
 
             # update the mouse in the experimental_designs.csv file
             # find the row in which the self.condition is in the column condition
-            condition_row = conditions_data_csv[
-                (conditions_data_csv["condition"] == self.condition)
-            ]
+            condition_row = conditions_data_csv[(conditions_data_csv["condition"] == self.condition)]
 
             # get the subjects column from the row
-            subjects = condition_row["subjects"].apply(
-                ast.literal_eval
-            )
+            subjects = condition_row["subjects"].apply(ast.literal_eval)
 
             # add the new subject_id to the subjects column
             subjects = subjects.iloc[0]
             subjects.append(self.subject_id)
 
             # update the subjects column in the row
-            conditions_data_csv.loc[
-                conditions_data_csv["condition"] == self.condition, "subjects"
-            ] = str(subjects)
+            conditions_data_csv.loc[conditions_data_csv["condition"] == self.condition, "subjects"] = str(subjects)
 
             # write the updated data to the CSV
             conditions_data_csv.to_csv(self.paths["experimental_designs"], index=False)
@@ -234,6 +215,7 @@ class SessionLogger:
         """
         Prompts user to enter duration of the experiment and select a time unit, then returns it.
         """
+
         def convert_to_seconds(value, unit):
             if unit == "seconds":
                 return value
@@ -254,7 +236,7 @@ class SessionLogger:
         tk.Entry(root, textvariable=duration_var).grid(row=0, column=1, padx=5, pady=5)
 
         tk.Label(root, text="Select unit:").grid(row=1, column=0, padx=5, pady=5)
-        
+
         unit_options = [("seconds", "seconds"), ("minutes", "minutes"), ("hours", "hours"), ("days", "days")]
         row = 1
         for text, value in unit_options:
@@ -304,11 +286,11 @@ class SessionLogger:
         self.get_duration_data()
         self.get_notes_data()
 
-        for self.subject_id in self.subject_ids:            
+        for self.subject_id in self.subject_ids:
             if self.method == "weighing":
                 self.log_weight()
                 break
-        
+
             self.get_license_data()
 
             self.get_subproject_data()
@@ -320,16 +302,15 @@ class SessionLogger:
 
             self.log_session()
 
-
     def get_drugs_data(self):
         drugs_data_csv = pd.read_csv(self.paths["drugs"])
-        
+
         # Create the main window
         root = tk.Tk()
         root.title("Drug Quantity Input")
 
         # Dictionary to hold the repeat values for each drug
-        repeat_values = {row['name']: 0 for _, row in drugs_data_csv.iterrows()}
+        repeat_values = {row["name"]: 0 for _, row in drugs_data_csv.iterrows()}
         labels = []  # List to hold references to label widgets
 
         def update_label(name, label):
@@ -347,22 +328,22 @@ class SessionLogger:
         def submit():
             drugs_info = []
             for _, row in drugs_data_csv.iterrows():
-                name = row['name']
-                default_quantity = row['default_quantity']
-                unit = row['unit']
+                name = row["name"]
+                default_quantity = row["default_quantity"]
+                unit = row["unit"]
                 repeat = repeat_values[name]
                 if repeat > 0:
                     drugs_info.append(f"{name}: {repeat} ({repeat * default_quantity} {unit})")
 
-            result = '; '.join(drugs_info)
+            result = "; ".join(drugs_info)
             print(result)
             root.destroy()  # Properly close the window and end the application
 
         # Create and place widgets for each drug
         for idx, (_, row) in enumerate(drugs_data_csv.iterrows()):
-            name = row['name']
-            default_quantity = row['default_quantity']
-            unit = row['unit']
+            name = row["name"]
+            default_quantity = row["default_quantity"]
+            unit = row["unit"]
 
             tk.Label(root, text=f"{name} ({default_quantity} {unit})").grid(row=idx, column=0)
             tk.Button(root, text="-", command=lambda n=name, l=idx: decrement(n, labels[l])).grid(row=idx, column=1)
@@ -380,9 +361,7 @@ class SessionLogger:
         Updates the logged_out field in the subjects.csv file.
         """
         subjects_data_csv = pd.read_csv(self.paths["subjects"])
-        subjects_data_csv.loc[
-            subjects_data_csv["subject_id"] == self.subject_id, "logged_out"
-        ] = True
+        subjects_data_csv.loc[subjects_data_csv["subject_id"] == self.subject_id, "logged_out"] = True
         subjects_data_csv.to_csv(self.paths["subjects"], index=False)
 
     def define_multiple_sessions(self):
@@ -421,9 +400,7 @@ class SessionLogger:
         if self.subject_id is None:
             subjects_data_dict = self.get_csv_data(self.paths["subjects"])
             subjects_options = [f"{key}" for key, _ in subjects_data_dict.items()]
-            subject_id = self.get_input(
-                "Enter the ID of the subject", subjects_options, start=0
-            )
+            subject_id = self.get_input("Enter the ID of the subject", subjects_options, start=0)
             self.subject_id = subject_id.split()[0]
 
         print(f"Subject ID: {self.subject_id}")
@@ -443,9 +420,7 @@ class SessionLogger:
         # check whether there's a row for the subject_id in the CSV
         if subjects_data_csv["subject_id"].isin([self.subject_id]).any():
             # Retrieve the current cell value
-            current_value = subjects_data_csv.loc[
-                subjects_data_csv["subject_id"] == self.subject_id, "weight"
-            ].iloc[0]
+            current_value = subjects_data_csv.loc[subjects_data_csv["subject_id"] == self.subject_id, "weight"].iloc[0]
 
             # Check if the cell is not empty and contains a dictionary
             if pd.notna(current_value):
@@ -459,9 +434,7 @@ class SessionLogger:
             current_dict[date] = self.weight
 
             # Convert the dictionary back to a string and update the DataFrame
-            subjects_data_csv.loc[
-                subjects_data_csv["subject_id"] == self.subject_id, "weight"
-            ] = str(current_dict)
+            subjects_data_csv.loc[subjects_data_csv["subject_id"] == self.subject_id, "weight"] = str(current_dict)
 
             # write the updated data to the CSV
             subjects_data_csv.to_csv(self.paths["subjects"], index=False)
@@ -475,9 +448,7 @@ class SessionLogger:
             self.experimenter = "IER"
             self.notes = f"Weight of {str(self.weight)} grams"
 
-            print(
-                f"Weight of {self.weight} grams logged for subject {self.subject_id} on {date}."
-            )
+            print(f"Weight of {self.weight} grams logged for subject {self.subject_id} on {date}.")
         else:
             print(f"Subject ID {self.subject_id} not found.")
 
@@ -534,11 +505,7 @@ class SessionLogger:
             None: If the subject_id is not found.
         """
 
-        if (
-            self.license != "ZH_139"
-            or self.license != "X9016/21"
-        ):
-
+        if self.license != "ZH_139" or self.license != "X9016/21":
             # Read the CSV file into a DataFrame
             df = pd.read_csv(self.paths["experimental_designs"])
 
@@ -546,18 +513,12 @@ class SessionLogger:
             license_rows = df[df["license_number"] == self.license]
 
             # Get the rows in which the subproject is self.subproject
-            subproject_rows = license_rows[
-                license_rows["subproject"] == self.subproject
-            ]
-            
-            # Convert the 'subjects' column from string to list
-            subproject_rows["subjects"] = subproject_rows["subjects"].apply(
-                ast.literal_eval
-            )
+            subproject_rows = license_rows[license_rows["subproject"] == self.subproject]
 
-            subject_row = subproject_rows[
-                subproject_rows["subjects"].apply(lambda x: self.subject_id in x)
-            ]
+            # Convert the 'subjects' column from string to list
+            subproject_rows["subjects"] = subproject_rows["subjects"].apply(ast.literal_eval)
+
+            subject_row = subproject_rows[subproject_rows["subjects"].apply(lambda x: self.subject_id in x)]
 
             print(self.subject_id)
 
@@ -566,9 +527,9 @@ class SessionLogger:
             else:
                 return None
         elif self.license == "ZH_139":
-            return 'killing'
+            return "killing"
         elif self.license == "X9016/21":
-            return 'teaching'
+            return "teaching"
 
     def log_session(self):
         """
@@ -628,14 +589,11 @@ class SessionLogger:
         new_subjects = []
 
         while True:
-
             # Add subject ID
             while True:
                 subject = {}
                 subject_id = input("Enter the subject ID: ")
-                confirmation = input(
-                    f"Confirm subject ID '{subject_id}' (y/n): "
-                ).lower()
+                confirmation = input(f"Confirm subject ID '{subject_id}' (y/n): ").lower()
                 if confirmation == "y":
                     # append the subject_id to the subject dictionary
                     subject["subject_id"] = subject_id
@@ -647,9 +605,7 @@ class SessionLogger:
                     printme("Invalid input. Please enter 'y' for yes or 'n' for no.")
 
             # Confirm adding more subjects
-            add_more_ids = input(
-                "Do you want to add more IDs for the same cage? (y/n): "
-            ).lower()
+            add_more_ids = input("Do you want to add more IDs for the same cage? (y/n): ").lower()
             if add_more_ids == "n":
                 break
 
@@ -663,10 +619,7 @@ class SessionLogger:
             date_of_birth = input("Enter the date of birth (DD/MM/YYYY): ")
             try:
                 datetime.strptime(date_of_birth, "%d/%m/%Y")
-                [
-                    new_subject.update({"date_of_birth": date_of_birth})
-                    for new_subject in new_subjects
-                ]
+                [new_subject.update({"date_of_birth": date_of_birth}) for new_subject in new_subjects]
                 break
             except ValueError:
                 printme("Invalid date format. Please enter in DD/MM/YYYY format.")
@@ -679,10 +632,7 @@ class SessionLogger:
         )
         if cage_number == "Enter new value":
             cage_number = input("Enter new cage number: ")
-        [
-            new_subject.update({"cage_number": cage_number})
-            for new_subject in new_subjects
-        ]
+        [new_subject.update({"cage_number": cage_number}) for new_subject in new_subjects]
 
         # Add species
         unique_species = genotypes_data_csv["species"].unique().tolist()
@@ -691,18 +641,13 @@ class SessionLogger:
 
         # Add genotype
         genotypes_for_species = (
-            genotypes_data_csv[genotypes_data_csv["species"] == species]["genotype"]
-            .unique()
-            .tolist()
+            genotypes_data_csv[genotypes_data_csv["species"] == species]["genotype"].unique().tolist()
         )
         genotype = self.get_input("Enter the genotype:", genotypes_for_species)
         [new_subject.update({"genotype": genotype}) for new_subject in new_subjects]
 
         # Default fields
-        [
-            new_subject.update({"current_license": "ZH_139"})
-            for new_subject in new_subjects
-        ]
+        [new_subject.update({"current_license": "ZH_139"}) for new_subject in new_subjects]
         [new_subject.update({"current_subproject": ""}) for new_subject in new_subjects]
         [new_subject.update({"weight": ""}) for new_subject in new_subjects]
         [new_subject.update({"notes": ""}) for new_subject in new_subjects]
@@ -713,9 +658,7 @@ class SessionLogger:
         # Append new subjects to the CSV
         print(new_subjects)
         new_subjects_df = pd.DataFrame(new_subjects)
-        subjects_data_csv = pd.concat(
-            [subjects_data_csv, new_subjects_df], ignore_index=True
-        )
+        subjects_data_csv = pd.concat([subjects_data_csv, new_subjects_df], ignore_index=True)
         subjects_data_csv.to_csv(self.paths["subjects"], index=False)
 
         printme("New subjects added successfully.")
@@ -729,9 +672,7 @@ class SessionLogger:
         """
         self.clear_input_buffer()
         subjects_data_dict = self.get_csv_data(self.paths["subjects"])
-        subjects_data_dict = {
-            k: v for k, v in subjects_data_dict.items() if v["active"] == True
-        }
+        subjects_data_dict = {k: v for k, v in subjects_data_dict.items() if v["active"] == True}
         subjects_options = [f"{key}" for key, _ in subjects_data_dict.items()]
 
         printme("Select the IDs of the subjects (separated by commas):")
@@ -739,18 +680,14 @@ class SessionLogger:
             print(f"{i + 1}. {option}")
 
         while True:
-            user_input = input(
-                "Enter the numbers corresponding to the subjects, separated by commas: "
-            )
+            user_input = input("Enter the numbers corresponding to the subjects, separated by commas: ")
             try:
                 selected_indices = [int(x) - 1 for x in user_input.split(",")]
                 selected_ids = [subjects_options[i] for i in selected_indices]
                 print(selected_ids)
                 return selected_ids
             except (ValueError, IndexError):
-                printme(
-                    "Invalid input, please enter valid numbers corresponding to the subjects."
-                )
+                printme("Invalid input, please enter valid numbers corresponding to the subjects.")
 
     @staticmethod
     def get_csv_data(file_path):
@@ -806,16 +743,12 @@ class SessionLogger:
             print(f"{i + start}. {option}")
 
         while True:
-            user_input = input(
-                "Select an option by entering the corresponding number: "
-            )
+            user_input = input("Select an option by entering the corresponding number: ")
             if user_input.isdigit():
                 index = int(user_input) - start
                 if 0 <= index < len(options):
                     return options[index]
-            printme(
-                "Invalid input, please enter a number corresponding to the options above."
-            )
+            printme("Invalid input, please enter a number corresponding to the options above.")
 
     @staticmethod
     def append_timestamp(data):
