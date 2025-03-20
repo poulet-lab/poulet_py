@@ -10,21 +10,24 @@ requires-python = ">=3.10"
 dynamic = ['version']
 license = "GPL-3.0-or-later"
 authors = [
-    { name = "Viktor Karamanis", email = "viktor.karamanis@outlook.com" },
+  { name = "Viktor Karamanis", email = "viktor.karamanis@outlook.com" },
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Operating System :: OS Independent",
-    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
-    "Programming Language :: Python",
-    "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
+  "Development Status :: 3 - Alpha",
+  "Operating System :: OS Independent",
+  "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
 ]
 
 dependencies = [
-    "poulet_py[all]"
+  "pydantic>=2.10.6,<2.11",
+  "pydantic-settings>=2.8.1,<2.9",
+  "python-dotenv>=1.0.1,<1.1",
+  "rich>=13.9.4,<13.10",
 ]
 
 keywords = ["poulet_py"]
@@ -41,29 +44,23 @@ path = "poulet_py/__init__.py"
 
 [project.optional-dependencies]
 hardware = [
-"pypylon>=3.0.1,<=4.0.0",
-"opencv-python==4.9.0.80",
-"numpy==1.26.4",
-"scipy==1.13.1",
-"matplotlib==3.9.0",
-"matplotlib-inline==0.1.7",
-"h5py==3.11.0",
-"keyboard==0.13.5",
-"pywin32==306; platform_system == 'Windows'",
-"pythonnet>=3.0.5,<3.1"
+  "pypylon>=3.0.1,<=4.0.0",
+  "opencv-python==4.9.0.80",
+  "numpy==1.26.4",
+  "scipy==1.13.1",
+  "matplotlib==3.9.0",
+  "matplotlib-inline==0.1.7",
+  "h5py==3.11.0",
+  "keyboard==0.13.5",
+  "pywin32==306; platform_system == 'Windows'",
+  "pythonnet>=3.0.5,<3.1",
 ]
 
-tools = [
+tools = []
 
-]
+utils = ["pandas==2.2.2"]
 
-utils = [
-"pandas==2.2.2",
-]
-
-all = [
-"poulet_py[hardware,tools,utils]"
-]
+all = ["poulet_py[hardware,tools,utils]"]
 
 
 [tool.hatch.envs.lint]

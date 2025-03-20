@@ -5,11 +5,6 @@ import logging
 import time
 
 
-def print_me(message):
-    """Print a message with newlines before and after."""
-    print(f"\n{message}\n")
-
-
 class Arduino:
     def __init__(self, ports=None):
         """
