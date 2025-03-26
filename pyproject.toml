@@ -71,7 +71,7 @@ dependencies = ["mypy", "ruff"]
 [tool.hatch.envs.lint.scripts]
 typing = "mypy --install-types --non-interactive {args:poulet_py tests}"
 style = "ruff check"
-fmt = "ruff check --fix && ruff format"
+fmt = "ruff check --fix > /dev/null 2>&1 && ruff format"
 all = ["style", "typing"]
 
 [tool.mypy]
@@ -79,7 +79,7 @@ strict = true
 ignore_missing_imports = true
 
 [tool.ruff]
-line-length = 120
+line-length = 80
 indent-width = 4
 exclude = [
   ".bzr",
