@@ -8,6 +8,7 @@ from poulet_py.config.settings import SETTINGS
 
 def setup_logging(
     logger: Logger,
+    *,
     terminal_width: int | None = None,
     show_time: bool = False,
     show_path: bool = True,
@@ -20,14 +21,16 @@ def setup_logging(
     file: str | None = None,
 ) -> None:
     """
-    Configure logging for the provided logger with optional rich formatting and file logging.
+    Configure logging for the provided logger with optional rich formatting
+    and file logging.
 
     Parameters
     ----------
     logger : Logger
         The logger instance to configure.
     terminal_width : int, optional
-        The width of the terminal for rich console output. If None, the default width is used.
+        The width of the terminal for rich console output.
+        If None, the default width is used.
     show_time : bool, optional
         Whether to show the time in the log output. Default is False.
     show_path : bool, optional
@@ -45,7 +48,7 @@ def setup_logging(
     level : int or str, optional
         The logging level to set for the logger. Default is warning.
     file : str, optional
-        The file to log to. If None, logs are output to the console. Default is None.
+        The file to log to. If None, logs are output to the console.
 
     Returns
     -------
@@ -79,11 +82,12 @@ def setup_logging(
 
 # Global instance of the `logger` object
 LOGGER = getLogger()
-setup_logging(logger=LOGGER, level=SETTINGS.log.level, file=SETTINGS.log.file)
+setup_logging(LOGGER, level=SETTINGS.log.level, file=SETTINGS.log.file)
 """
 An instance of the `logger` object.
 
-This instance holds can be imported and used throughout the application for logging.
+This instance holds can be imported and used throughout the application
+for logging.
 
 Example
 -------

@@ -1,4 +1,4 @@
-from logging import DEBUG, FileHandler, getLevelNamesMapping, getLogger
+from logging import DEBUG, FileHandler, _nameToLevel, getLogger
 
 from rich.logging import RichHandler
 
@@ -29,4 +29,4 @@ def test_setup_logging_with_rich_handler():
 
 
 def test_logger_instance():
-    assert LOGGER.level == getLevelNamesMapping()[SETTINGS.log.level.upper()]
+    assert LOGGER.level == _nameToLevel[SETTINGS.log.level.upper()]

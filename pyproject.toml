@@ -156,6 +156,9 @@ known-first-party = ["poulet_py"]
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
 
+[tool.ruff.lint.pylint]
+max-args = 15
+
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
 

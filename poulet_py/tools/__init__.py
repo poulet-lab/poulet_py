@@ -1,3 +1,5 @@
+# ruff: noqa F401
+
 __all__ = ["generators", "organizational"]
 
 from poulet_py.tools.generators import generate_trials

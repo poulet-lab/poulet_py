@@ -1,3 +1,5 @@
+# ruff: noqa F401
+
 __all__ = ["arduino", "julabo_chiller", "thermal_stimulators"]
 
 from poulet_py.hardware.arduino import Arduino
