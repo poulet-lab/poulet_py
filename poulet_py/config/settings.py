@@ -52,15 +52,17 @@ class Log(BaseModel):
     level: str = Field("info", description="The logging level")
     file: str | None = Field(
         None,
-        description="The file path for logging. If `None`, logging is done to the console.",
+        description="""The file path for logging. If `None`,
+        logging is done to the console.
+        """,
     )
 
 
 class Settings(BaseSettings):
     """
     This class loads configuration from environment variables and a `.env` file.
-    It supports nested configuration using the `env_nested_delimiter` (e.g., `LOG__LEVEL`).
-
+    It supports nested configuration using the `env_nested_delimiter`
+    (e.g., `LOG__LEVEL`).
     """
 
     model_config = SettingsConfigDict(
@@ -77,8 +79,9 @@ SETTINGS = Settings()
 """
 An instance of the `Settings` class.
 
-This instance holds the application's configuration, loaded from environment variables
-and a `.env` file. It can be imported and used throughout the application to access
+This instance holds the application's configuration, loaded from environment
+variables and a `.env` file.
+It can be imported and used throughout the application to access
 configuration settings.
 
 Example
