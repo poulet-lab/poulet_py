@@ -1,5 +1,5 @@
-import os
 import datetime
+import os
 
 
 def check_or_create(path):
@@ -9,7 +9,9 @@ def check_or_create(path):
     """
     folder_name = os.path.split(path)[1]
     if not os.path.isdir(path):
-        print(f"\nFolder '{folder_name}' does NOT exist, creating it for you...\n")
+        print(
+            f"\nFolder '{folder_name}' does NOT exist, creating it for you...\n"
+        )
         os.mkdir(path)
     else:
         print(f"\nFolder '{folder_name}' exists, ready to continue...\n")

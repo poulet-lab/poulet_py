@@ -10,21 +10,24 @@ requires-python = ">=3.10"
 dynamic = ['version']
 license = "GPL-3.0-or-later"
 authors = [
-    { name = "Viktor Karamanis", email = "viktor.karamanis@outlook.com" },
+  { name = "Viktor Karamanis", email = "viktor.karamanis@outlook.com" },
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Operating System :: OS Independent",
-    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
-    "Programming Language :: Python",
-    "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
+  "Development Status :: 3 - Alpha",
+  "Operating System :: OS Independent",
+  "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
 ]
 
 dependencies = [
-    "poulet_py[all]"
+  "pydantic>=2.10.6,<2.11",
+  "pydantic-settings>=2.8.1,<2.9",
+  "python-dotenv>=1.0.1,<1.1",
+  "rich>=13.9.4,<13.10",
 ]
 
 keywords = ["poulet_py"]
@@ -41,29 +44,23 @@ path = "poulet_py/__init__.py"
 
 [project.optional-dependencies]
 hardware = [
-"pypylon>=3.0.1,<=4.0.0",
-"opencv-python==4.9.0.80",
-"numpy==1.26.4",
-"scipy==1.13.1",
-"matplotlib==3.9.0",
-"matplotlib-inline==0.1.7",
-"h5py==3.11.0",
-"keyboard==0.13.5",
-"pywin32==306; platform_system == 'Windows'",
-"pythonnet>=3.0.5,<3.1"
+  "pypylon>=3.0.1,<=4.0.0",
+  "opencv-python==4.9.0.80",
+  "numpy==1.26.4",
+  "scipy==1.13.1",
+  "matplotlib==3.9.0",
+  "matplotlib-inline==0.1.7",
+  "h5py==3.11.0",
+  "keyboard==0.13.5",
+  "pywin32==306; platform_system == 'Windows'",
+  "pythonnet>=3.0.5,<3.1",
 ]
 
-tools = [
+tools = []
 
-]
+utils = ["pandas==2.2.2"]
 
-utils = [
-"pandas==2.2.2",
-]
-
-all = [
-"poulet_py[hardware,tools,utils]"
-]
+all = ["poulet_py[hardware,tools,utils]"]
 
 
 [tool.hatch.envs.lint]
@@ -72,9 +69,9 @@ require = ["default"]
 dependencies = ["mypy", "ruff"]
 
 [tool.hatch.envs.lint.scripts]
-typing = "mypy --install-types --non-interactive {args:neu_sdk tests}"
+typing = "mypy --install-types --non-interactive {args:poulet_py tests}"
 style = "ruff check"
-fmt = "ruff format"
+fmt = "ruff check --fix --exit-zero && ruff format"
 all = ["style", "typing"]
 
 [tool.mypy]
@@ -82,7 +79,7 @@ strict = true
 ignore_missing_imports = true
 
 [tool.ruff]
-line-length = 120
+line-length = 80
 indent-width = 4
 exclude = [
   ".bzr",
@@ -154,10 +151,13 @@ line-ending = "auto"
 docstring-code-line-length = "dynamic"
 
 [tool.ruff.lint.isort]
-known-first-party = ["neu_sdk"]
+known-first-party = ["poulet_py"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
+
+[tool.ruff.lint.pylint]
+max-args = 15
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
@@ -166,13 +166,13 @@ ban-relative-imports = "all"
 python = ["3.8", "3.9", "3.10", "3.11", "3.12"]
 
 [tool.coverage.run]
-source_pkgs = ["neu_sdk", "tests"]
+source_pkgs = ["poulet_py", "tests"]
 branch = true
 parallel = true
 
 [tool.coverage.paths]
-neu_sdk = ["neu_sdk", "*/neu-sdk/neu_sdk"]
-tests = ["tests", "*/neu-sdk/tests"]
+poulet_py = ["poulet_py", "*/poulet-py/poulet_py"]
+tests = ["tests", "*/poulet-py/tests"]
 
 [tool.coverage.report]
 exclude_lines = ["no cov", "if __name__ == .__main__.:", "if TYPE_CHECKING:"]

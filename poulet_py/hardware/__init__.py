@@ -1,7 +1,11 @@
-__all__ = ["julabo_chiller", "thermal_stimulators", "arduino"]
+# ruff: noqa F401
 
-from poulet_py.hardware.camera import BaslerCamera
-from poulet_py.hardware.camera import ThermalCamera
-from poulet_py.hardware.julabo_chiller import JulaboChiller
+__all__ = ["arduino", "julabo_chiller", "thermal_stimulators"]
+
 from poulet_py.hardware.arduino import Arduino
-from poulet_py.hardware.thermal_stimulators import TCSIIController, TCSIIStimulus
+from poulet_py.hardware.camera import BaslerCamera, ThermalCamera
+from poulet_py.hardware.julabo_chiller import JulaboChiller
+from poulet_py.hardware.thermal_stimulators import (
+    TCSIIController,
+    TCSIIStimulus,
+)

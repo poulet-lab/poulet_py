@@ -1,16 +1,16 @@
-import csv
-from datetime import datetime
-import os
-import pandas as pd
-import os
 import ast
+import csv
+import os
 import platform
-import tkinter as tk
-from tkinter import messagebox
-import sys
 import smtplib
+import sys
+import tkinter as tk
+from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from tkinter import messagebox
+
+import pandas as pd
 from PIL import Image, ImageTk
 
 
@@ -38,7 +38,10 @@ class SessionLogger:
             "ear_marks.png",
         ]
         self.path = path
-        self.paths = {os.path.splitext(file_name)[0]: os.path.join(path, file_name) for file_name in self.file_names}
+        self.paths = {
+            os.path.splitext(file_name)[0]: os.path.join(path, file_name)
+            for file_name in self.file_names
+        }
 
         self.subject_id = None
         self.subject_ids = []
@@ -119,7 +122,9 @@ class SessionLogger:
         Prompts user to select multiple subject IDs and retrieves the corresponding subject numbers.
         """
         subjects_data_dict = self.get_csv_data(self.paths["subjects"])
-        subjects_data_dict = {k: v for k, v in subjects_data_dict.items() if v["active"]}
+        subjects_data_dict = {
+            k: v for k, v in subjects_data_dict.items() if v["active"]
+        }
 
         root = tk.Tk()
         root.title("Select Subject IDs")
@@ -153,7 +158,11 @@ class SessionLogger:
 
         def create_button(subject_id, row, column):
             button = tk.Button(
-                frame, text=subject_id, width=20, command=lambda: toggle_selection(subject_id, button), bg="lightyellow"
+                frame,
+                text=subject_id,
+                width=20,
+                command=lambda: toggle_selection(subject_id, button),
+                bg="lightyellow",
             )
             button.grid(row=row, column=column, padx=5, pady=5)
             return button
@@ -165,7 +174,9 @@ class SessionLogger:
                 column = 0
                 row += 1
 
-        tk.Button(frame, text="Accept", command=submit).grid(row=row + 1, column=0, columnspan=max_columns, pady=10)
+        tk.Button(frame, text="Accept", command=submit).grid(
+            row=row + 1, column=0, columnspan=max_columns, pady=10
+        )
 
         # Load and display the image
         image_frame = tk.Frame(root)
@@ -191,17 +202,25 @@ class SessionLogger:
         self.license = self.get_current_license()
         if self.license in ["ZH_139", "X9016_21", "G0167_23"]:
             license_data = self.get_csv_data(self.paths["licenses"])
-            self.license = self.get_input("Enter the license", list(license_data.keys()))
+            self.license = self.get_input(
+                "Enter the license", list(license_data.keys())
+            )
             # update the current license in the subjects.csv file
             subjects_data_csv = pd.read_csv(self.paths["subjects"])
 
-            subjects_data_csv.loc[subjects_data_csv["subject_id"] == self.subject_id, "current_license"] = self.license
+            subjects_data_csv.loc[
+                subjects_data_csv["subject_id"] == self.subject_id,
+                "current_license",
+            ] = self.license
             # get the genotype of the mouse
-            genotype = subjects_data_csv.loc[subjects_data_csv["subject_id"] == self.subject_id, "genotype"].iloc[0]
+            genotype = subjects_data_csv.loc[
+                subjects_data_csv["subject_id"] == self.subject_id, "genotype"
+            ].iloc[0]
             # get the cage number of the mouse
-            cage_number = subjects_data_csv.loc[subjects_data_csv["subject_id"] == self.subject_id, "cage_number"].iloc[
-                0
-            ]
+            cage_number = subjects_data_csv.loc[
+                subjects_data_csv["subject_id"] == self.subject_id,
+                "cage_number",
+            ].iloc[0]
 
             subjects_data_csv.to_csv(self.paths["subjects"], index=False)
 
@@ -231,7 +250,11 @@ class SessionLogger:
         current_date = datetime.now()
         age_in_days = (current_date - birth_date).days
         age_in_weeks = age_in_days / 7
-        return int(age_in_weeks) if age_in_weeks - int(age_in_weeks) < 0.5 else int(age_in_weeks) + 1
+        return (
+            int(age_in_weeks)
+            if age_in_weeks - int(age_in_weeks) < 0.5
+            else int(age_in_weeks) + 1
+        )
 
     def send_email(self, subject, body, smtp_user="ivan.eromano@gmail.com"):
         """
@@ -286,13 +309,16 @@ class SessionLogger:
             elif len(subprojects) == 0:
                 self.subproject = ""
             else:
-                self.subproject = self.get_input("Enter the subproject", subprojects)
+                self.subproject = self.get_input(
+                    "Enter the subproject", subprojects
+                )
 
             # update the current subproject in the subjects.csv file
             subjects_data_csv = pd.read_csv(self.paths["subjects"])
-            subjects_data_csv.loc[subjects_data_csv["subject_id"] == self.subject_id, "current_subproject"] = (
-                self.subproject
-            )
+            subjects_data_csv.loc[
+                subjects_data_csv["subject_id"] == self.subject_id,
+                "current_subproject",
+            ] = self.subproject
             subjects_data_csv.to_csv(self.paths["subjects"], index=False)
 
         printme(f"Subproject: {self.subproject}")
@@ -333,7 +359,11 @@ class SessionLogger:
 
                 def create_button(method, row):
                     button = tk.Button(
-                        frame, text=method, width=20, command=lambda: select_method(method, button), bg="lightyellow"
+                        frame,
+                        text=method,
+                        width=20,
+                        command=lambda: select_method(method, button),
+                        bg="lightyellow",
                     )
                     button.grid(row=row, column=0, padx=5, pady=5)
                     return button
@@ -341,23 +371,33 @@ class SessionLogger:
                 buttons.append(create_button(method, row))
                 row += 1
 
-            tk.Button(frame, text="Accept", command=submit).grid(row=row, column=0, pady=10)
+            tk.Button(frame, text="Accept", command=submit).grid(
+                row=row, column=0, pady=10
+            )
 
             root.mainloop()
 
         # check whether the method requires drugs
         methods_data_csv = pd.read_csv(self.paths["methods"])
-        self.drugs_required = methods_data_csv.loc[methods_data_csv["name"] == self.method, "drugs"].iloc[0]
+        self.drugs_required = methods_data_csv.loc[
+            methods_data_csv["name"] == self.method, "drugs"
+        ].iloc[0]
         # check whether the method means logging out
-        self.logged_out = methods_data_csv.loc[methods_data_csv["name"] == self.method, "logging_out"].iloc[0]
+        self.logged_out = methods_data_csv.loc[
+            methods_data_csv["name"] == self.method, "logging_out"
+        ].iloc[0]
         # check whether the method requires a todo
-        self.todo = methods_data_csv.loc[methods_data_csv["name"] == self.method, "todo"].iloc[0]
+        self.todo = methods_data_csv.loc[
+            methods_data_csv["name"] == self.method, "todo"
+        ].iloc[0]
         # if the method requires a todo, get the todo_message
         if self.todo:
-            self.todo_message = methods_data_csv.loc[methods_data_csv["name"] == self.method, "todo_message"].iloc[0]
-            self.todo_deadline = methods_data_csv.loc[methods_data_csv["name"] == self.method, "todo_deadline_h"].iloc[
-                0
-            ]
+            self.todo_message = methods_data_csv.loc[
+                methods_data_csv["name"] == self.method, "todo_message"
+            ].iloc[0]
+            self.todo_deadline = methods_data_csv.loc[
+                methods_data_csv["name"] == self.method, "todo_deadline_h"
+            ].iloc[0]
 
         print(
             f"Method: {self.method} ({'drugs required' if self.drugs_required else 'no drugs required'}) ({'logged out' if self.logged_out else 'not logged out'})"
@@ -370,7 +410,9 @@ class SessionLogger:
         if self.method_version is None:
             method_data = self.get_csv_data(self.paths["methods"])
             method_versions = eval(method_data[self.method]["versions"])
-            self.method_version = self.get_input("Enter the version", method_versions)
+            self.method_version = self.get_input(
+                "Enter the version", method_versions
+            )
 
         printme(f"Method version: {self.method_version}")
 
@@ -380,7 +422,9 @@ class SessionLogger:
         """
         if self.experimenter is None:
             experimenter_data = self.get_csv_data(self.paths["experimenters"])
-            self.experimenter = self.get_input("Enter the experimenter", list(experimenter_data.keys()))
+            self.experimenter = self.get_input(
+                "Enter the experimenter", list(experimenter_data.keys())
+            )
 
         printme(f"Experimenter: {self.experimenter}")
 
@@ -390,20 +434,30 @@ class SessionLogger:
         """
         self.condition = self.get_mouse_condition()
         if self.condition is None:
-            conditions_data_csv = pd.read_csv(self.paths["experimental_designs"])
+            conditions_data_csv = pd.read_csv(
+                self.paths["experimental_designs"]
+            )
             # get the rows with license_numner is self.license
-            license_rows = conditions_data_csv[conditions_data_csv["license_number"] == self.license]
+            license_rows = conditions_data_csv[
+                conditions_data_csv["license_number"] == self.license
+            ]
             # get the rows with subproject is self.subproject
-            subproject_rows = license_rows[license_rows["subproject"] == self.subproject]
+            subproject_rows = license_rows[
+                license_rows["subproject"] == self.subproject
+            ]
             # get the values in the column condition
             condition_data = subproject_rows["condition"].unique().tolist()
 
             # print(condition_data)
-            self.condition = self.get_input("Enter the condition", list(condition_data))
+            self.condition = self.get_input(
+                "Enter the condition", list(condition_data)
+            )
 
             # update the mouse in the experimental_designs.csv file
             # find the row in which the self.condition is in the column condition
-            condition_row = conditions_data_csv[(conditions_data_csv["condition"] == self.condition)]
+            condition_row = conditions_data_csv[
+                (conditions_data_csv["condition"] == self.condition)
+            ]
 
             # get the subjects column from the row
             subjects = condition_row["subjects"].apply(ast.literal_eval)
@@ -413,10 +467,14 @@ class SessionLogger:
             subjects.append(self.subject_id)
 
             # update the subjects column in the row
-            conditions_data_csv.loc[conditions_data_csv["condition"] == self.condition, "subjects"] = str(subjects)
+            conditions_data_csv.loc[
+                conditions_data_csv["condition"] == self.condition, "subjects"
+            ] = str(subjects)
 
             # write the updated data to the CSV
-            conditions_data_csv.to_csv(self.paths["experimental_designs"], index=False)
+            conditions_data_csv.to_csv(
+                self.paths["experimental_designs"], index=False
+            )
 
         printme(f"Condition: {self.condition}")
 
@@ -442,26 +500,44 @@ class SessionLogger:
             duration_var = tk.StringVar()
             unit_var = tk.StringVar(value="seconds")
 
-            tk.Label(root, text="Enter duration:").grid(row=0, column=0, padx=5, pady=5)
-            tk.Entry(root, textvariable=duration_var).grid(row=0, column=1, padx=5, pady=5)
+            tk.Label(root, text="Enter duration:").grid(
+                row=0, column=0, padx=5, pady=5
+            )
+            tk.Entry(root, textvariable=duration_var).grid(
+                row=0, column=1, padx=5, pady=5
+            )
 
-            tk.Label(root, text="Select unit:").grid(row=1, column=0, padx=5, pady=5)
+            tk.Label(root, text="Select unit:").grid(
+                row=1, column=0, padx=5, pady=5
+            )
 
-            unit_options = [("seconds", "seconds"), ("minutes", "minutes"), ("hours", "hours"), ("days", "days")]
+            unit_options = [
+                ("seconds", "seconds"),
+                ("minutes", "minutes"),
+                ("hours", "hours"),
+                ("days", "days"),
+            ]
             row = 1
             for text, value in unit_options:
                 row += 1
-                tk.Radiobutton(root, text=text, variable=unit_var, value=value).grid(row=row, column=1, sticky="w")
+                tk.Radiobutton(
+                    root, text=text, variable=unit_var, value=value
+                ).grid(row=row, column=1, sticky="w")
 
             def submit():
                 try:
                     duration_value = int(duration_var.get())
                     duration_unit = unit_var.get()
-                    self.duration_s = convert_to_seconds(duration_value, duration_unit)
+                    self.duration_s = convert_to_seconds(
+                        duration_value, duration_unit
+                    )
 
                     root.destroy()
                 except ValueError:
-                    messagebox.showerror("Invalid Input", "Please enter a valid number for duration.")
+                    messagebox.showerror(
+                        "Invalid Input",
+                        "Please enter a valid number for duration.",
+                    )
 
             def on_closing():
                 if messagebox.askokcancel("Quit", "Do you want to quit?"):
@@ -470,11 +546,13 @@ class SessionLogger:
 
             root.protocol("WM_DELETE_WINDOW", on_closing)
 
-            tk.Button(root, text="Accept", command=submit).grid(row=row + 1, column=0, columnspan=2, pady=10)
+            tk.Button(root, text="Accept", command=submit).grid(
+                row=row + 1, column=0, columnspan=2, pady=10
+            )
 
             root.mainloop()
         else:
-            printme(f"Duration defined in script")
+            printme("Duration defined in script")
 
         printme(f"Duration: {self.duration_s} seconds")
 
@@ -537,23 +615,36 @@ class SessionLogger:
 
                 # if the notification time is not within 9am and 5pm, set it to 9am if it's after midnight and to 5pm if it's before midnight
                 if notification_time.hour < 9:
-                    notification_time = notification_time.replace(hour=9, minute=0, second=0)
+                    notification_time = notification_time.replace(
+                        hour=9, minute=0, second=0
+                    )
                 elif notification_time.hour >= 17:
-                    notification_time = notification_time.replace(hour=15, minute=0, second=0)
+                    notification_time = notification_time.replace(
+                        hour=15, minute=0, second=0
+                    )
 
                 # format the notification time to the format YY-MM-DD HH:MM:SS
-                self.todo_deadline_date = notification_time.strftime("%Y-%m-%d %H:%M:%S")
+                self.todo_deadline_date = notification_time.strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
             else:
                 self.todo_deadline_date = "open"
 
             # append to the todos.csv file timestamp,subject_id,deadline,message
             file_exists = os.path.isfile(self.paths["todos"])
-            todo_entry = [timestamp, self.subject_id, self.todo_deadline_date, self.todo_message]
+            todo_entry = [
+                timestamp,
+                self.subject_id,
+                self.todo_deadline_date,
+                self.todo_message,
+            ]
 
             with open(self.paths["todos"], mode="a", newline="") as file:
                 writer = csv.writer(file)
                 if not file_exists:
-                    writer.writerow(["timestamp", "subject_id", "deadline", "message"])
+                    writer.writerow(
+                        ["timestamp", "subject_id", "deadline", "message"]
+                    )
                 writer.writerow(todo_entry)
 
     def get_drugs_data(self):
@@ -587,7 +678,9 @@ class SessionLogger:
                 unit = row["unit"]
                 repeat = repeat_values[name]
                 if repeat > 0:
-                    drugs_info.append(f"{name}: {repeat} ({repeat * default_quantity} {unit})")
+                    drugs_info.append(
+                        f"{name}: {repeat} ({repeat * default_quantity} {unit})"
+                    )
 
             result = "; ".join(drugs_info)
             print(result)
@@ -599,14 +692,26 @@ class SessionLogger:
             default_quantity = row["default_quantity"]
             unit = row["unit"]
 
-            tk.Label(root, text=f"{name} ({default_quantity} {unit})").grid(row=idx, column=0)
-            tk.Button(root, text="-", command=lambda n=name, l=idx: decrement(n, labels[l])).grid(row=idx, column=1)
+            tk.Label(root, text=f"{name} ({default_quantity} {unit})").grid(
+                row=idx, column=0
+            )
+            tk.Button(
+                root,
+                text="-",
+                command=lambda n=name, l=idx: decrement(n, labels[l]),
+            ).grid(row=idx, column=1)
             label = tk.Label(root, text="0")
             label.grid(row=idx, column=2)
             labels.append(label)
-            tk.Button(root, text="+", command=lambda n=name, l=idx: increment(n, labels[l])).grid(row=idx, column=3)
+            tk.Button(
+                root,
+                text="+",
+                command=lambda n=name, l=idx: increment(n, labels[l]),
+            ).grid(row=idx, column=3)
 
-        tk.Button(root, text="Accept", command=submit).grid(row=len(drugs_data_csv), columnspan=4)
+        tk.Button(root, text="Accept", command=submit).grid(
+            row=len(drugs_data_csv), columnspan=4
+        )
 
         root.mainloop()
 
@@ -616,11 +721,14 @@ class SessionLogger:
         """
         subjects_data_csv = pd.read_csv(self.paths["subjects"])
 
-        subjects_data_csv.loc[subjects_data_csv["subject_id"] == self.subject_id, "logged_out"] = True
+        subjects_data_csv.loc[
+            subjects_data_csv["subject_id"] == self.subject_id, "logged_out"
+        ] = True
         # add logged out date
-        subjects_data_csv.loc[subjects_data_csv["subject_id"] == self.subject_id, "logged_out_date"] = (
-            datetime.now().strftime("%d/%m/%Y")
-        )
+        subjects_data_csv.loc[
+            subjects_data_csv["subject_id"] == self.subject_id,
+            "logged_out_date",
+        ] = datetime.now().strftime("%d/%m/%Y")
 
         subjects_data_csv.to_csv(self.paths["subjects"], index=False)
 
@@ -689,8 +797,12 @@ class SessionLogger:
         # Subject ID
         if self.subject_id is None:
             subjects_data_dict = self.get_csv_data(self.paths["subjects"])
-            subjects_options = [f"{key}" for key, _ in subjects_data_dict.items()]
-            subject_id = self.get_input("Enter the ID of the subject", subjects_options, start=0)
+            subjects_options = [
+                f"{key}" for key, _ in subjects_data_dict.items()
+            ]
+            subject_id = self.get_input(
+                "Enter the ID of the subject", subjects_options, start=0
+            )
             self.subject_id = subject_id.split()[0]
 
         print(f"Subject ID: {self.subject_id}")
@@ -711,16 +823,28 @@ class SessionLogger:
         if subjects_data_csv["subject_id"].isin([self.subject_id]).any():
             # Retrieve the current cell value
 
-            current_value = subjects_data_csv.loc[subjects_data_csv["subject_id"] == self.subject_id, "weight"].iloc[0]
+            current_value = subjects_data_csv.loc[
+                subjects_data_csv["subject_id"] == self.subject_id, "weight"
+            ].iloc[0]
             # get the age of the mouse
             self.age_in_weeks = self.calculate_age(
-                subjects_data_csv.loc[subjects_data_csv["subject_id"] == self.subject_id, "date_of_birth"].iloc[0]
+                subjects_data_csv.loc[
+                    subjects_data_csv["subject_id"] == self.subject_id,
+                    "date_of_birth",
+                ].iloc[0]
             )
 
             # get the sex
-            sex = subjects_data_csv.loc[subjects_data_csv["subject_id"] == self.subject_id, "sex"].iloc[0]
+            sex = subjects_data_csv.loc[
+                subjects_data_csv["subject_id"] == self.subject_id, "sex"
+            ].iloc[0]
 
-            self.check_weight_bounds(sex, self.age_in_weeks, self.weight, self.body_weight_trends_C57BL_6J)
+            self.check_weight_bounds(
+                sex,
+                self.age_in_weeks,
+                self.weight,
+                self.body_weight_trends_C57BL_6J,
+            )
 
             # Check if the cell is not empty and contains a dictionary
             if pd.notna(current_value):
@@ -739,18 +863,22 @@ class SessionLogger:
                 # last_two_entries = list(current_dict.keys())[-2:]
                 last_two_weights = list(current_dict.values())[-2:]
                 # check whether the subject has lost more than 25% of its weight in the last two entries
-                factor_weight_loss = (last_two_weights[1] - last_two_weights[0]) / last_two_weights[0]
+                factor_weight_loss = (
+                    last_two_weights[1] - last_two_weights[0]
+                ) / last_two_weights[0]
                 if factor_weight_loss < -0.25:
-                    alert_message = (
-                        f"\n\nSubject {self.subject_id} has lost more than 25% of its weight in the last two dates.\n\n"
-                    )
+                    alert_message = f"\n\nSubject {self.subject_id} has lost more than 25% of its weight in the last two dates.\n\n"
                     show_alert(self.subject_id, alert_message)
                 else:
                     weight_diff = last_two_weights[1] - last_two_weights[0]
-                    print(f"\n\nThe weight difference of subject {self.subject_id} is {weight_diff} grams.\n\n")
+                    print(
+                        f"\n\nThe weight difference of subject {self.subject_id} is {weight_diff} grams.\n\n"
+                    )
 
             # Convert the dictionary back to a string and update the DataFrame
-            subjects_data_csv.loc[subjects_data_csv["subject_id"] == self.subject_id, "weight"] = str(current_dict)
+            subjects_data_csv.loc[
+                subjects_data_csv["subject_id"] == self.subject_id, "weight"
+            ] = str(current_dict)
 
             # write the updated data to the CSV
             subjects_data_csv.to_csv(self.paths["subjects"], index=False)
@@ -760,9 +888,11 @@ class SessionLogger:
             self.method_version = "101"
             self.duration_s = 60
             self.condition = self.get_mouse_condition()
-            self.notes = f"Weight of {str(self.weight)} grams"
+            self.notes = f"Weight of {self.weight!s} grams"
 
-            print(f"Weight of {self.weight} grams logged for subject {self.subject_id} on {date}.")
+            print(
+                f"Weight of {self.weight} grams logged for subject {self.subject_id} on {date}."
+            )
         else:
             print(f"Subject ID {self.subject_id} not found.")
 
@@ -828,12 +958,20 @@ class SessionLogger:
 
             # Get the rows in which the subproject is self.subproject
 
-            subproject_rows = license_rows[license_rows["subproject"] == self.subproject]
+            subproject_rows = license_rows[
+                license_rows["subproject"] == self.subproject
+            ]
 
             # Convert the 'subjects' column from string to list
-            subproject_rows["subjects"] = subproject_rows["subjects"].apply(ast.literal_eval)
+            subproject_rows["subjects"] = subproject_rows["subjects"].apply(
+                ast.literal_eval
+            )
 
-            subject_row = subproject_rows[subproject_rows["subjects"].apply(lambda x: self.subject_id in x)]
+            subject_row = subproject_rows[
+                subproject_rows["subjects"].apply(
+                    lambda x: self.subject_id in x
+                )
+            ]
 
             if not subject_row.empty:
                 return subject_row.iloc[0]["condition"]
@@ -907,7 +1045,9 @@ class SessionLogger:
             while True:
                 subject = {}
                 subject_id = input("Enter the subject ID: ")
-                confirmation = input(f"Confirm subject ID '{subject_id}' (y/n): ").lower()
+                confirmation = input(
+                    f"Confirm subject ID '{subject_id}' (y/n): "
+                ).lower()
                 if confirmation == "y":
                     # append the subject_id to the subject dictionary
                     subject["subject_id"] = subject_id
@@ -916,15 +1056,21 @@ class SessionLogger:
                 elif confirmation == "n":
                     continue
                 else:
-                    printme("Invalid input. Please enter 'y' for yes or 'n' for no.")
+                    printme(
+                        "Invalid input. Please enter 'y' for yes or 'n' for no."
+                    )
 
             # Confirm adding more subjects
-            add_more_ids = input("Do you want to add more IDs for the same cage? (y/n): ").lower()
+            add_more_ids = input(
+                "Do you want to add more IDs for the same cage? (y/n): "
+            ).lower()
             if add_more_ids == "n":
                 break
 
         # Add sex
-        sex = self.get_input("Enter the sex (male/female): ", ["male", "female"])
+        sex = self.get_input(
+            "Enter the sex (male/female): ", ["male", "female"]
+        )
         # Append the sex to all the new subjects
         [new_subject.update({"sex": sex}) for new_subject in new_subjects]
 
@@ -933,49 +1079,83 @@ class SessionLogger:
             date_of_birth = input("Enter the date of birth (DD/MM/YYYY): ")
             try:
                 datetime.strptime(date_of_birth, "%d/%m/%Y")
-                [new_subject.update({"date_of_birth": date_of_birth}) for new_subject in new_subjects]
+                [
+                    new_subject.update({"date_of_birth": date_of_birth})
+                    for new_subject in new_subjects
+                ]
                 break
             except ValueError:
-                printme("Invalid date format. Please enter in DD/MM/YYYY format.")
+                printme(
+                    "Invalid date format. Please enter in DD/MM/YYYY format."
+                )
 
         # Add cage number
         # first get the rows in which active is True
         active_subjects = subjects_data_csv[subjects_data_csv["active"] == True]
-        active_existing_cage_numbers = active_subjects["cage_number"].unique().tolist()
+        active_existing_cage_numbers = (
+            active_subjects["cage_number"].unique().tolist()
+        )
         cage_number = self.get_input(
             "Enter the cage number or select from existing:",
             active_existing_cage_numbers + ["Enter new value"],
         )
         if cage_number == "Enter new value":
             cage_number = input("Enter new cage number: ")
-        [new_subject.update({"cage_number": cage_number}) for new_subject in new_subjects]
+        [
+            new_subject.update({"cage_number": cage_number})
+            for new_subject in new_subjects
+        ]
 
         # Add species
         unique_species = genotypes_data_csv["species"].unique().tolist()
         species = self.get_input("Enter the species:", unique_species)
-        [new_subject.update({"species": species}) for new_subject in new_subjects]
+        [
+            new_subject.update({"species": species})
+            for new_subject in new_subjects
+        ]
 
         # Add genotype
         genotypes_for_species = (
-            genotypes_data_csv[genotypes_data_csv["species"] == species]["genotype"].unique().tolist()
+            genotypes_data_csv[genotypes_data_csv["species"] == species][
+                "genotype"
+            ]
+            .unique()
+            .tolist()
         )
         genotype = self.get_input("Enter the genotype:", genotypes_for_species)
-        [new_subject.update({"genotype": genotype}) for new_subject in new_subjects]
+        [
+            new_subject.update({"genotype": genotype})
+            for new_subject in new_subjects
+        ]
 
         # Default fields
-        [new_subject.update({"current_license": "ZH_139"}) for new_subject in new_subjects]
-        [new_subject.update({"current_subproject": ""}) for new_subject in new_subjects]
+        [
+            new_subject.update({"current_license": "ZH_139"})
+            for new_subject in new_subjects
+        ]
+        [
+            new_subject.update({"current_subproject": ""})
+            for new_subject in new_subjects
+        ]
         [new_subject.update({"weight": ""}) for new_subject in new_subjects]
         [new_subject.update({"notes": ""}) for new_subject in new_subjects]
         [new_subject.update({"repository": ""}) for new_subject in new_subjects]
         [new_subject.update({"active": True}) for new_subject in new_subjects]
-        [new_subject.update({"logged_out": False}) for new_subject in new_subjects]
-        [new_subject.update({"logged_out_date": ""}) for new_subject in new_subjects]
+        [
+            new_subject.update({"logged_out": False})
+            for new_subject in new_subjects
+        ]
+        [
+            new_subject.update({"logged_out_date": ""})
+            for new_subject in new_subjects
+        ]
 
         # Append new subjects to the CSV
         print(new_subjects)
         new_subjects_df = pd.DataFrame(new_subjects)
-        subjects_data_csv = pd.concat([subjects_data_csv, new_subjects_df], ignore_index=True)
+        subjects_data_csv = pd.concat(
+            [subjects_data_csv, new_subjects_df], ignore_index=True
+        )
         subjects_data_csv.to_csv(self.paths["subjects"], index=False)
 
         printme("New subjects added successfully.")
@@ -989,7 +1169,9 @@ class SessionLogger:
         """
         self.clear_input_buffer()
         subjects_data_dict = self.get_csv_data(self.paths["subjects"])
-        subjects_data_dict = {k: v for k, v in subjects_data_dict.items() if v["active"] == True}
+        subjects_data_dict = {
+            k: v for k, v in subjects_data_dict.items() if v["active"] == True
+        }
         subjects_options = [f"{key}" for key, _ in subjects_data_dict.items()]
 
         printme("Select the IDs of the subjects (separated by commas):")
@@ -997,14 +1179,18 @@ class SessionLogger:
             print(f"{i + 1}. {option}")
 
         while True:
-            user_input = input("Enter the numbers corresponding to the subjects, separated by commas: ")
+            user_input = input(
+                "Enter the numbers corresponding to the subjects, separated by commas: "
+            )
             try:
                 selected_indices = [int(x) - 1 for x in user_input.split(",")]
                 selected_ids = [subjects_options[i] for i in selected_indices]
                 print(selected_ids)
                 return selected_ids
             except (ValueError, IndexError):
-                printme("Invalid input, please enter valid numbers corresponding to the subjects.")
+                printme(
+                    "Invalid input, please enter valid numbers corresponding to the subjects."
+                )
 
     @staticmethod
     def get_csv_data(file_path):
@@ -1060,12 +1246,16 @@ class SessionLogger:
             print(f"{i + start}. {option}")
 
         while True:
-            user_input = input("Select an option by entering the corresponding number: ")
+            user_input = input(
+                "Select an option by entering the corresponding number: "
+            )
             if user_input.isdigit():
                 index = int(user_input) - start
                 if 0 <= index < len(options):
                     return options[index]
-            printme("Invalid input, please enter a number corresponding to the options above.")
+            printme(
+                "Invalid input, please enter a number corresponding to the options above."
+            )
 
     @staticmethod
     def append_timestamp(data):
@@ -1087,12 +1277,11 @@ class SessionLogger:
         Clears the input buffer to prevent unexpected behavior.
         """
         if platform.system() == "Windows":
-            import ms
-
             while msvcrt.kbhit():
                 msvcrt.getch()
         else:
-            import sys, termios
+            import sys
+            import termios
 
             termios.tcflush(sys.stdin, termios.TCIOFLUSH)
 
