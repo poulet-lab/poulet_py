@@ -71,7 +71,7 @@ dependencies = ["mypy", "ruff"]
 [tool.hatch.envs.lint.scripts]
 typing = "mypy --install-types --non-interactive {args:poulet_py tests}"
 style = "ruff check"
-fmt = "ruff format"
+fmt = "ruff check --fix && ruff format"
 all = ["style", "typing"]
 
 [tool.mypy]
