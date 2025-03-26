@@ -1,13 +1,9 @@
-import serial
-import os
 import csv
 import logging
+import os
 import time
 
-
-def print_me(message):
-    """Print a message with newlines before and after."""
-    print(f"\n{message}\n")
+import serial
 
 
 class Arduino:
@@ -48,7 +44,9 @@ class Arduino:
             except Exception as e:
                 self.arduinos[key]["last_value"] = float("nan")
                 print(f"Exception from arduino read_data method: {e}")
-                self.log_error(f"Exception from arduino {key} read_data method: {e}")
+                self.log_error(
+                    f"Exception from arduino {key} read_data method: {e}"
+                )
 
     def set_error_log_path(self, folder_path, error_file_name):
         """
@@ -60,7 +58,9 @@ class Arduino:
         """
         self.error_log_path = os.path.join(folder_path, error_file_name)
 
-    def set_output_file(self, path, extra_name, data_columns=["data"], base_file_name="arduino"):
+    def set_output_file(
+        self, path, extra_name, data_columns=["data"], base_file_name="arduino"
+    ):
         """
         Set the output file for the Arduino.
 
@@ -73,11 +73,15 @@ class Arduino:
             # Create the output file name
             extra_name = extra_name + str(key)
             self.output_file_name = f"{base_file_name}_{extra_name}.csv"
-            self.arduinos[key]["output_file"] = os.path.join(path, self.output_file_name)
+            self.arduinos[key]["output_file"] = os.path.join(
+                path, self.output_file_name
+            )
 
             # Create the CSV file and write the header if it doesn't exist
             if not os.path.isfile(self.arduinos[key]["output_file"]):
-                with open(self.arduinos[key]["output_file"], mode="w", newline="") as csvfile:
+                with open(
+                    self.arduinos[key]["output_file"], mode="w", newline=""
+                ) as csvfile:
                     writer = csv.writer(csvfile)
                     writer.writerow(["timestamp", *data_columns])
 
@@ -90,11 +94,15 @@ class Arduino:
         """
         for key in self.arduinos.keys():
             try:
-                with open(self.arduinos[key]["output_file"], mode="a", newline="") as csvfile:
+                with open(
+                    self.arduinos[key]["output_file"], mode="a", newline=""
+                ) as csvfile:
                     writer = csv.writer(csvfile)
                     writer.writerow([self.timestamp, *data])
             except Exception as e:
-                self.log_error(f"Error from arduino {key} save_data method: {e}")
+                self.log_error(
+                    f"Error from arduino {key} save_data method: {e}"
+                )
 
     def set_timer(self, start_time):
         """
@@ -114,7 +122,9 @@ class Arduino:
                 self.arduinos[key]["arduino"].close()
                 print(f"Closed connection on port {self.arduinos[key]['port']}")
             except Exception as e:
-                self.log_error(f"Error closing connection on port {self.arduinos[key]['port']}: {e}")
+                self.log_error(
+                    f"Error closing connection on port {self.arduinos[key]['port']}: {e}"
+                )
 
     @staticmethod
     def log_error(self, error_message):
@@ -125,4 +135,6 @@ class Arduino:
             logging.error(error_message)
         else:
             print(f"An error occurred: {error_message}")
-            print("Set the error log file path to log the error with set_error_log_path().")
+            print(
+                "Set the error log file path to log the error with set_error_log_path()."
+            )

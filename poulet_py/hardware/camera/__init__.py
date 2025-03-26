@@ -1,3 +1,5 @@
+# ruff: noqa F401
+
 __all__ = ["basler", "thermal_camera"]
 
 from poulet_py.hardware.camera.basler import BaslerCamera
