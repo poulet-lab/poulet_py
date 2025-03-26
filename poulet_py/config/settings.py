@@ -36,7 +36,9 @@ Usage Examples
 
 4. Programmatically Updating Settings:
     >>> from poulet_py.config.settings import Settings
-    >>> custom_settings = Settings(log={"level": "error", "file": "/custom/path.log"})
+    >>> custom_settings = Settings(
+    ...     log={"level": "error", "file": "/custom/path.log"}
+    ... )
     >>> print(custom_settings.log.level)  # Output: "error"
     >>> print(custom_settings.log.file)  # Output: "/custom/path.log"
 """
@@ -48,7 +50,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Log(BaseModel):
     level: str = Field("info", description="The logging level")
-    file: str | None = Field(None, description="The file path for logging. If `None`, logging is done to the console.")
+    file: str | None = Field(
+        None,
+        description="The file path for logging. If `None`, logging is done to the console.",
+    )
 
 
 class Settings(BaseSettings):

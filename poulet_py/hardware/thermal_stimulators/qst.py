@@ -1,11 +1,12 @@
+from random import randint
+from time import sleep
 from typing import Literal
-from typing_extensions import Self
+
+from pandas import DataFrame, concat
 from pydantic import BaseModel, Field
 from pytcsii import tcsii_serial
-from time import sleep
-from random import randint
-from pandas import DataFrame, concat
 from tqdm import tqdm
+from typing_extensions import Self
 
 from poulet_py.tools import generate_trials
 
@@ -14,7 +15,9 @@ class TCSIIStimulus(BaseModel):
     target: int = Field(description="target temperature in C ")
     rise_rate: int = Field(description="rise rate in C/s")
     return_rate: int = Field(description="return rate in C/s")
-    dur_ms: int | None = Field(None, description="duration in ms. Phases duration depends on dur_mode.")
+    dur_ms: int | None = Field(
+        None, description="duration in ms. Phases duration depends on dur_mode."
+    )
     dur_mode: Literal["fix_stim", "fixed_plateau", "fixed_total"] = Field(
         "fixed_stim",
         description="""
@@ -23,7 +26,9 @@ class TCSIIStimulus(BaseModel):
             'fixed_total' (duration is total time and rise/return rates are included)""",
     )
     trigger_code: int = Field(255, description="trigger code. Defaults to 255.")
-    trigger_dur_ms: int = Field(10, description="trigger duration. Defaults to 10.")
+    trigger_dur_ms: int = Field(
+        10, description="trigger duration. Defaults to 10."
+    )
     surfaces: int = Field(0)
 
 
@@ -38,11 +43,18 @@ class TCSIIController(tcsii_serial):
         trigger_in=True,
         temp_profile=False,
     ):
-        super().__init__(port, baseline, surfaces, max_temp, beep, trigger_in, temp_profile)
+        super().__init__(
+            port, baseline, surfaces, max_temp, beep, trigger_in, temp_profile
+        )
 
         self.data = DataFrame()
 
-    def trials(self, n: int, stimuli: list[TCSIIStimulus], mode: Literal["random", "fixed"]) -> Self:
+    def trials(
+        self,
+        n: int,
+        stimuli: list[TCSIIStimulus],
+        mode: Literal["random", "fixed"],
+    ) -> Self:
         self.trials = generate_trials(n=n, stimuli_options=stimuli, mode=mode)
         return self
 

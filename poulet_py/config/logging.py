@@ -1,6 +1,8 @@
 from logging import FileHandler, Formatter, Logger, getLogger
+
 from rich.console import Console
 from rich.logging import RichHandler
+
 from poulet_py.config.settings import SETTINGS
 
 
@@ -51,7 +53,9 @@ def setup_logging(
     """
     if file is not None:
         file_handler = FileHandler(file)
-        file_handler.setFormatter(Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+        file_handler.setFormatter(
+            Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        )
         logger.addHandler(file_handler)
     else:
         console = Console(width=terminal_width) if terminal_width else Console()

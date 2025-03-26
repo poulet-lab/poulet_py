@@ -1,7 +1,8 @@
-import serial
-import time
-import os
 import csv
+import os
+import time
+
+import serial
 
 
 class JulaboChiller:
@@ -18,14 +19,17 @@ class JulaboChiller:
         """
         if port is None:
             # check in env cariable
-            from dotenv import load_dotenv, find_dotenv
             import os
+
+            from dotenv import find_dotenv, load_dotenv
 
             dotenv_path = find_dotenv(usecwd=True)
             load_dotenv(dotenv_path)
             self.port = os.getenv("CHILLER_PORT")
             if self.port is None:
-                raise ValueError("No serial port specified in .env file or argument.")
+                raise ValueError(
+                    "No serial port specified in .env file or argument."
+                )
         else:
             self.port = port
         self.baudrate = baudrate
@@ -61,14 +65,18 @@ class JulaboChiller:
         """
         self.error_log_file = os.path.join(path, file_name)
 
-    def set_output_file(self, path, extra_name, base_file_name="julabo_chiller"):
+    def set_output_file(
+        self, path, extra_name, base_file_name="julabo_chiller"
+    ):
         """
         Sets the output file for recording the video.
 
         Args:
             path (str): The directory where the output file will be saved.
         """
-        self.output_file = os.path.join(path, f"{base_file_name}-{extra_name}.csv")
+        self.output_file = os.path.join(
+            path, f"{base_file_name}-{extra_name}.csv"
+        )
 
         if not os.path.isfile(self.output_file):
             with open(self.output_file, mode="w", newline="") as csvfile:

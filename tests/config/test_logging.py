@@ -8,7 +8,9 @@ from poulet_py.config.settings import SETTINGS
 
 def test_setup_logging_with_file_handler(tmpdir):
     logger = getLogger("test_logger_file")
-    setup_logging(logger=logger, level="debug", file=str(tmpdir.join("test.log")))
+    setup_logging(
+        logger=logger, level="debug", file=str(tmpdir.join("test.log"))
+    )
 
     assert len(logger.handlers) == 1
     assert isinstance(logger.handlers[0], FileHandler)
