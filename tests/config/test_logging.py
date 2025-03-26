@@ -1,0 +1,30 @@
+from logging import DEBUG, FileHandler, getLevelNamesMapping, getLogger
+
+from rich.logging import RichHandler
+
+from poulet_py.config.logging import LOGGER, setup_logging
+from poulet_py.config.settings import SETTINGS
+
+
+def test_setup_logging_with_file_handler(tmpdir):
+    logger = getLogger("test_logger_file")
+    setup_logging(logger=logger, level="debug", file=str(tmpdir.join("test.log")))
+
+    assert len(logger.handlers) == 1
+    assert isinstance(logger.handlers[0], FileHandler)
+    assert logger.level == DEBUG
+    del logger
+
+
+def test_setup_logging_with_rich_handler():
+    logger = getLogger("test_logger_rich")
+    setup_logging(logger=logger, level="debug")
+
+    assert len(logger.handlers) == 1
+    assert isinstance(logger.handlers[0], RichHandler)
+    assert logger.level == DEBUG
+    del logger
+
+
+def test_logger_instance():
+    assert LOGGER.level == getLevelNamesMapping()[SETTINGS.log.level.upper()]

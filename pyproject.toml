@@ -69,7 +69,7 @@ require = ["default"]
 dependencies = ["mypy", "ruff"]
 
 [tool.hatch.envs.lint.scripts]
-typing = "mypy --install-types --non-interactive {args:neu_sdk tests}"
+typing = "mypy --install-types --non-interactive {args:poulet_py tests}"
 style = "ruff check"
 fmt = "ruff format"
 all = ["style", "typing"]
@@ -151,7 +151,7 @@ line-ending = "auto"
 docstring-code-line-length = "dynamic"
 
 [tool.ruff.lint.isort]
-known-first-party = ["neu_sdk"]
+known-first-party = ["poulet_py"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
@@ -163,13 +163,13 @@ ban-relative-imports = "all"
 python = ["3.8", "3.9", "3.10", "3.11", "3.12"]
 
 [tool.coverage.run]
-source_pkgs = ["neu_sdk", "tests"]
+source_pkgs = ["poulet_py", "tests"]
 branch = true
 parallel = true
 
 [tool.coverage.paths]
-neu_sdk = ["neu_sdk", "*/neu-sdk/neu_sdk"]
-tests = ["tests", "*/neu-sdk/tests"]
+poulet_py = ["poulet_py", "*/poulet-py/poulet_py"]
+tests = ["tests", "*/poulet-py/tests"]
 
 [tool.coverage.report]
 exclude_lines = ["no cov", "if __name__ == .__main__.:", "if TYPE_CHECKING:"]
