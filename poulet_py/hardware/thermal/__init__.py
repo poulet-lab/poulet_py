@@ -1,12 +1,16 @@
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from poulet_py.hardware.camera.basler import BaslerCamera
-    from poulet_py.hardware.camera.group_gets import PureThermal
+    from poulet_py.hardware.thermal.qst import (
+        TCSIIController,
+        TCSIIStimulus,
+        TCSStimulus,
+    )
 
 IMPORTS = {
-    "BaslerCamera": "hardware.camera.basler",
-    "PureThermal": "hardware.camera.group_gets",
+    "TCSStimulus": "hardware.thermal_stimulators.qst",
+    "TCSIIStimulus": "hardware.thermal_stimulators.qst",
+    "TCSIIController": "hardware.thermal_stimulators.qst",
 }
 
 
@@ -18,12 +22,13 @@ def __getattr__(name: str) -> Any:
             return getattr(module, name)
         except ImportError as e:
             submodule = module_path.split(".")[-1]
-            msg = f"Missing '{submodule}' module. "
+            msg = "Missing '{submodule}' module. "
             f"To install it use: pip install poulet_py[{submodule}]"
             raise ImportError(msg) from e
 
-    msg = f"module 'poulet_py.hardware.camera' has no attribute '{name}'"
+    msg = "module 'poulet_py.hardware.thermal_stimulators' "
+    f"has no attribute '{name}'"
     raise AttributeError(msg)
 
 
-__all__ = ["BaslerCamera", "PureThermal"]
+__all__ = ["TCSIIController", "TCSIIStimulus", "TCSStimulus"]

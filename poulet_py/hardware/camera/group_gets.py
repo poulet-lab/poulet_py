@@ -1,8 +1,8 @@
 import os
-import platform
 import time
+from ctypes import CFUNCTYPE, POINTER, c_uint16, cast
 from datetime import datetime
-
+from platform import architecture, system
 import h5py
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -25,52 +25,52 @@ import sys
 import clr
 from scipy import ndimage
 
-
-def py_frame_callback(frame, userptr):
-    """
-    Callback function to handle frames from the camera.
-
-    Args:
-        frame: The frame data from the camera.
-        userptr: User pointer.
-    """
-    array_pointer = cast(
-        frame.contents.data,
-        POINTER(c_uint16 * (frame.contents.width * frame.contents.height)),
-    )
-    data = np.frombuffer(array_pointer.contents, dtype=np.uint16).reshape(
-        frame.contents.height, frame.contents.width
-    )
-
-    # Ensure frame size is correct
-    if frame.contents.data_bytes != (
-        2 * frame.contents.width * frame.contents.height
-    ):
-        return
-
-    # Add frame data to queue if not full
-    if not q.full():
-        q.put(data)
-
-
 # Check whether we are in Windows
-if not platform.system() == "Windows":
-    from uvctypes import *
+if not system() == "Windows":
+    from poulet_py.types.leptonUVC import *
+else:
+    import pythoncom
+
+
+if not system() == "Windows":
+
+    def py_frame_callback(frame, userptr):
+        """
+        Callback function to handle frames from the camera.
+
+        Args:
+            frame: The frame data from the camera.
+            userptr: User pointer.
+        """
+        array_pointer = cast(
+            frame.contents.data,
+            POINTER(c_uint16 * (frame.contents.width * frame.contents.height)),
+        )
+        data = np.frombuffer(array_pointer.contents, dtype=np.uint16).reshape(
+            frame.contents.height, frame.contents.width
+        )
+
+        # Ensure frame size is correct
+        if frame.contents.data_bytes != (
+            2 * frame.contents.width * frame.contents.height
+        ):
+            return
+
+        # Add frame data to queue if not full
+        if not q.full():
+            q.put(data)
 
     BUF_SIZE = 2
     q = Queue(BUF_SIZE)
     PTR_PY_FRAME_CALLBACK = CFUNCTYPE(None, POINTER(uvc_frame), c_void_p)(
         py_frame_callback
     )
-    tiff_frame = 1
-    colorMapType = 0
-else:
-    import pythoncom
 
 
-class ThermalCamera:
+class PureThermal:
     """
-    A class to interact with the Lepton 3.5 thermal camera.
+    A class to interact with the GroupGet PureThermal with camera.
+    tested on PureThermal 3 with Lepton 3.5 camera
     """
 
     def __init__(self, vminT=30, vmaxT=34):
@@ -91,8 +91,9 @@ class ThermalCamera:
         self.shutter_manual = False
 
         # Check whether we are in Windows
-        if platform.system() == "Windows":
-            self.windows = True
+
+        self.windows = system() == "Windows"
+        if self.windows:
             self.windows_camera = CameraWindows()
 
         print("Object thermal camera initialized")
@@ -187,15 +188,6 @@ class ThermalCamera:
             start_time (float): The time at which the camera recording started.
         """
         self.start_time = start_time
-
-    def set_error_log_path(self, path, file_name):
-        """
-        Sets the path for the error log file.
-
-        Args:
-            path (str): The path to the error log file.
-        """
-        self.error_log_file = os.path.join(path, file_name)
 
     def set_output_file(
         self,
@@ -528,118 +520,121 @@ class ThermalCamera:
 
 # imports
 
+if system() == "Windows":
+    # Initialize COM
+    pythoncom.CoInitialize()
 
-# Initialize COM
-pythoncom.CoInitialize()
+    folder = (
+        "../bin/thermal_camera/x64" if architecture()[0] == "64bit" else "x86"
+    )
+    path = os.path.sep.join(__file__.split(os.path.sep)[:-1])
+    sys.path.append(os.path.sep.join([path, folder]))
+    clr.AddReference("LeptonUVC")
+    clr.AddReference("ManagedIR16Filters")
 
-folder = "x64" if platform.architecture()[0] == "64bit" else "x86"
-path = os.path.sep.join(__file__.split(os.path.sep)[:-1])
-sys.path.append(os.path.sep.join([path, folder]))
-clr.AddReference("LeptonUVC")
-clr.AddReference("ManagedIR16Filters")
+    from IR16Filters import IR16Capture, NewBytesFrameEvent
+    from Lepton import CCI
 
-from IR16Filters import IR16Capture, NewBytesFrameEvent
-from Lepton import CCI
-
-
-def handle_exit(sig, frame):
-    print("Exiting and cleaning up...")
-    pythoncom.CoUninitialize()
-
-
-# Register signal handlers for clean exit
-signal.signal(signal.SIGINT, handle_exit)
-signal.signal(signal.SIGTERM, handle_exit)
-
-
-class CameraWindows:
-    def __init__(self):
-        self.latest_frame = None
-        self.CCI = CCI
-        self.IR16Capture = IR16Capture
-        self.NewBytesFrameEvent = NewBytesFrameEvent
-        self.device = None
-        self.reader = None
-
-    def add_frame(self, array, width, height):
-        """
-        Add a new frame to the buffer of read data.
-        """
-        img = np.fromiter(array, dtype="uint16").reshape(height, width)  # parse
-        img = ndimage.rotate(img, angle=0, reshape=True)  # rotation
-        self.latest_frame = img.astype(np.float16)  # update the last reading
-
-    def initialise_camera(self):
-        """
-        Initialize the camera and start capturing frames.
-        """
-        devices = []
-        for i in self.CCI.GetDevices():
-            if i.Name.startswith("PureThermal"):
-                devices.append(i)
-
-        if len(devices) > 1:
-            print("Multiple Pure Thermal devices have been found.\n")
-            for i, d in enumerate(devices):
-                print(f"{i}. {d}")
-            while True:
-                idx = input("Select the index of the required device: ")
-                try:
-                    idx = int(idx)
-                    if idx in range(len(devices)):
-                        self.device = devices[idx]
-                        break
-                except ValueError:
-                    print("Unrecognized input value.\n")
-
-        elif len(devices) == 1:
-            self.device = devices[0]
-
-        else:
-            self.device = None
-
-        txt = "No devices called 'PureThermal' have been found."
-        assert self.device is not None, txt
-        self.device = self.device.Open()
-        self.device.sys.RunFFCNormalization()
-
-        self.device.sys.SetGainMode(self.CCI.Sys.GainMode.HIGH)
-
-        self.reader = self.IR16Capture()
-        callback = self.NewBytesFrameEvent(self.add_frame)
-        self.reader.SetupGraphWithBytesCallback(callback)
-
-    def start_streaming(self):
-        """
-        Start capturing frames.
-        """
-        self.reader.RunGraph()
-
-    def set_shutter_manual(self):
-        """
-        Set the shutter mode to manual.
-        """
-        new_shutter_mode_obj = self.device.sys.GetFfcShutterModeObj()
-        new_shutter_mode_obj.shutterMode = self.CCI.Sys.FfcShutterMode.AUTO
-
-        self.device.sys.SetFfcShutterModeObj(new_shutter_mode_obj)
-
-    def perform_manualff(self):
-        """
-        Perform a manual flat field correction.
-        """
-        self.device.sys.RunFFCNormalization()
-
-    def stop_streaming(self):
-        """
-        Stop capturing frames.
-        """
-        self.reader.StopGraph()
+    def handle_exit(sig, frame):
+        print("Exiting and cleaning up...")
         pythoncom.CoUninitialize()
-        handle_exit(None, None)
 
-    def get_frame(self):
-        """
-        Retrieve the latest frame captured by the camera.
-        """
-        return self.latest_frame
+    # Register signal handlers for clean exit
+    signal.signal(signal.SIGINT, handle_exit)
+    signal.signal(signal.SIGTERM, handle_exit)
+
+    class CameraWindows:
+        def __init__(self):
+            self.latest_frame = None
+            self.CCI = CCI
+            self.IR16Capture = IR16Capture
+            self.NewBytesFrameEvent = NewBytesFrameEvent
+            self.device = None
+            self.reader = None
+
+        def add_frame(self, array, width, height):
+            """
+            Add a new frame to the buffer of read data.
+            """
+            img = np.fromiter(array, dtype="uint16").reshape(
+                height, width
+            )  # parse
+            img = ndimage.rotate(img, angle=0, reshape=True)  # rotation
+            self.latest_frame = img.astype(
+                np.float16
+            )  # update the last reading
+
+        def initialise_camera(self):
+            """
+            Initialize the camera and start capturing frames.
+            """
+            devices = []
+            for i in self.CCI.GetDevices():
+                if i.Name.startswith("PureThermal"):
+                    devices.append(i)
+
+            if len(devices) > 1:
+                print("Multiple Pure Thermal devices have been found.\n")
+                for i, d in enumerate(devices):
+                    print(f"{i}. {d}")
+                while True:
+                    idx = input("Select the index of the required device: ")
+                    try:
+                        idx = int(idx)
+                        if idx in range(len(devices)):
+                            self.device = devices[idx]
+                            break
+                    except ValueError:
+                        print("Unrecognized input value.\n")
+
+            elif len(devices) == 1:
+                self.device = devices[0]
+
+            else:
+                self.device = None
+
+            txt = "No devices called 'PureThermal' have been found."
+            assert self.device is not None, txt
+            self.device = self.device.Open()
+            self.device.sys.RunFFCNormalization()
+
+            self.device.sys.SetGainMode(self.CCI.Sys.GainMode.HIGH)
+
+            self.reader = self.IR16Capture()
+            callback = self.NewBytesFrameEvent(self.add_frame)
+            self.reader.SetupGraphWithBytesCallback(callback)
+
+        def start_streaming(self):
+            """
+            Start capturing frames.
+            """
+            self.reader.RunGraph()
+
+        def set_shutter_manual(self):
+            """
+            Set the shutter mode to manual.
+            """
+            new_shutter_mode_obj = self.device.sys.GetFfcShutterModeObj()
+            new_shutter_mode_obj.shutterMode = self.CCI.Sys.FfcShutterMode.AUTO
+
+            self.device.sys.SetFfcShutterModeObj(new_shutter_mode_obj)
+
+        def perform_manualff(self):
+            """
+            Perform a manual flat field correction.
+            """
+            self.device.sys.RunFFCNormalization()
+
+        def stop_streaming(self):
+            """
+            Stop capturing frames.
+            """
+            self.reader.StopGraph()
+            pythoncom.CoUninitialize()
+            handle_exit(None, None)
+
+        def get_frame(self):
+            """
+            Retrieve the latest frame captured by the camera.
+            """
+            return self.latest_frame

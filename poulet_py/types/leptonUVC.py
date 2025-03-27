@@ -1,26 +1,48 @@
-import platform
-from ctypes import *
+from platform import system
+from ctypes import (
+    POINTER,
+    Structure,
+    byref,
+    c_bool,
+    c_char,
+    c_int,
+    c_long,
+    c_size_t,
+    c_ubyte,
+    c_uint,
+    c_uint8,
+    c_uint16,
+    c_uint32,
+    c_ulong,
+    c_ushort,
+    c_void_p,
+    cdll,
+    create_string_buffer,
+)
+
 
 try:
-    if platform.system() == "Darwin":
+    if system() == "Darwin":
         libuvc = cdll.LoadLibrary("libuvc.dylib")
-    elif platform.system() == "Linux":
+    elif system() == "Linux":
         libuvc = cdll.LoadLibrary("libuvc.so")
     else:
         libuvc = cdll.LoadLibrary("libuvc")
 except OSError:
-    print("Error: could not find libuvc!")
-    # sys.exit(1)
+    msg = "Error: could not find libuvc"
+    raise RuntimeError(msg)
 
 
 class uvc_context(Structure):
-    _fields_ = [
-        ("usb_ctx", c_void_p),
-        ("own_usb_ctx", c_uint8),
-        ("open_devices", c_void_p),
-        ("handler_thread", c_ulong),
-        ("kill_handler_thread", c_int),
-    ]
+    def __init__(self, *args, **kw):
+        super().__init__(*args, **kw)
+        self._fields_: list[tuple] = [
+            ("usb_ctx", c_void_p),
+            ("own_usb_ctx", c_uint8),
+            ("open_devices", c_void_p),
+            ("handler_thread", c_ulong),
+            ("kill_handler_thread", c_int),
+        ]
 
 
 class uvc_device(Structure):
@@ -398,9 +420,7 @@ def print_device_formats(devh):
 def uvc_get_frame_formats_by_guid(devh, vs_fmt_guid):
     for format_desc in uvc_iter_formats(devh):
         if vs_fmt_guid[0:4] == format_desc.guidFormat[0:4]:
-            return [
-                fmt for fmt in uvc_iter_frames_for_format(devh, format_desc)
-            ]
+            return list(uvc_iter_frames_for_format(devh, format_desc))
     return []
 
 
