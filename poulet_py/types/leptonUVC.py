@@ -1,4 +1,3 @@
-from platform import system
 from ctypes import (
     POINTER,
     Structure,
@@ -19,7 +18,7 @@ from ctypes import (
     cdll,
     create_string_buffer,
 )
-
+from platform import system
 
 try:
     if system() == "Darwin":

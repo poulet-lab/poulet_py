@@ -1,9 +1,9 @@
+import logging
+import platform
+from threading import Thread
+
 import cv2
 import matplotlib.pyplot as plt
-from threading import Thread
-import numpy as np
-import platform
-import logging
 
 
 class UVCCameraStream:
@@ -186,7 +186,7 @@ class UVCCameraStream:
         except KeyboardInterrupt:
             self.logger.info("Stream stopped by user")
         except Exception as e:
-            self.logger.error(f"Error in plot_stream: {str(e)}")
+            self.logger.error(f"Error in plot_stream: {e!s}")
         finally:
             plt.ioff()
             self.release()
@@ -214,7 +214,7 @@ class UVCCameraStream:
         except KeyboardInterrupt:
             self.logger.info("Stream stopped by user")
         except Exception as e:
-            self.logger.error(f"Error in show_opencv: {str(e)}")
+            self.logger.error(f"Error in show_opencv: {e!s}")
         finally:
             cv2.destroyAllWindows()
             self.release()

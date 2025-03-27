@@ -3,6 +3,7 @@ import time
 from ctypes import CFUNCTYPE, POINTER, c_uint16, cast
 from datetime import datetime
 from platform import architecture, system
+
 import h5py
 import matplotlib as mpl
 import matplotlib.pyplot as plt

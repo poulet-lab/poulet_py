@@ -1,4 +1,4 @@
-from datetime import timezone, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from pytest import mark
