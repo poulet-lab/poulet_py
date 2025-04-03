@@ -1,5 +1,8 @@
-# ruff: noqa F401
-__all__ = ["logging", "settings"]
+from typing import TYPE_CHECKING
 
-from poulet_py.config.logging import LOGGER
-from poulet_py.config.settings import SETTINGS, Settings
+if TYPE_CHECKING:
+    from poulet_py.config.logging import LOGGER, setup_logging
+    from poulet_py.config.settings import SETTINGS, Settings
+
+
+__all__ = ["LOGGER", "SETTINGS", "Settings", "setup_logging"]

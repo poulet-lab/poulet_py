@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "poulet_py"
 description = "A library which hosts various neuroscience python methods"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.14"
 dynamic = ['version']
 license = "GPL-3.0-or-later"
 authors = [
@@ -21,13 +21,15 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
 ]
 
 dependencies = [
-  "pydantic>=2.10.6,<2.11",
-  "pydantic-settings>=2.8.1,<2.9",
-  "python-dotenv>=1.0.1,<1.1",
-  "rich>=13.9.4,<13.10",
+  "pydantic==2.10.*",
+  "pydantic-settings==2.8.*",
+  "python-dotenv==1.0.*",
+  "rich==13.9.*",
+  "deprecated==1.2.*",
 ]
 
 keywords = ["poulet_py"]
@@ -40,7 +42,10 @@ Source = "https://github.com/poulet-lab/poulet_py"
 
 
 [tool.hatch.version]
-path = "poulet_py/__init__.py"
+path = "poulet_py/__about__.py"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [project.optional-dependencies]
 hardware = [
@@ -56,10 +61,9 @@ hardware = [
   "pythonnet>=3.0.5,<3.1",
 ]
 
-tools = []
+tools = ["orjson==3.10.*"]
 
 all = ["poulet_py[hardware,tools]"]
-
 
 [tool.hatch.envs.lint]
 detached = true
@@ -160,13 +164,17 @@ max-args = 15
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
 
-[[tool.hatch.envs.hatch-test.matrix]]
-python = ["3.8", "3.9", "3.10", "3.11", "3.12"]
+[tool.hatch.envs.hatch-test]
+extra-dependencies = ["poulet-py[all]"]
 
+[[tool.hatch.envs.hatch-test.matrix]]
+python = ["3.10", "3.11", "3.12", "3.13"]
+dependencies = ["poulet-py[all]"]
 [tool.coverage.run]
 source_pkgs = ["poulet_py", "tests"]
 branch = true
 parallel = true
+omit = ["src/hello_world/__about__.py"]
 
 [tool.coverage.paths]
 poulet_py = ["poulet_py", "*/poulet-py/poulet_py"]
