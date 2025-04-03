@@ -176,6 +176,7 @@ extra-dependencies = [
   "pytcsii @ git+https://github.com/mpcoll/pytcsii.git@main",
 ]
 
+
 [[tool.hatch.envs.hatch-test.matrix]]
 python = ["3.10", "3.11", "3.12", "3.13"]
 dependencies = ["poulet-py[all]"]
