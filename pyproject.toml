@@ -58,9 +58,7 @@ hardware = [
 
 tools = []
 
-utils = ["pandas==2.2.2"]
-
-all = ["poulet_py[hardware,tools,utils]"]
+all = ["poulet_py[hardware,tools]"]
 
 
 [tool.hatch.envs.lint]
