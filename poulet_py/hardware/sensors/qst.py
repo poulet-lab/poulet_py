@@ -563,7 +563,7 @@ class TCS(BaseModel):
             self.write(TCSCommand.RESET.format())
             LOGGER.info("Reset command sent successfully")
         except Exception as e:
-            LOGGER.error(f"Reset failed: {str(e)}", exc_info=True)
+            LOGGER.error(f"Reset failed: {e!s}", exc_info=True)
             msg = "Reset operation failed"
             raise RuntimeError(msg) from e
 
