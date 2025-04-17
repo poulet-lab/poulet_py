@@ -59,10 +59,11 @@ hardware = [
   "keyboard==0.13.5",
   "pywin32==306; platform_system == 'Windows'",
   "pythonnet>=3.0.5,<3.1",
+  "poulet_py[qst]",
+
 ]
-
+qst = ["numpy==2.2.*", "pandas==2.2.*"]
 tools = ["orjson==3.10.*"]
-
 all = ["poulet_py[hardware,tools]"]
 
 [tool.hatch.envs.lint]
