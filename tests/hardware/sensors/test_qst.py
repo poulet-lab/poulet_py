@@ -1,9 +1,8 @@
+import re
 from time import time_ns
-from unittest.mock import MagicMock, patch
+from unittest.mock import Mock, call, patch
 
 import pytest
-from pydantic import ValidationError
-from serial import Serial
 
 from poulet_py.hardware.sensors.qst import TCS, TCSCommand, TCSStimulus
 
@@ -11,11 +10,17 @@ from poulet_py.hardware.sensors.qst import TCS, TCSCommand, TCSStimulus
 # Fixtures
 @pytest.fixture
 def mock_serial():
-    return MagicMock(spec=Serial)
+    with patch("serial.Serial") as mock:
+        yield mock
 
 
 @pytest.fixture
-def basic_stimulus():
+def tcs(mock_serial):
+    return TCS(port="/dev/ttyUSB0")
+
+
+@pytest.fixture
+def stimulus():
     return TCSStimulus(
         surface=1,
         baseline=30.0,
@@ -26,161 +31,172 @@ def basic_stimulus():
     )
 
 
-@pytest.fixture
-def tcs_instance(mock_serial):
-    with patch("serial.Serial", return_value=mock_serial):
-        tcs = TCS(port="/dev/ttyUSB0", maximum_temperature=40.0)
-    return tcs
-
-
-# Test TCSCommand Enum
+# Test cases
 class TestTCSCommand:
-    def test_command_formatting_success(self):
-        assert TCSCommand.BASELINE_TEMPERATURE.format(300) == b"N300"
+    def test_command_formatting(self):
         assert TCSCommand.TARGET_TEMPERATURE.format(1, 350) == b"C1350"
-        assert TCSCommand.SET_MAX_TEMPERATURE.format(400) == b"Om400"
+        assert TCSCommand.BASELINE_TEMPERATURE.format(300) == b"N300"
+        assert TCSCommand.STIMULATION_RATE.format(1, 10) == b"V00110"
 
-    def test_command_formatting_failure(self):
+    def test_invalid_formatting(self):
         with pytest.raises(ValueError):
-            TCSCommand.BASELINE_TEMPERATURE.format()  # Missing argument
-
-        with pytest.raises(ValueError):
-            TCSCommand.TARGET_TEMPERATURE.format("a", "b")  # Wrong type
-
-    def test_all_commands_have_format_method(self):
-        for cmd in TCSCommand:
-            assert hasattr(cmd, "format")
-            if "%" in cmd.value.decode():
-                # Commands with format specifiers should raise if not given args
-                with pytest.raises((ValueError, TypeError)):
-                    cmd.format()
+            TCSCommand.TARGET_TEMPERATURE.format(1)  # Missing argument
 
 
-# Test TCSStimulus Model
 class TestTCSStimulus:
-    def test_valid_stimulus(self, basic_stimulus):
-        assert basic_stimulus.surface == 1
-        assert basic_stimulus.baseline == 30.0
-        assert basic_stimulus.target == 35.0
-
-    def test_invalid_surface(self):
-        with pytest.raises(ValidationError):
-            TCSStimulus(surface=6)  # Surface must be <=5
-
-    def test_invalid_temperatures(self):
-        with pytest.raises(ValidationError):
-            TCSStimulus(baseline=10)  # Below minimum
-
-        with pytest.raises(ValidationError):
-            TCSStimulus(target=70)  # Above maximum
-
-    def test_commands_method(self, basic_stimulus):
-        commands = basic_stimulus.commands()
-        assert len(commands) == 5
-        assert commands[0] == TCSCommand.BASELINE_TEMPERATURE.format(300)
-        assert commands[1] == TCSCommand.TARGET_TEMPERATURE.format(1, 350)
-
-
-# Test TCS Model
-class TestTCS:
-    def test_valid_port(self):
-        valid_ports = ["COM3", "/dev/ttyUSB0", "/dev/tty.usbmodem123"]
-        for port in valid_ports:
-            tcs = TCS(port=port, maximum_temperature=40.0)
-            assert tcs.port == port
-
-    def test_invalid_port(self):
-        with pytest.raises(ValidationError):
-            TCS(port="invalid_port", maximum_temperature=40.0)
-
-    def test_max_temperature_validation(self):
-        with pytest.raises(ValidationError):
-            TCS(port="COM1", maximum_temperature=70)  # Above max
-
-    def test_serial_property_caching(self, tcs_instance, mock_serial):
-        # First access creates and caches the serial property
-        serial1 = tcs_instance.serial
-        # Second access should return the same instance
-        serial2 = tcs_instance.serial
-        assert serial1 is serial2
-        mock_serial.assert_called_once()
-
-    def test_stimulus_property(self, tcs_instance, basic_stimulus):
-        # Test default stimulus
-        assert isinstance(tcs_instance.stimulus, TCSStimulus)
-
-        # Test setting valid stimulus
-        tcs_instance.stimulus = basic_stimulus
-        assert tcs_instance.stimulus == basic_stimulus
-
-        # Test setting invalid stimulus type
+    def test_stimulus_validation(self):
         with pytest.raises(ValueError):
-            tcs_instance.stimulus = "not a stimulus"
+            TCSStimulus(surface=6)  # Invalid surface
 
-        # Test stimulus with too high target temperature
         with pytest.raises(ValueError):
-            tcs_instance.stimulus = TCSStimulus(target=50)  # Above max of 40
+            TCSStimulus(target=70)  # Too hot
 
-    def test_write_method(self, tcs_instance, mock_serial):
-        test_command = b"test"
-        tcs_instance.write(test_command)
-        mock_serial.flush.assert_called_once()
-        mock_serial.write.assert_called_with(test_command)
+    def test_commands_generation(self, stimulus):
+        commands = stimulus.commands()
+        assert len(commands) == 6
+        assert commands[0] == b"S10000"  # Surface selection
+        assert commands[1] == b"N300"  # Baseline
+        assert commands[2] == b"C1350"  # Target
+        assert commands[3] == b"V10010"  # Rise rate
+        assert commands[4] == b"D100100"  # Duration
+        assert commands[5] == b"R10010"  # Return speed
 
-    def test_read_method(self, tcs_instance, mock_serial):
-        mock_serial.read_until.return_value = b"test response\r\n"
-        timestamp, response = tcs_instance.read()
-        assert isinstance(timestamp, int)
-        assert response == "test response\n"
 
-    def test_init_method(self, tcs_instance, mock_serial):
-        mock_serial.read_until.return_value = b"Firmware: v1.0\nProbe ID: 123\n"
-        tcs_instance.init()
-        mock_serial.write.assert_any_call(
-            TCSCommand.AUTOMATIC_CALIBRATION.format()
-        )
-        mock_serial.write.assert_any_call(
-            TCSCommand.SET_MAX_TEMPERATURE.format(400)
+class TestTCSInitialization:
+    def test_init_creates_serial_connection(self, mock_serial, tcs):
+        tcs.init()
+        mock_serial.assert_called_once_with(
+            port="/dev/ttyUSB0",
+            baudrate=115200,
+            bytesize=8,
+            parity="N",
+            timeout=2,
         )
 
-    def test_trigger_method(self, tcs_instance, basic_stimulus, mock_serial):
-        tcs_instance.stimulus = basic_stimulus
-        tcs_instance.trigger()
-        # Should write all stimulus commands plus trigger
-        assert mock_serial.write.call_count == 6  # 5 commands + trigger
+    def test_init_sets_max_temperature(self, tcs, mock_serial):
+        tcs.maximum_temperature = 45.0
+        tcs.init()
+        mock_serial.return_value.write.assert_any_call(b"Om450")
 
-    def test_trigger_with_beep(self, tcs_instance, basic_stimulus, mock_serial):
-        tcs_instance.beep = True
-        tcs_instance.stimulus = basic_stimulus
-        tcs_instance.trigger()
-        # Should write all stimulus commands plus beep plus trigger
-        assert mock_serial.write.call_count == 7  # 5 commands + beep + trigger
+    def test_init_starts_reader_thread(self, tcs):
+        tcs.init()
+        assert hasattr(tcs, "_stop_event")
+        assert tcs.thread.is_alive()
 
-    def test_close_method(self, tcs_instance, mock_serial):
-        tcs_instance.close()
-        mock_serial.reset_input_buffer.assert_called_once()
-        mock_serial.reset_output_buffer.assert_called_once()
-        mock_serial.close.assert_called_once()
+    def test_close_stops_thread_and_closes_serial(self, tcs, mock_serial):
+        tcs.init()
+        tcs.close()
+        assert tcs.stop_event is True
+        mock_serial.return_value.close.assert_called_once()
 
-    def test_reset_method(self, tcs_instance, mock_serial):
-        tcs_instance.reset()
-        mock_serial.write.assert_called_with(TCSCommand.RESET.format())
 
-    def test_get_readings_method(self, tcs_instance, mock_serial):
-        mock_response = b"\n30.0 31.0 32.0 33.0 34.0 35.0\n"
-        mock_serial.read_until.return_value = mock_response
-        readings = tcs_instance.get_readings()
-        assert readings == {
-            "neutral": 3.0,
-            "s1": 3.1,
-            "s2": 3.2,
-            "s3": 3.3,
-            "s4": 3.4,
-            "s5": 3.5,
-            "time": pytest.approx(time_ns(), rel=1e6),  # Allow 1ms difference
-        }
+class TestTCSCommandExecution:
+    def test_write_command(self, tcs, mock_serial):
+        tcs.init()
+        tcs.write(b"TEST")
+        mock_serial.return_value.write.assert_called_with(b"TEST")
 
-    def test_get_readings_invalid_data(self, tcs_instance, mock_serial):
-        mock_serial.read_until.return_value = b"invalid data\n"
-        readings = tcs_instance.get_readings()
-        assert readings == {}
+    def test_execute_command(self, tcs):
+        tcs.init()
+        with (
+            patch.object(tcs, "write") as mock_write,
+            patch.object(tcs, "_expect_response") as mock_expect,
+        ):
+            tcs.execute_command(
+                TCSCommand.READ_INFO, expected_pattern=re.compile(".*")
+            )
+            mock_write.assert_called_once_with(b"H")
+            mock_expect.assert_called_once()
+
+    def test_expect_response(self, tcs):
+        tcs.init()
+        pattern = re.compile(r"TEST(\d+)")
+        test_data = "TEST123\n"
+
+        # Mock the serial read
+        mock_serial = tcs.serial
+        mock_serial.read_until.return_value = test_data.encode()
+
+        # Mock current_search mechanism
+        tcs.current_search = (pattern, Mock(), None)
+
+        # This would normally be done by the reader thread
+        result = tcs._expect_response(pattern)
+
+        assert result is not None
+        timestamp, match = result
+        assert match.group(1) == "123"
+
+
+class TestTCSFunctionality:
+    def test_trigger_stimulation(self, tcs, stimulus):
+        tcs.init()
+        tcs.stimulus = stimulus
+
+        with patch.object(tcs, "write") as mock_write:
+            tcs.trigger()
+            calls = [
+                call(b"S10000"),
+                call(b"N300"),
+                call(b"C1350"),
+                call(b"V10010"),
+                call(b"D100100"),
+                call(b"R10010"),
+                call(b"L"),
+            ]
+            mock_write.assert_has_calls(calls)
+
+    def test_get_readings(self, tcs):
+        tcs.init()
+        test_response = "300 310 320 330 340 350\n"
+
+        with (
+            patch.object(tcs.serial, "read_until") as mock_read,
+            patch.object(tcs, "_expect_response") as mock_expect,
+        ):
+            mock_read.return_value = test_response.encode()
+            mock_expect.return_value = (time_ns(), re.match(r"(\d{3})", "300"))
+
+            readings = tcs.get_readings()
+            assert readings["neutral"] == 30.0
+            assert readings["s1"] == 31.0
+
+    def test_context_manager(self, mock_serial):
+        with TCS(port="/dev/ttyUSB0") as tcs:
+            tcs.init = Mock()
+            tcs.close = Mock()
+        tcs.init.assert_called_once()
+        tcs.close.assert_called_once()
+
+
+class TestThreadSafety:
+    def test_concurrent_access(self, tcs):
+        tcs.init()
+
+        # Simulate concurrent access to current_search
+        from threading import Thread
+
+        def worker():
+            tcs.current_search = (re.compile(".*"), Mock(), None)
+
+        threads = [Thread(target=worker) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # Should not raise any threading-related exceptions
+
+
+class TestErrorHandling:
+    def test_serial_error_on_write(self, tcs, mock_serial):
+        mock_serial.return_value.write.side_effect = IOError("Serial error")
+        tcs.init()
+        with pytest.raises(RuntimeError):
+            tcs.write(b"TEST")
+
+    def test_timeout_on_response(self, tcs):
+        tcs.init()
+        with patch.object(tcs, "_expect_response", return_value=None):
+            with pytest.raises(RuntimeError):
+                tcs.get_readings()

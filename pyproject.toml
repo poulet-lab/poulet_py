@@ -59,12 +59,13 @@ hardware = [
   "keyboard==0.13.5",
   "pywin32==306; platform_system == 'Windows'",
   "pythonnet>=3.0.5,<3.1",
-  "poulet_py[qst]",
+
 
 ]
-qst = ["numpy==2.2.*", "pandas==2.2.*"]
+qst = ["pandas==2.2.*", "tqdm==4.67.*", "pyqt5==5.15.*"]
 tools = ["orjson==3.10.*"]
-all = ["poulet_py[hardware,tools]"]
+utils = ["poulet_py[qst]"]
+all = ["poulet_py[hardware,tools, utils]"]
 
 [tool.hatch.envs.lint]
 detached = true

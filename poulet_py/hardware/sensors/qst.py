@@ -16,21 +16,16 @@ Examples
 ...     print(readings)
 """
 
-try:
-    from atexit import register
-    from enum import Enum
-    from functools import cached_property
-    from re import Match, Pattern, compile, search
-    from threading import Event, Lock, Thread
-    from time import sleep, time_ns
+from atexit import register
+from enum import Enum
+from re import Match, Pattern, compile, match, search
+from threading import Event, Lock, Thread
+from time import time_ns
 
-    from pydantic import BaseModel, Field
-    from serial import Serial
+from pydantic import BaseModel, Field
+from serial import Serial
 
-    from poulet_py.config.logging import LOGGER
-except ImportError as e:
-    msg = "Missing 'qst' module. To install it use: pip install poulet_py[qst]"
-    raise ImportError(msg) from e
+from poulet_py.config.logging import LOGGER
 
 
 class TCSCommand(bytes, Enum):
@@ -176,7 +171,7 @@ class TCSStimulus(BaseModel):
         le=99999,
     )
 
-    def commands(self) -> tuple[TCSCommand, tuple[int | float]]:
+    def commands(self) -> list[TCSCommand, tuple[int | float]]:
         """
         Generate the sequence of commands needed to configure this stimulus.
 
@@ -192,9 +187,6 @@ class TCSStimulus(BaseModel):
         [b'S10000', b'N300', b'C1000', b'V10010', b'D100100', b'R10010']
         """
         surface_map = {0: 11111, 1: 10000, 2: 1000, 3: 100, 4: 10, 5: 1}
-        LOGGER.info(
-            f"Generating commands for stimulus on surface {self.surface}"
-        )
         return [
             TCSCommand.SURFACE_SELECTION.format(surface_map[self.surface]),
             TCSCommand.BASELINE_TEMPERATURE.format(int(self.baseline * 10)),
@@ -211,101 +203,84 @@ class TCSStimulus(BaseModel):
         ]
 
 
-class TCS(BaseModel):
+class TCS:
     """
     Interface for communicating with a TCS thermal stimulator.
     """
 
-    port: str = Field(
-        ...,
-        description="Serial port device path (e.g. '/dev/ttyUSB0' or 'COM3')",
-        pattern=r"^(COM\d+|/dev/ttyUSB\d+|/dev/tty\.usb\w+)$",
-    )
-    maximum_temperature: float = Field(
-        40,
-        description="Safety limit for maximum allowed temperature (0-60°C)",
-        ge=0,
-        le=60,
-    )
-    beep: bool = Field(
-        False, description="Whether to enable audible beep during stimulation"
-    )
-    trigger_out_channel: int = Field(
-        255,
-        description="Output channel of trigger signal (1-255)",
-        ge=1,
-        le=255,
-    )
-    read_timeout: float = Field(2, description="Serial read timeout in seconds")
-    response_timeout: float = Field(
-        2, description="Timeout for command responses in seconds"
-    )
+    def __init__(
+        self,
+        port: str,
+        *,
+        maximum_temperature: float = 40,
+        beep: bool = False,
+        trigger_out_channel: int = 255,
+        read_timeout: float = 2,
+        response_timeout: float = 2,
+    ):
+        """
+        Initialize TCS interface with validation.
 
-    @cached_property
-    def serial(self):
-        """Initialize and return the serial connection."""
-        LOGGER.info(f"Initializing serial connection on port {self.port}")
-        return Serial(
+        Args:
+            port: Serial port device path (e.g. '/dev/ttyUSB0' or 'COM3')
+            maximum_temperature: Safety limit for maximum allowed temperature (0-60°C)
+            beep: Whether to enable audible beep during stimulation
+            trigger_out_channel: Output channel of trigger signal (1-255)
+            read_timeout: Serial read timeout in seconds
+            response_timeout: Timeout for command responses in seconds
+        """
+        self.port = port
+        self.maximum_temperature = maximum_temperature
+        self.beep = beep
+        self.trigger_out_channel = trigger_out_channel
+        self.read_timeout = read_timeout
+        self.response_timeout = response_timeout
+
+        self._validate()
+
+        self._serial = Serial(
             port=self.port,
             baudrate=115200,
             bytesize=8,
             parity="N",
             timeout=self.read_timeout,
         )
-
-    @cached_property
-    def lock(self):
-        return Lock()
-
-    @cached_property
-    def current_search(
-        self,
-    ) -> tuple[Pattern, Event, tuple[int, str] | None] | None:
-        return None
-
-    @current_search.setter
-    def current_search(self, value):
-        with self.lock:
-            LOGGER.debug("Updating current_search pattern")
-            self._current_search = value
-
-    @current_search.deleter
-    def current_search(self):
-        with self.lock:
-            LOGGER.debug("Clearing current_search pattern")
-            self._current_search = None
-
-    @cached_property
-    def thread(self):
-        return Thread(
+        self._stop_event = Event()
+        self._write_lock = Lock()
+        self._read_lock = Lock()
+        self._thread = Thread(
             target=self._read_loop, daemon=True, name="TCS Serial Reader"
         )
+        self._current_search = None  # (pattern, event, result)
+        self._stimulus = TCSStimulus()
 
-    @property
-    def stop_event(self) -> bool:
-        if not hasattr(self, "_stop_event"):
-            self._stop_event = False
-        return self._stop_event
+    def _validate(self):
+        """Validate all fields according to their constraints."""
+        msg = ""
+        if not match(r"^(COM\d+|/dev/ttyUSB\d+|/dev/tty\.usb\w+)$", self.port):
+            msg += "Port must match pattern: 'COM<number>'"
+            " or '/dev/ttyUSB<number>'"
+            " or '/dev/tty.usb<something>'\n"
 
-    @stop_event.setter
-    def stop_event(self, value: bool):
-        if not isinstance(value, bool):
-            msg = "stop_event must be a boolean value"
+        if not 0 <= self.maximum_temperature <= 60:  # noqa: PLR2004
+            msg += "Maximum temperature must be between 0 and 60°C\n"
+
+        if not 1 <= self.trigger_out_channel <= 255:  # noqa: PLR2004
+            msg += "Trigger out channel must be between 1 and 255\n"
+
+        if self.read_timeout <= 0:
+            msg += "Read timeout must be positive\n"
+
+        if self.response_timeout <= 0:
+            msg += "Response timeout must be positive\n"
+
+        if msg:
             raise ValueError(msg)
-        LOGGER.debug(f"Setting stop_event to {value}")
-        self._stop_event = value
-
-    @stop_event.deleter
-    def stop_event(self):
-        LOGGER.info("Resetting stop_event")
-        del self._stop_event
 
     @property
     def stimulus(self) -> TCSStimulus:
-        if not hasattr(self, "_stimulus"):
-            LOGGER.warning("No stimulus configured, using defaults")
-            self._stimulus = TCSStimulus()
-        return self._stimulus
+        with self._write_lock:
+            return self._stimulus
 
     @stimulus.setter
     def stimulus(self, value: TCSStimulus):
@@ -325,57 +300,62 @@ class TCS(BaseModel):
         if msg:
             raise ValueError(msg)
 
-        LOGGER.info(f"Setting new stimulus configuration: {value}")
-        self._stimulus = value
+        with self._write_lock:
+            self._stimulus = value
 
     @stimulus.deleter
     def stimulus(self):
-        LOGGER.info("Resetting stimulus configuration")
-        del self._stimulus
+        with self._write_lock:
+            self._stimulus = TCSStimulus()
 
     def _start_reader(self):
         """Start the background serial reader thread if not already running."""
-        if not self.thread.is_alive():
+        if not self._thread.is_alive():
             LOGGER.info("Starting serial reader thread")
-            self.stop_event = False
-            self.thread.start()
+            self._thread.start()
             register(self._stop_reader)
 
     def _stop_reader(self):
         """Stop the background serial reader thread."""
-        if self.thread.is_alive():
+        if self._thread.is_alive():
             LOGGER.info("Stopping serial reader thread")
-            self.stop_event = True
-            self.thread.join(timeout=1.0)
-            if self.thread.is_alive():
+            self._stop_event.set()
+            self._thread.join(timeout=10.0)
+            if self._thread.is_alive():
                 LOGGER.warning("Reader thread did not stop gracefully")
-            del self.thread
+            del self._thread
+            self._thread = Thread(
+                target=self._read_loop, daemon=True, name="TCS Serial Reader"
+            )
+            self._stop_event.clear()
 
     def _read_loop(self):
         """Continuous reading loop running in background thread"""
         LOGGER.debug("Serial reader thread started")
-        while not self.stop_event:
-            try:
-                if self.serial.in_waiting > 0:
-                    data = self.serial.read_until(b"\n").decode()
+        try:
+            while not self._stop_event.is_set():
+                if self._serial.in_waiting > 0:
+                    data = self._serial.read_until(b"\n").decode()
                     timestamp = time_ns()
 
                     LOGGER.debug(f"Read data: {data}")
-
-                    if self.current_search:
-                        pattern, event, _ = self.current_search
-                        if match := search(pattern, data):
-                            LOGGER.debug(f"Matched pattern {pattern.pattern}")
-                            self.current_search = (
-                                pattern,
-                                event,
-                                (timestamp, match),
-                            )
-                            event.set()
-
-            except Exception as e:
-                LOGGER.error(f"Error in read loop: {e}")
-                sleep(0.001)
+                    with self._read_lock:
+                        if self._current_search:
+                            pattern, event, _ = self._current_search
+                            if match := search(pattern, data):
+                                LOGGER.debug(
+                                    f"Matched pattern {pattern.pattern}"
+                                )
+                                self._current_search = (
+                                    pattern,
+                                    event,
+                                    (timestamp, match),
+                                )
+                                event.set()
+        except Exception as e:
+            msg = f"Read loop failed: {e}"
+            self._stop_event.set()
+            raise RuntimeError(msg) from e
 
     def write(self, command: bytes) -> int:
         """
@@ -399,18 +379,15 @@ class TCS(BaseModel):
         try:
             # Start reader thread if not already running
             self._start_reader()
-            self.serial.flush()
+            self._serial.flush()
             LOGGER.debug(f"Sending command: {command}")
-            bytes_written = self.serial.write(command)
+            bytes_written = self._serial.write(command)
             if bytes_written != len(command):
                 LOGGER.warning(
                     f"Partial write: {bytes_written}/{len(command)} bytes"
                 )
             return bytes_written
         except Exception as e:
-            LOGGER.error(
-                f"Write failed for command {command}: {e}", exc_info=True
-            )
             msg = f"Write operation failed: {e}"
             raise RuntimeError(msg) from e
 
@@ -430,18 +407,17 @@ class TCS(BaseModel):
         tuple[int, Match[str]]] | None
             Tuple of (timestamp, match object) if pattern matched, None otherwise
         """
-        event = Event()
-        self.current_search = (pattern, event, None)
-        LOGGER.debug(f"Waiting for pattern: {pattern.pattern}")
+        with self._read_lock:
+            event = Event()
+            self._current_search = (pattern, event, None)
 
         try:
             if event.wait(timeout=self.response_timeout):
-                LOGGER.debug("Pattern matched successfully")
-                return self.current_search[2]
+                return self._current_search[2]
             LOGGER.warning(f"Timeout waiting for pattern: {pattern.pattern}")
             return None
         finally:
-            self.current_search = None
+            self._current_search = None
 
     def execute_command(
         self,
@@ -472,7 +448,6 @@ class TCS(BaseModel):
         ...     TCSCommand.READ_INFO, expected_pattern=compile(r"Firmware:(.*)")
         ... )
         """
-        LOGGER.info(f"Executing command: {command.name} with args {args}")
         self.write(command.format(*args))
 
         if expected_pattern:
@@ -489,8 +464,6 @@ class TCS(BaseModel):
             If initialization fails
         """
         try:
-            LOGGER.info("Initializing TCS connection")
-            self._start_reader()
             self.write(
                 TCSCommand.SET_MAX_TEMPERATURE.format(
                     int(self.maximum_temperature * 10)
@@ -510,23 +483,19 @@ class TCS(BaseModel):
                 f"Probe TYPE: {match.group(3).strip() if match else 'Unknown'}"
             )
         except Exception as e:
-            LOGGER.error(f"Initialization failed: {e}", exc_info=True)
             msg = "TCS initialization failed"
             raise RuntimeError(msg) from e
 
     def close(self):
         """Close the connection and clean up resources."""
         try:
-            LOGGER.info("Closing TCS connection")
             self._stop_reader()
-            self.serial.reset_input_buffer()
-            self.serial.reset_output_buffer()
-            self.serial.close()
-            del self.serial
-            LOGGER.info("Connection closed successfully")
+            self._serial.reset_input_buffer()
+            self._serial.reset_output_buffer()
+            self._serial.close()
         except Exception as e:
-            LOGGER.error(f"Error closing connection: {e}")
-            raise e
+            msg = "Error closing TCS connection"
+            raise RuntimeError(msg) from e
 
     def info(self) -> str:
         """
@@ -542,7 +511,6 @@ class TCS(BaseModel):
         RuntimeError
             If the info command fails or times out
         """
-        LOGGER.info("Requesting device info")
         result = self.execute_command(
             TCSCommand.READ_INFO,
             expected_pattern=compile(r"(Firmware:\s+.*)\n"),
@@ -552,18 +520,15 @@ class TCS(BaseModel):
             _, match = result
             return match.group(1).replace("\r", "\n")
 
-        LOGGER.error("Failed to get device info")
         msg = "Device info request timed out"
         raise RuntimeError(msg)
 
     def reset(self):
         """Reset the TCS device to its default state."""
         try:
-            LOGGER.info("Resetting TCS device")
             self.write(TCSCommand.RESET.format())
-            LOGGER.info("Reset command sent successfully")
+            LOGGER.info("Reset successfully")
         except Exception as e:
-            LOGGER.error(f"Reset failed: {e!s}", exc_info=True)
             msg = "Reset operation failed"
             raise RuntimeError(msg) from e
 
@@ -577,7 +542,6 @@ class TCS(BaseModel):
             If stimulation fails to trigger
         """
         try:
-            LOGGER.info("Starting stimulation with current configuration")
             for command in self.stimulus.commands():
                 self.write(command)
 
@@ -592,12 +556,10 @@ class TCS(BaseModel):
             self.write(
                 TCSCommand.TRIGGER_CHANNEL_DURATION.format(
                     self.trigger_out_channel,
-                    min(999, self.stimulus.duration // 10),
+                    max(1, min(999, self.stimulus.duration // 10)),
                 )
             )
-            LOGGER.info("Stimulation triggered successfully")
         except Exception as e:
-            LOGGER.error(f"Stimulation failed: {e}")
             msg = "Stimulation failed"
             raise RuntimeError(msg) from e
 
@@ -616,7 +578,6 @@ class TCS(BaseModel):
         RuntimeError
             If reading temperatures fails
         """
-        LOGGER.debug("Requesting temperature readings")
         result = self.execute_command(
             TCSCommand.READ_TEMPERATURES,
             expected_pattern=compile(
@@ -635,10 +596,8 @@ class TCS(BaseModel):
                 "s4": float(match.group(5)) / 10,
                 "s5": float(match.group(6)) / 10,
             }
-            LOGGER.debug(f"Readings obtained: {readings}")
             return readings
 
-        LOGGER.error("Failed to get temperature readings")
         msg = "Temperature readings request timed out"
         raise RuntimeError(msg)
 

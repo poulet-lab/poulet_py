@@ -1,9 +1,13 @@
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from poulet_py.hardware.sensors.qst import TCS, TCSStimulus
+    from poulet_py.hardware.sensors.qst import TCS, TCSCommand, TCSStimulus
 
-IMPORTS = {"TCSStimulus": "hardware.sensors.qst", "TCS": "hardware.sensors.qst"}
+IMPORTS = {
+    "TCSStimulus": "hardware.sensors.qst",
+    "TCS": "hardware.sensors.qst",
+    "TCSCommand": "hardware.sensors.qst",
+}
 
 
 def __getattr__(name: str) -> Any:
@@ -14,7 +18,7 @@ def __getattr__(name: str) -> Any:
             return getattr(module, name)
         except ImportError as e:
             submodule = module_path.split(".")[-1]
-            msg = "Missing '{submodule}' module. "
+            msg = f"Missing '{submodule}' module. "
             f"To install it use: pip install poulet_py[{submodule}]"
             raise ImportError(msg) from e
 
@@ -23,4 +27,4 @@ def __getattr__(name: str) -> Any:
     raise AttributeError(msg)
 
 
-__all__ = ["TCS", "TCSStimulus"]
+__all__ = ["TCS", "TCSCommand", "TCSStimulus"]

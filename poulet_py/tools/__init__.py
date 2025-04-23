@@ -29,7 +29,7 @@ def __getattr__(name: str) -> Any:
             # Extract the submodule name (e.g., "utils" or "tools")
             submodule = module_path.split(".")[-2]
             msg = f"❌ Missing '{submodule}' module. Import failed: "
-            "Install it with: pip install poulet_py[{submodule}]"
+            f"Install it with: pip install poulet_py[{submodule}]"
             raise ImportError(msg) from e
 
     msg = f"module 'poulet_py.tools' has no attribute '{name}'"
