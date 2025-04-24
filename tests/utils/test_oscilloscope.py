@@ -179,6 +179,4 @@ def test_import_error():
     """Test that the import error is raised when dependencies are missing."""
     with patch.dict("sys.modules", {"matplotlib.animation": None}):
         with pytest.raises(ImportError, match="Missing 'osc' module"):
-            from your_module import (
-                Oscilloscope,
-            )  # Replace with your actual module name
+            pass  # Replace with your actual module name

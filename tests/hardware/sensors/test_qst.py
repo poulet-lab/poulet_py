@@ -190,7 +190,7 @@ class TestThreadSafety:
 
 class TestErrorHandling:
     def test_serial_error_on_write(self, tcs, mock_serial):
-        mock_serial.return_value.write.side_effect = IOError("Serial error")
+        mock_serial.return_value.write.side_effect = OSError("Serial error")
         tcs.init()
         with pytest.raises(RuntimeError):
             tcs.write(b"TEST")
