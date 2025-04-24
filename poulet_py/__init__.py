@@ -11,21 +11,23 @@ if TYPE_CHECKING:
         sanitize_path,
     )
     from poulet_py.tools.serializers import json_serializer, save_metadata_exp
+    from poulet_py.utils.oscilloscope import Oscilloscope
     from poulet_py.utils.qst import TCSInterface
 
 
 IMPORTS = {
     "LOGGER": "config.logging",
     "SETTINGS": "config.settings",
+    "TCS": "hardware.sensors.qst",
+    "TCSCommand": "hardware.sensors.qst",
+    "TCSStimulus": "hardware.sensors.qst",
     "generate_stimulus_sequence": "tools.generators",
     "check_or_create": "tools.organizational",
     "define_folder_name": "tools.organizational",
     "sanitize_path": "tools.organizational",
     "json_serializer": "tools.serializers",
     "save_metadata_exp": "tools.serializers",
-    "TCS": "hardware.sensors.qst",
-    "TCSCommand": "hardware.sensors.qst",
-    "TCSStimulus": "hardware.sensors.qst",
+    "Oscilloscope": "utils.oscilloscope",
     "TCSInterface": "utils.qst",
 }
 
@@ -44,6 +46,7 @@ __all__ = [
     "LOGGER",
     "SETTINGS",
     "TCS",
+    "Oscilloscope",
     "TCSCommand",
     "TCSInterface",
     "TCSStimulus",

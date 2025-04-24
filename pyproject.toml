@@ -62,9 +62,13 @@ hardware = [
 
 
 ]
-qst = ["pandas==2.2.*", "tqdm==4.67.*", "pyqt5==5.15.*"]
+
 tools = ["orjson==3.10.*"]
-utils = ["poulet_py[qst]"]
+
+oscilloscope = ["pandas==2.2.*", "matplotlib==3.10.*", "numpy==1.26.*"]
+qst = ["pandas==2.2.*", "tqdm==4.67.*"]
+utils = ["poulet_py[qst]", "poulet_py[oscilloscope]"]
+
 all = ["poulet_py[hardware,tools, utils]"]
 
 [tool.hatch.envs.lint]
