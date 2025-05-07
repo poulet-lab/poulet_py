@@ -1,7 +1,7 @@
 from random import random
 from time import sleep, time
-from poulet_py.utils.oscilloscope import Oscilloscope
 
+from poulet_py.utils.oscilloscope import Oscilloscope
 
 osc = Oscilloscope()
 osc.start()
