@@ -293,13 +293,52 @@ class ThermalCamera:
                 (f"frame{self.frame_number}"), data=thermal_image_celsius_data
             )
 
-            # get current time
-            timestamp = time.time() - self.start_time
-            self.hpy_file.create_dataset((f"time{self.frame_number}"), data=[timestamp])
-
             self.frame_number += 1
         else:
             print("Thermal data is none")
+
+    def export_frame_to_png(self, path, file_name, colormap="coolwarm"):
+        """
+        Loads thermal frames from an HDF5 file and saves each frame as a PNG.
+
+        Args:
+            hdf5_path (str): Path to the HDF5 file containing frames (e.g., "frame1", "frame2", etc.).
+            output_dir (str): Directory where PNG files will be saved.
+            colormap (str): Matplotlib colormap to use (default is "coolwarm").
+        """
+        # Ensure the output directory exists
+        # Open the HDF5 file in read mode
+        with h5py.File(self.output_path, "r") as f:
+            # Get all dataset keys (e.g., "frame1", "frame2", etc.)
+            frame_keys = list(f.keys())
+            # Sort keys numerically (remove 'frame' and convert to int)
+            frame_keys.sort(key=lambda x: int(x.replace("frame", "")))
+
+            # Loop over each dataset (frame) in the file
+            for frame_name in frame_keys:
+                # Load the frame data (already in Celsius)
+                frame_data = f[frame_name][()]
+
+                # Build output PNG path; for example, "frame1.png"
+                png_filename = os.path.join(path, f"{file_name}.png")
+
+                fig, ax = plt.subplots(figsize=(8, 6))
+                
+                # Display the image using imshow and capture the mappable object
+                im = ax.imshow(frame_data, cmap=colormap)
+                
+                # Add a colorbar to the mappable object
+                cbar = fig.colorbar(im, ax=ax, label='Temperature (°C)')
+                
+                # Remove axis ticks and labels for a cleaner look
+                ax.axis('off')
+                
+                # Adjust layout to ensure everything fits
+                plt.tight_layout()
+                
+                # Save the figure to a PNG file
+                plt.savefig(png_filename, bbox_inches='tight')
+                plt.close(fig)
 
     def grab_data_func(self, func, **kwargs):
         """
@@ -349,117 +388,91 @@ class ThermalCamera:
 
     def plot_live(self):
         """
-        Method to plot the thermal camera as a 2-D raster (imshow, heatmap).
-        The min and max values of the heatmap are specified.
-        You can take a pic too.
+        Continuously updates a live plot with thermal camera data.
+        Keyboard commands:
+          - Press "r" to refresh the shutter.
+          - Press "t" to take a thermal pic.
+          - Press "e" to exit.
         """
         print('Press "r" to refresh the shutter.')
         print('Press "t" to take a thermal pic.')
         print('Press "e" to exit.')
+        print('Starting live plot...')
 
         mpl.rc("image", cmap="coolwarm")
-
-        pressed = False
-
-        if platform.system() == "Windows":
-            plt.ion()  # Enable interactive mode
+        is_windows = platform.system() == "Windows"
+        if is_windows:
+            print("Windows detected")
+            plt.ion()
 
         fig = plt.figure()
         ax = plt.axes()
         div = make_axes_locatable(ax)
         cax = div.append_axes("right", "5%", "5%")
 
-        dummy = np.zeros([120, 160])
-
-        img = ax.imshow(
-            dummy,
-            interpolation="nearest",
-            vmin=self.vminT,
-            vmax=self.vmaxT,
-            animated=True,
-        )
+        # Initialize with a dummy frame
+        dummy = np.zeros((120, 160))
+        img = ax.imshow(dummy, interpolation="nearest", vmin=self.vminT, vmax=self.vmaxT, animated=True)
         ax.set_xticks([])
         ax.set_yticks([])
-
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        ax.spines["left"].set_visible(False)
-        ax.spines["bottom"].set_visible(False)
-
+        for spine in ax.spines.values():
+            spine.set_visible(False)
         fig.colorbar(img, cax=cax)
 
+        pressed = False
         try:
             while True:
-                if platform.system() == "Windows":
+                # Retrieve data from the camera
+                if is_windows:
                     data = self.windows_camera.get_frame()
                 else:
                     data = q.get(True, 500)
                 if data is None:
                     print("Data is none")
-                    # make an empty frame
-                    data = np.zeros([120, 160])
-
+                    data = np.zeros((120, 160))
+                # Convert raw data (Kelvin*100) to Celsius
                 data = (data - 27315) / 100
 
-                if platform.system() == "Windows":
-                    img.set_data(data)  # Update image data
-                    fig.canvas.draw()  # Redraw the figure
-                    fig.canvas.flush_events()  # Flush the GUI events for real-time updates
-                else:
-                    ax.clear()
-                    img = ax.imshow(data, vmin=self.vminT, vmax=self.vmaxT)
-                    fig.colorbar(img, cax=cax)
+                # Update the plot with the new data
+                img.set_data(data)
+                fig.canvas.draw_idle()
+                plt.pause(0.2)
 
-                plt.pause(0.0005)
-
+                # Handle keyboard events
                 if keyboard.is_pressed("r"):
                     if not pressed:
                         print("Manual FFC")
-                        self.performManualff()
+                        self.perform_manual_ffc()
                         pressed = True
-
                 elif keyboard.is_pressed("t"):
                     if not pressed:
+                        now = datetime.now()
+                        dt_string = now.strftime("day_%d_%m_%Y_time_%H_%M_%S")
                         try:
-                            now = datetime.now()
-                            dt_string = now.strftime("day_%d_%m_%Y_time_%H_%M_%S")
-                            print(dt_string)
-                            f = h5py.File(f"{self.pathset}/{dt_string}.hdf5", "w")
-                            f.create_dataset("image", data=data)
-                            f = None
+                            # Save as HDF5 file; ensure self.pathset is set
+                            with h5py.File(f"{self.pathset}/{dt_string}.hdf5", "w") as f:
+                                f.create_dataset("image", data=data)
                             print("Thermal pic saved as hdf5")
                             if self.png:
-                                plt.imsave(
-                                    f"{self.pathset}/{dt_string}.png",
-                                    data,
-                                    vmin=self.vminT,
-                                    vmax=self.vmaxT,
-                                )
-
+                                plt.imsave(f"{self.pathset}/{dt_string}.png", data, vmin=self.vminT, vmax=self.vmaxT)
                         except Exception as e:
                             self.log_error(e)
                             print("There isn't a set path!")
-
-                    pressed = True
-
+                        pressed = True
                 elif keyboard.is_pressed("e"):
                     if not pressed:
-                        print("We are done")
+                        print("Exiting live plot")
                         break
-
                 else:
                     pressed = False
-
         except Exception as e:
             self.log_error(e)
-            if platform.system() == "Windows":
+            if is_windows:
                 plt.ioff()
                 plt.close(fig)
-
             self.stop_streaming()
-
         finally:
-            if platform.system() == "Windows":
+            if is_windows:
                 plt.ioff()
                 plt.close(fig)
 
@@ -551,6 +564,7 @@ class CameraWindows:
         Initialize the camera and start capturing frames.
         """
         devices = []
+        
         for i in self.CCI.GetDevices():
             if i.Name.startswith("PureThermal"):
                 devices.append(i)
