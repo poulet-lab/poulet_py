@@ -72,7 +72,7 @@ class ThermalCamera:
     A class to interact with the Lepton 3.5 thermal camera.
     """
 
-    def __init__(self, vminT=30, vmaxT=34):
+    def __init__(self, doors, vminT=30, vmaxT=34):
         """
         Initializes the ThermalCamera object.
 
@@ -80,6 +80,7 @@ class ThermalCamera:
             vminT (int, optional): Minimum temperature threshold. Defaults to 30.
             vmaxT (int, optional): Maximum temperature threshold. Defaults to 34.
         """
+        self.doors = doors
         self.vminT = int(vminT)
         self.vmaxT = int(vmaxT)
         self.frames_per_second = 8.7
