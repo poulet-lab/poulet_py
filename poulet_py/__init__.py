@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from poulet_py import hardware, tools
     from poulet_py.config import LOGGER, SETTINGS
+    from poulet_py.converters.seq import Seq
     from poulet_py.tools.generators import generate_stimulus_sequence
     from poulet_py.tools.organizational import (
         check_or_create,
@@ -15,6 +16,7 @@ if TYPE_CHECKING:
 IMPORTS = {
     "LOGGER": "config.logging",
     "SETTINGS": "config.settings",
+    "Seq": "converters.seq",
     "generate_stimulus_sequence": "tools.generators",
     "check_or_create": "tools.organizational",
     "define_folder_name": "tools.organizational",
@@ -37,10 +39,10 @@ def __getattr__(name: str) -> Any:
 __all__ = [
     "LOGGER",
     "SETTINGS",
+    "Seq",
     "check_or_create",
     "define_folder_name",
     "generate_stimulus_sequence",
-    "generate_trials",
     "hardware",
     "json_serializer",
     "sanitize_path",

@@ -46,7 +46,7 @@ path = "poulet_py/__about__.py"
 
 [tool.hatch.metadata]
 allow-direct-references = true
-
+constraints-file = "constraints.txt"
 [project.optional-dependencies]
 hardware = [
   "pypylon>=3.0.1,<=4.0.0",
@@ -61,9 +61,11 @@ hardware = [
   "pythonnet>=3.0.5,<3.1",
 ]
 
+converters = ["flirpy", "zstd", "pandas"]
+
 tools = ["orjson==3.10.*"]
 
-all = ["poulet_py[hardware,tools]"]
+all = ["poulet_py[hardware,tools,converters]"]
 
 [tool.hatch.envs.lint]
 detached = true
@@ -169,7 +171,8 @@ extra-dependencies = ["poulet-py[all]"]
 
 [[tool.hatch.envs.hatch-test.matrix]]
 python = ["3.10", "3.11", "3.12", "3.13"]
-dependencies = ["poulet-py[all]"]
+dependencies = ["'poulet-py[all]'"]
+
 [tool.coverage.run]
 source_pkgs = ["poulet_py", "tests"]
 branch = true
