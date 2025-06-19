@@ -26,9 +26,7 @@ class TCSIIStimulus(BaseModel):
             'fixed_total' (duration is total time and rise/return rates are included)""",
     )
     trigger_code: int = Field(255, description="trigger code. Defaults to 255.")
-    trigger_dur_ms: int = Field(
-        10, description="trigger duration. Defaults to 10."
-    )
+    trigger_dur_ms: int = Field(10, description="trigger duration. Defaults to 10.")
     surfaces: int = Field(0)
 
 
@@ -43,9 +41,7 @@ class TCSIIController(tcsii_serial):
         trigger_in=True,
         temp_profile=False,
     ):
-        super().__init__(
-            port, baseline, surfaces, max_temp, beep, trigger_in, temp_profile
-        )
+        super().__init__(port, baseline, surfaces, max_temp, beep, trigger_in, temp_profile)
 
         self.data = DataFrame()
 

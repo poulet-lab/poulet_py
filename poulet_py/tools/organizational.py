@@ -1,6 +1,7 @@
-from os import chdir
-from poulet_py.config.logging import LOGGER
 from inspect import stack
+from os import chdir
+
+from poulet_py.config.logging import LOGGER
 
 try:
     from datetime import datetime, timezone
@@ -10,7 +11,7 @@ try:
 
     from deprecated import deprecated
 except ImportError as e:
-    msg = "Missing 'tools' module. To install it use: pip install poulet_py[tools]"  # noqa: E501
+    msg = "Missing 'tools' module. To install it use: pip install poulet_py[tools]"
     raise ImportError(msg) from e
 
 
