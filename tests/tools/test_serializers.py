@@ -5,7 +5,7 @@ from tempfile import TemporaryDirectory
 from numpy import array
 from pytest import raises
 
-from poulet_py.tools import json_serializer, save_metadata_exp
+from poulet_py import json_serializer, save_metadata_exp
 
 
 class TestJsonSerializer:

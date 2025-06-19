@@ -1,3 +1,7 @@
+from os import chdir
+from poulet_py.config.logging import LOGGER
+from inspect import stack
+
 try:
     from datetime import datetime, timezone
     from os import makedirs
@@ -32,9 +36,7 @@ def define_folder_name(name: str, *, add_date: bool = True) -> str:
     sanitized_name = sub(r"[^\w]", "_", name)
 
     if add_date:
-        return (
-            f"{datetime.now(timezone.utc).strftime('%Y%m%d')}_{sanitized_name}"
-        )
+        return f"{datetime.now(timezone.utc).strftime('%Y%m%d')}_{sanitized_name}"
     return sanitized_name
 
 
@@ -84,3 +86,49 @@ def sanitize_path(path: Path | str, *, add_timestamp: bool = False) -> Path:
         )
 
     return Path(*sanitized_parts)
+
+
+def go_to(key: str, *, path: Path | str | None = None) -> bool:
+    """
+    Change the current working directory to the level containing a specified key in a path.
+
+    Parameters
+    ----------
+    key : str
+        The directory name to search for in the path (e.g., "neuropixels").
+    path : Path or str, optional
+        The input path to analyze. Defaults to the caller script's location (`__file__`).
+
+    Returns
+    -------
+    bool
+        True if the directory was changed successfully, False otherwise.
+
+    Examples
+    --------
+    >>> change_dir_to_key("neuropixels", path="/project/neuropixels/src/file.py")
+    True  # Changes CWD to "/project/neuropixels"
+    """
+    if path is None:
+        frame = stack()[1]
+        path = frame.filename
+        LOGGER.debug(f"Using caller's path: {path}")
+
+    path = Path(path).absolute()
+    parts = list(path.parts)
+
+    try:
+        key_index = len(parts) - 1 - parts[::-1].index(key)
+    except ValueError:
+        LOGGER.warning(f"Key '{key}' not found in path.")
+        return False
+
+    new_path = Path(*parts[: key_index + 1])
+
+    try:
+        chdir(new_path)
+        LOGGER.info(f"Changed directory to: {new_path}")
+        return True
+    except Exception as e:
+        LOGGER.warning(f"Error changing directory: {e}")
+        return False

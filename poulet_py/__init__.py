@@ -1,26 +1,31 @@
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from poulet_py import hardware, tools
-    from poulet_py.config import LOGGER, SETTINGS
-    from poulet_py.tools.generators import generate_stimulus_sequence
-    from poulet_py.tools.organizational import (
+    from poulet_py import config, hardware, tools
+    from poulet_py.config import LOGGER, SETTINGS, Settings, setup_logging
+    from poulet_py.tools import (
         check_or_create,
         define_folder_name,
+        generate_stimulus_sequence,
+        go_to,
+        json_serializer,
         sanitize_path,
+        save_metadata_exp,
     )
-    from poulet_py.tools.serializers import json_serializer, save_metadata_exp
 
 
 IMPORTS = {
-    "LOGGER": "config.logging",
-    "SETTINGS": "config.settings",
-    "generate_stimulus_sequence": "tools.generators",
-    "check_or_create": "tools.organizational",
-    "define_folder_name": "tools.organizational",
-    "sanitize_path": "tools.organizational",
-    "json_serializer": "tools.serializers",
-    "save_metadata_exp": "tools.serializers",
+    "LOGGER": "config",
+    "SETTINGS": "config",
+    "Settings": "config",
+    "generate_stimulus_sequence": "tools",
+    "check_or_create": "tools",
+    "define_folder_name": "tools",
+    "go_to": "tools",
+    "sanitize_path": "tools",
+    "json_serializer": "tools",
+    "save_metadata_exp": "tools",
+    "setup_logging": "config",
 }
 
 
@@ -37,13 +42,16 @@ def __getattr__(name: str) -> Any:
 __all__ = [
     "LOGGER",
     "SETTINGS",
+    "Settings",
     "check_or_create",
+    "config",
     "define_folder_name",
     "generate_stimulus_sequence",
-    "generate_trials",
+    "go_to",
     "hardware",
     "json_serializer",
     "sanitize_path",
     "save_metadata_exp",
+    "setup_logging",
     "tools",
 ]

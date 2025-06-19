@@ -1,4 +1,4 @@
-from poulet_py.config.settings import SETTINGS, Settings
+from poulet_py import SETTINGS, Settings
 
 
 def test_settings_defaults():
