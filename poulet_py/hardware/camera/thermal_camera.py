@@ -27,7 +27,6 @@ import numpy as np
 import signal
 import logging
 
-
 def py_frame_callback(frame, userptr):
     """
     Callback function to handle frames from the camera.
@@ -514,14 +513,7 @@ class ThermalCamera:
         else:
             print(f"An error occurred: {error_message}")
             print("Set the error log file path to log the error with set_error_log_path().")
-        
-
-# imports
-
-
-# Initialize COM
-pythoncom.CoInitialize()
-
+     
 folder = "x64" if platform.architecture()[0] == "64bit" else "x86"
 path = os.path.sep.join(__file__.split(os.path.sep)[:-1])
 sys.path.append(os.path.sep.join([path, folder]))
@@ -564,6 +556,10 @@ class CameraWindows:
         Initialize the camera and start capturing frames.
         """
         devices = []
+
+        # initialize COM on this thread
+        pythoncom.CoInitialize()
+        time.sleep(1)
         
         for i in self.CCI.GetDevices():
             if i.Name.startswith("PureThermal"):
