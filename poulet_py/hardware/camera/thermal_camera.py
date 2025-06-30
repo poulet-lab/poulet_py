@@ -1,12 +1,12 @@
-import numpy as np
-import h5py
-import platform
 import os
+import platform
 import time
-import matplotlib.pyplot as plt
-import matplotlib as mpl
 from datetime import datetime
-import time
+
+import h5py
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 try:
@@ -18,14 +18,12 @@ try:
 except ImportError:
     from Queue import Queue
 import json
-from scipy import ndimage
-import clr
-import sys
-import os
-import platform
-import numpy as np
-import signal
 import logging
+import signal
+import sys
+
+import clr
+from scipy import ndimage
 
 def py_frame_callback(frame, userptr):
     """
@@ -58,13 +56,12 @@ if not platform.system() == "Windows":
 
     BUF_SIZE = 2
     q = Queue(BUF_SIZE)
-    PTR_PY_FRAME_CALLBACK = CFUNCTYPE(None, POINTER(uvc_frame), c_void_p)(
-        py_frame_callback
-    )
+    PTR_PY_FRAME_CALLBACK = CFUNCTYPE(None, POINTER(uvc_frame), c_void_p)(py_frame_callback)
     tiff_frame = 1
     colorMapType = 0
 else:
     import pythoncom
+
 
 class ThermalCamera:
     """
@@ -154,7 +151,7 @@ class ThermalCamera:
                         devh, byref(ctrl), PTR_PY_FRAME_CALLBACK, None, 0
                     )
                     if res < 0:
-                        print("uvc_start_streaming failed: {0}".format(res))
+                        print(f"uvc_start_streaming failed: {res}")
                         exit(1)
 
                     print("done starting stream, displaying settings")
@@ -480,9 +477,7 @@ class ThermalCamera:
         Saves metadata about the recording to a JSON file in the output directory.
         """
         metadata_file_name = f"{self.output_file_name.split('.')[0]}.json"
-        metadata_path = os.path.join(
-            os.path.dirname(self.output_path), metadata_file_name
-        )
+        metadata_path = os.path.join(os.path.dirname(self.output_path), metadata_file_name)
 
         data = {
             "camera": "thermal",
@@ -502,7 +497,7 @@ class ThermalCamera:
 
         with open(metadata_path, "w") as f:
             json.dump(data, f, indent=4)
-    
+
     @staticmethod
     def log_error(self, error_message):
         """
@@ -513,15 +508,15 @@ class ThermalCamera:
         else:
             print(f"An error occurred: {error_message}")
             print("Set the error log file path to log the error with set_error_log_path().")
-     
+
 folder = "x64" if platform.architecture()[0] == "64bit" else "x86"
 path = os.path.sep.join(__file__.split(os.path.sep)[:-1])
 sys.path.append(os.path.sep.join([path, folder]))
 clr.AddReference("LeptonUVC")
 clr.AddReference("ManagedIR16Filters")
 
-from Lepton import CCI
 from IR16Filters import IR16Capture, NewBytesFrameEvent
+from Lepton import CCI
 
 
 def handle_exit(sig, frame):
@@ -581,7 +576,6 @@ class CameraWindows:
 
             elif len(devices) == 1:
                 self.device = devices[0]
-
             else:
                 self.device = None
 

@@ -1,12 +1,10 @@
-import serial
-import os
 import csv
 import logging
+import os
 import time
 
-def print_me(message):
-    """Print a message with newlines before and after."""
-    print(f"\n{message}\n")
+import serial
+
 
 class Arduino:
     def __init__(self, ports=None):
@@ -44,7 +42,7 @@ class Arduino:
                 self.arduinos[key]["last_value"] = data_parser(data)
 
             except Exception as e:
-                self.arduinos[key]["last_value"] = float('nan')
+                self.arduinos[key]["last_value"] = float("nan")
                 print(f"Exception from arduino read_data method: {e}")
                 self.log_error(f"Exception from arduino {key} read_data method: {e}")
 
@@ -58,7 +56,7 @@ class Arduino:
         """
         self.error_log_path = os.path.join(folder_path, error_file_name)
 
-    def set_output_file(self, path, extra_name, data_columns = ['data'], base_file_name="arduino"):
+    def set_output_file(self, path, extra_name, data_columns=["data"], base_file_name="arduino"):
         """
         Set the output file for the Arduino.
 
@@ -112,7 +110,9 @@ class Arduino:
                 self.arduinos[key]["arduino"].close()
                 print(f"Closed connection on port {self.arduinos[key]['port']}")
             except Exception as e:
-                self.log_error(f"Error closing connection on port {self.arduinos[key]['port']}: {e}")
+                self.log_error(
+                    f"Error closing connection on port {self.arduinos[key]['port']}: {e}"
+                )
 
     @staticmethod
     def log_error(self, error_message):
@@ -124,4 +124,3 @@ class Arduino:
         else:
             print(f"An error occurred: {error_message}")
             print("Set the error log file path to log the error with set_error_log_path().")
-        
