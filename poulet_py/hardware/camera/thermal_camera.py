@@ -25,6 +25,7 @@ import sys
 import clr
 from scipy import ndimage
 
+
 def py_frame_callback(frame, userptr):
     """
     Callback function to handle frames from the camera.
@@ -320,21 +321,21 @@ class ThermalCamera:
                 png_filename = os.path.join(path, f"{file_name}.png")
 
                 fig, ax = plt.subplots(figsize=(8, 6))
-                
+
                 # Display the image using imshow and capture the mappable object
                 im = ax.imshow(frame_data, cmap=colormap)
-                
+
                 # Add a colorbar to the mappable object
-                cbar = fig.colorbar(im, ax=ax, label='Temperature (°C)')
-                
+                cbar = fig.colorbar(im, ax=ax, label="Temperature (°C)")
+
                 # Remove axis ticks and labels for a cleaner look
-                ax.axis('off')
-                
+                ax.axis("off")
+
                 # Adjust layout to ensure everything fits
                 plt.tight_layout()
-                
+
                 # Save the figure to a PNG file
-                plt.savefig(png_filename, bbox_inches='tight')
+                plt.savefig(png_filename, bbox_inches="tight")
                 plt.close(fig)
 
     def grab_data_func(self, func, **kwargs):
@@ -394,7 +395,7 @@ class ThermalCamera:
         print('Press "r" to refresh the shutter.')
         print('Press "t" to take a thermal pic.')
         print('Press "e" to exit.')
-        print('Starting live plot...')
+        print("Starting live plot...")
 
         mpl.rc("image", cmap="coolwarm")
         if self.windows:
@@ -408,7 +409,9 @@ class ThermalCamera:
 
         # Initialize with a dummy frame
         dummy = np.zeros((120, 160))
-        img = ax.imshow(dummy, interpolation="nearest", vmin=self.vminT, vmax=self.vmaxT, animated=True)
+        img = ax.imshow(
+            dummy, interpolation="nearest", vmin=self.vminT, vmax=self.vmaxT, animated=True
+        )
         ax.set_xticks([])
         ax.set_yticks([])
         for spine in ax.spines.values():
@@ -450,7 +453,12 @@ class ThermalCamera:
                                 f.create_dataset("image", data=data)
                             print("Thermal pic saved as hdf5")
                             if self.png:
-                                plt.imsave(f"{self.pathset}/{dt_string}.png", data, vmin=self.vminT, vmax=self.vmaxT)
+                                plt.imsave(
+                                    f"{self.pathset}/{dt_string}.png",
+                                    data,
+                                    vmin=self.vminT,
+                                    vmax=self.vmaxT,
+                                )
                         except Exception as e:
                             self.log_error(e)
                             print("There isn't a set path!")
@@ -509,6 +517,7 @@ class ThermalCamera:
             print(f"An error occurred: {error_message}")
             print("Set the error log file path to log the error with set_error_log_path().")
 
+
 folder = "x64" if platform.architecture()[0] == "64bit" else "x86"
 path = os.path.sep.join(__file__.split(os.path.sep)[:-1])
 sys.path.append(os.path.sep.join([path, folder]))
@@ -555,7 +564,7 @@ class CameraWindows:
         # initialize COM on this thread
         pythoncom.CoInitialize()
         time.sleep(1)
-        
+
         for i in self.CCI.GetDevices():
             if i.Name.startswith("PureThermal"):
                 devices.append(i)
@@ -563,7 +572,7 @@ class CameraWindows:
             if len(devices) > 1:
                 print("Multiple Pure Thermal devices have been found.\n")
                 for i, d in enumerate(devices):
-                    print("{}. {}".format(i, d))
+                    print(f"{i}. {d}")
                 while True:
                     idx = input("Select the index of the required device: ")
                     try:
