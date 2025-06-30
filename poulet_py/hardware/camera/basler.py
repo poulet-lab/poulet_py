@@ -5,8 +5,10 @@ import logging
 import os
 import time
 from typing import Literal
+
 import cv2
 from pypylon import pylon
+
 
 class BaslerCamera:
     """
