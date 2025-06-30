@@ -520,36 +520,36 @@ sys.path.append(os.path.sep.join([path, folder]))
 clr.AddReference("LeptonUVC")
 clr.AddReference("ManagedIR16Filters")
 
-    from Lepton import CCI
-    from IR16Filters import IR16Capture, NewBytesFrameEvent
+from Lepton import CCI
+from IR16Filters import IR16Capture, NewBytesFrameEvent
 
 
-    def handle_exit(sig, frame):
-        print("Exiting and cleaning up...")
-        pythoncom.CoUninitialize()
+def handle_exit(sig, frame):
+    print("Exiting and cleaning up...")
+    pythoncom.CoUninitialize()
 
 
-    # Register signal handlers for clean exit
-    signal.signal(signal.SIGINT, handle_exit)
-    signal.signal(signal.SIGTERM, handle_exit)
+# Register signal handlers for clean exit
+signal.signal(signal.SIGINT, handle_exit)
+signal.signal(signal.SIGTERM, handle_exit)
 
 
-    class CameraWindows:
-        def __init__(self):
-            self.latest_frame = None
-            self.CCI = CCI
-            self.IR16Capture = IR16Capture
-            self.NewBytesFrameEvent = NewBytesFrameEvent
-            self.device = None
-            self.reader = None
+class CameraWindows:
+    def __init__(self):
+        self.latest_frame = None
+        self.CCI = CCI
+        self.IR16Capture = IR16Capture
+        self.NewBytesFrameEvent = NewBytesFrameEvent
+        self.device = None
+        self.reader = None
 
-        def add_frame(self, array, width, height):
-            """
-            Add a new frame to the buffer of read data.
-            """
-            img = np.fromiter(array, dtype="uint16").reshape(height, width)  # parse
-            img = ndimage.rotate(img, angle=0, reshape=True)  # rotation
-            self.latest_frame = img.astype(np.float16)  # update the last reading
+    def add_frame(self, array, width, height):
+        """
+        Add a new frame to the buffer of read data.
+        """
+        img = np.fromiter(array, dtype="uint16").reshape(height, width)  # parse
+        img = ndimage.rotate(img, angle=0, reshape=True)  # rotation
+        self.latest_frame = img.astype(np.float16)  # update the last reading
 
     def initialise_camera(self):
         """
@@ -596,37 +596,37 @@ clr.AddReference("ManagedIR16Filters")
             callback = self.NewBytesFrameEvent(self.add_frame)
             self.reader.SetupGraphWithBytesCallback(callback)
 
-        def start_streaming(self):
-            """
-            Start capturing frames.
-            """
-            self.reader.RunGraph()
+    def start_streaming(self):
+        """
+        Start capturing frames.
+        """
+        self.reader.RunGraph()
 
-        def set_shutter_manual(self):
-            """
-            Set the shutter mode to manual.
-            """
-            new_shutter_mode_obj = self.device.sys.GetFfcShutterModeObj()
-            new_shutter_mode_obj.shutterMode = self.CCI.Sys.FfcShutterMode.AUTO
+    def set_shutter_manual(self):
+        """
+        Set the shutter mode to manual.
+        """
+        new_shutter_mode_obj = self.device.sys.GetFfcShutterModeObj()
+        new_shutter_mode_obj.shutterMode = self.CCI.Sys.FfcShutterMode.AUTO
 
-            self.device.sys.SetFfcShutterModeObj(new_shutter_mode_obj)
+        self.device.sys.SetFfcShutterModeObj(new_shutter_mode_obj)
 
-        def perform_manualff(self):
-            """
-            Perform a manual flat field correction.
-            """
-            self.device.sys.RunFFCNormalization()
+    def perform_manualff(self):
+        """
+        Perform a manual flat field correction.
+        """
+        self.device.sys.RunFFCNormalization()
 
-        def stop_streaming(self):
-            """
-            Stop capturing frames.
-            """
-            self.reader.StopGraph()
-            pythoncom.CoUninitialize()
-            handle_exit(None, None)
+    def stop_streaming(self):
+        """
+        Stop capturing frames.
+        """
+        self.reader.StopGraph()
+        pythoncom.CoUninitialize()
+        handle_exit(None, None)
 
-        def get_frame(self):
-            """
-            Retrieve the latest frame captured by the camera.
-            """
-            return self.latest_frame
+    def get_frame(self):
+        """
+        Retrieve the latest frame captured by the camera.
+        """
+        return self.latest_frame
