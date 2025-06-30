@@ -5,12 +5,8 @@ import logging
 import os
 import time
 from typing import Literal
-
 import cv2
 from pypylon import pylon
-
-from poulet_py.tools import save_metadata_exp
-
 
 class BaslerCamera:
     """
@@ -44,8 +40,6 @@ class BaslerCamera:
             print(
                 "Using device", self.cameras[i].GetDeviceInfo().GetModelName()
             )
-
-        print("I am here")
 
         self.frames_per_second = None
         self.outs = {}  # VideoWriter objects keyed by camera index
@@ -291,9 +285,6 @@ class BaslerCamera:
             "video format": video_format,
         }
 
-        # Save initial metadata
-        save_metadata_exp(metadata, data_save_folder, "Video_metadata")
-
         # Setup the Basler camera outside of the loop to ensure the preview is shown before any recording starts
 
         self.set_frames_per_second(30)
@@ -326,11 +317,6 @@ class BaslerCamera:
                 finally:
                     print(f"Frames captured: {self.frame_number}")
                     self.save_metadata()
-
-                    # Save metadata for each recording
-                    save_metadata_exp(
-                        metadata, data_save_folder, f"test_{rec_count + 1}"
-                    )
 
                     # Buffer period before the next recording
                     if rec_count < total_rec - 1:
