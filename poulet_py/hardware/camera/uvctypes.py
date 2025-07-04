@@ -1,9 +1,5 @@
-from ctypes import *
-import ctypes
 import platform
-import gc
-import sys
-
+from ctypes import *
 
 try:
     if platform.system() == "Darwin":
@@ -28,7 +24,11 @@ class uvc_context(Structure):
 
 
 class uvc_device(Structure):
-    _fields_ = [("ctx", POINTER(uvc_context)), ("ref", c_int), ("usb_dev", c_void_p)]
+    _fields_ = [
+        ("ctx", POINTER(uvc_context)),
+        ("ref", c_int),
+        ("usb_dev", c_void_p),
+    ]
 
 
 class uvc_stream_ctrl(Structure):
@@ -66,7 +66,10 @@ uvc_frame_desc._fields_ = [
     ("prev", POINTER(uvc_frame_desc)),
     ("next", POINTER(uvc_frame_desc)),
     # /** Type of frame, such as JPEG frame or uncompressed frme */
-    ("bDescriptorSubtype", c_uint),  # enum uvc_vs_desc_subtype bDescriptorSubtype;
+    (
+        "bDescriptorSubtype",
+        c_uint,
+    ),  # enum uvc_vs_desc_subtype bDescriptorSubtype;
     # /** Index of the frame within the list of specs available for this format */
     ("bFrameIndex", c_uint8),
     ("bmCapabilities", c_uint8),
@@ -101,7 +104,10 @@ uvc_format_desc._fields_ = [
     ("prev", POINTER(uvc_format_desc)),
     ("next", POINTER(uvc_format_desc)),
     # /** Type of image stream, such as JPEG or uncompressed. */
-    ("bDescriptorSubtype", c_uint),  # enum uvc_vs_desc_subtype bDescriptorSubtype;
+    (
+        "bDescriptorSubtype",
+        c_uint,
+    ),  # enum uvc_vs_desc_subtype bDescriptorSubtype;
     # /** Identifier of this format within the VS interface's format list */
     ("bFormatIndex", c_uint8),
     ("bNumFrameDescriptors", c_uint8),
@@ -316,25 +322,15 @@ UVC_FRAME_FORMAT_RGB = 7
 UVC_FRAME_FORMAT_BGR = 8
 UVC_FRAME_FORMAT_Y16 = 13
 
-VS_FMT_GUID_GREY = create_string_buffer(
-    b"Y8  \x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71", 16
-)
+VS_FMT_GUID_GREY = create_string_buffer(b"Y8  \x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71", 16)
 
-VS_FMT_GUID_Y16 = create_string_buffer(
-    b"Y16 \x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71", 16
-)
+VS_FMT_GUID_Y16 = create_string_buffer(b"Y16 \x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71", 16)
 
-VS_FMT_GUID_YUYV = create_string_buffer(
-    b"UYVY\x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71", 16
-)
+VS_FMT_GUID_YUYV = create_string_buffer(b"UYVY\x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71", 16)
 
-VS_FMT_GUID_NV12 = create_string_buffer(
-    b"NV12\x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71", 16
-)
+VS_FMT_GUID_NV12 = create_string_buffer(b"NV12\x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71", 16)
 
-VS_FMT_GUID_YU12 = create_string_buffer(
-    b"I420\x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71", 16
-)
+VS_FMT_GUID_YU12 = create_string_buffer(b"I420\x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71", 16)
 
 VS_FMT_GUID_BGR3 = create_string_buffer(
     b"\x7d\xeb\x36\xe4\x4f\x52\xce\x11\x9f\x53\x00\x20\xaf\x0b\xa7\x70", 16
@@ -354,23 +350,16 @@ def print_device_info(devh):
     vers = lep_oem_sw_version()
     call_extension_unit(devh, OEM_UNIT_ID, 9, byref(vers), 8)
     print(
-        "Version gpp: {0}.{1}.{2} dsp: {3}.{4}.{5}".format(
-            vers.gpp_major,
-            vers.gpp_minor,
-            vers.gpp_build,
-            vers.dsp_major,
-            vers.dsp_minor,
-            vers.dsp_build,
-        )
+        f"Version gpp: {vers.gpp_major}.{vers.gpp_minor}.{vers.gpp_build} dsp: {vers.dsp_major}.{vers.dsp_minor}.{vers.dsp_build}"
     )
 
     flir_pn = create_string_buffer(32)
     call_extension_unit(devh, OEM_UNIT_ID, 8, flir_pn, 32)
-    print("FLIR part #: {0}".format(flir_pn.raw))
+    print(f"FLIR part #: {flir_pn.raw}")
 
     flir_sn = create_string_buffer(8)
     call_extension_unit(devh, SYS_UNIT_ID, 3, flir_sn, 8)
-    print("FLIR serial #: {0}".format(repr(flir_sn.raw)))
+    print(f"FLIR serial #: {flir_sn.raw!r}")
 
 
 def uvc_iter_formats(devh):
@@ -389,14 +378,10 @@ def uvc_iter_frames_for_format(devh, format_desc):
 
 def print_device_formats(devh):
     for format_desc in uvc_iter_formats(devh):
-        print("format: {0}".format(format_desc.guidFormat[0:4]))
+        print(f"format: {format_desc.guidFormat[0:4]}")
         for frame_desc in uvc_iter_frames_for_format(devh, format_desc):
             print(
-                "  frame {0}x{1} @ {2}fps".format(
-                    frame_desc.wWidth,
-                    frame_desc.wHeight,
-                    int(1e7 / frame_desc.dwDefaultFrameInterval),
-                )
+                f"  frame {frame_desc.wWidth}x{frame_desc.wHeight} @ {int(1e7 / frame_desc.dwDefaultFrameInterval)}fps"
             )
 
 
@@ -435,15 +420,12 @@ def set_auto_ffc(devh):
 
 
 def set_external_ffc(devh):
-
     sizeData = 32
     # shutter_mode = (c_uint16)(2) #2 = external
     getSDK = 0x3D
     controlID = (getSDK >> 2) + 1  # formula from Kurt Kiefer
     print("controlID: " + str(controlID))
-    set_extension_unit(
-        devh, SYS_UNIT_ID, controlID, byref(sysShutterExternal), sizeData
-    )
+    set_extension_unit(devh, SYS_UNIT_ID, controlID, byref(sysShutterExternal), sizeData)
 
 
 shutter = lep_sys_shutter_mode()
@@ -454,19 +436,9 @@ def print_shutter_info(devh):
     controlID = (getSDK >> 2) + 1
     call_extension_unit(devh, SYS_UNIT_ID, controlID, byref(shutter), 32)
     print(
-        "Shutter Info:\n {0}\t shutterMode\n {1}\t tempLockoutState\n {2}\t videoFreezeDuringFFC\n\
- {3}\t ffcDesired\n {4}\t elapsedTimeSinceLastFfc\n {5}\t desiredFfcPeriod\n\
- {6}\t explicitCmdToOpen\n {7}\t desiredFfcTempDelta\n {8}\t imminentDelay\n".format(
-            shutter.shutterMode,
-            shutter.tempLockoutState,
-            shutter.videoFreezeDuringFFC,
-            shutter.ffcDesired,
-            shutter.elapsedTimeSinceLastFfc,
-            shutter.desiredFfcPeriod,
-            shutter.explicitCmdToOpen,
-            shutter.desiredFfcTempDelta,
-            shutter.imminentDelay,
-        )
+        f"Shutter Info:\n {shutter.shutterMode}\t shutterMode\n {shutter.tempLockoutState}\t tempLockoutState\n {shutter.videoFreezeDuringFFC}\t videoFreezeDuringFFC\n\
+ {shutter.ffcDesired}\t ffcDesired\n {shutter.elapsedTimeSinceLastFfc}\t elapsedTimeSinceLastFfc\n {shutter.desiredFfcPeriod}\t desiredFfcPeriod\n\
+ {shutter.explicitCmdToOpen}\t explicitCmdToOpen\n {shutter.desiredFfcTempDelta}\t desiredFfcTempDelta\n {shutter.imminentDelay}\t imminentDelay\n"
     )
 
 

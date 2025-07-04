@@ -4,11 +4,13 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+    target-branch: "dev"
     commit-message:
       prefix: ⬆
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
       interval: "daily"
+    target-branch: "dev"
     commit-message:
       prefix: ⬆

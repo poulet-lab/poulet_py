@@ -1,12 +1,12 @@
-import numpy as np
-import h5py
-import platform
 import os
+import platform
 import time
-import matplotlib.pyplot as plt
-import matplotlib as mpl
 from datetime import datetime
-import time
+
+import h5py
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 try:
@@ -18,14 +18,13 @@ try:
 except ImportError:
     from Queue import Queue
 import json
-from scipy import ndimage
-import clr
-import sys
-import os
-import platform
-import numpy as np
-import signal
 import logging
+import signal
+import sys
+
+import clr
+from scipy import ndimage
+
 
 def py_frame_callback(frame, userptr):
     """
@@ -58,13 +57,12 @@ if not platform.system() == "Windows":
 
     BUF_SIZE = 2
     q = Queue(BUF_SIZE)
-    PTR_PY_FRAME_CALLBACK = CFUNCTYPE(None, POINTER(uvc_frame), c_void_p)(
-        py_frame_callback
-    )
+    PTR_PY_FRAME_CALLBACK = CFUNCTYPE(None, POINTER(uvc_frame), c_void_p)(py_frame_callback)
     tiff_frame = 1
     colorMapType = 0
 else:
     import pythoncom
+
 
 class ThermalCamera:
     """
@@ -153,7 +151,7 @@ class ThermalCamera:
                         devh, byref(ctrl), PTR_PY_FRAME_CALLBACK, None, 0
                     )
                     if res < 0:
-                        print("uvc_start_streaming failed: {0}".format(res))
+                        print(f"uvc_start_streaming failed: {res}")
                         exit(1)
 
                     print("done starting stream, displaying settings")
@@ -322,21 +320,21 @@ class ThermalCamera:
                 png_filename = os.path.join(path, f"{file_name}.png")
 
                 fig, ax = plt.subplots(figsize=(8, 6))
-                
+
                 # Display the image using imshow and capture the mappable object
                 im = ax.imshow(frame_data, cmap=colormap)
-                
+
                 # Add a colorbar to the mappable object
-                cbar = fig.colorbar(im, ax=ax, label='Temperature (°C)')
-                
+                cbar = fig.colorbar(im, ax=ax, label="Temperature (°C)")
+
                 # Remove axis ticks and labels for a cleaner look
-                ax.axis('off')
-                
+                ax.axis("off")
+
                 # Adjust layout to ensure everything fits
                 plt.tight_layout()
-                
+
                 # Save the figure to a PNG file
-                plt.savefig(png_filename, bbox_inches='tight')
+                plt.savefig(png_filename, bbox_inches="tight")
                 plt.close(fig)
 
     def grab_data_func(self, func, **kwargs):
@@ -396,7 +394,7 @@ class ThermalCamera:
         print('Press "r" to refresh the shutter.')
         print('Press "t" to take a thermal pic.')
         print('Press "e" to exit.')
-        print('Starting live plot...')
+        print("Starting live plot...")
 
         mpl.rc("image", cmap="coolwarm")
         if self.windows:
@@ -410,7 +408,9 @@ class ThermalCamera:
 
         # Initialize with a dummy frame
         dummy = np.zeros((120, 160))
-        img = ax.imshow(dummy, interpolation="nearest", vmin=self.vminT, vmax=self.vmaxT, animated=True)
+        img = ax.imshow(
+            dummy, interpolation="nearest", vmin=self.vminT, vmax=self.vmaxT, animated=True
+        )
         ax.set_xticks([])
         ax.set_yticks([])
         for spine in ax.spines.values():
@@ -452,7 +452,12 @@ class ThermalCamera:
                                 f.create_dataset("image", data=data)
                             print("Thermal pic saved as hdf5")
                             if self.png:
-                                plt.imsave(f"{self.pathset}/{dt_string}.png", data, vmin=self.vminT, vmax=self.vmaxT)
+                                plt.imsave(
+                                    f"{self.pathset}/{dt_string}.png",
+                                    data,
+                                    vmin=self.vminT,
+                                    vmax=self.vmaxT,
+                                )
                         except Exception as e:
                             self.log_error(e)
                             print("There isn't a set path!")
@@ -479,9 +484,7 @@ class ThermalCamera:
         Saves metadata about the recording to a JSON file in the output directory.
         """
         metadata_file_name = f"{self.output_file_name.split('.')[0]}.json"
-        metadata_path = os.path.join(
-            os.path.dirname(self.output_path), metadata_file_name
-        )
+        metadata_path = os.path.join(os.path.dirname(self.output_path), metadata_file_name)
 
         data = {
             "camera": "thermal",
@@ -501,7 +504,7 @@ class ThermalCamera:
 
         with open(metadata_path, "w") as f:
             json.dump(data, f, indent=4)
-    
+
     @staticmethod
     def log_error(self, error_message):
         """
@@ -512,15 +515,16 @@ class ThermalCamera:
         else:
             print(f"An error occurred: {error_message}")
             print("Set the error log file path to log the error with set_error_log_path().")
-     
+
+
 folder = "x64" if platform.architecture()[0] == "64bit" else "x86"
 path = os.path.sep.join(__file__.split(os.path.sep)[:-1])
 sys.path.append(os.path.sep.join([path, folder]))
 clr.AddReference("LeptonUVC")
 clr.AddReference("ManagedIR16Filters")
 
-from Lepton import CCI
 from IR16Filters import IR16Capture, NewBytesFrameEvent
+from Lepton import CCI
 
 
 def handle_exit(sig, frame):
@@ -559,7 +563,7 @@ class CameraWindows:
         # initialize COM on this thread
         pythoncom.CoInitialize()
         time.sleep(1)
-        
+
         for i in self.CCI.GetDevices():
             if i.Name.startswith("PureThermal"):
                 devices.append(i)
@@ -567,7 +571,7 @@ class CameraWindows:
             if len(devices) > 1:
                 print("Multiple Pure Thermal devices have been found.\n")
                 for i, d in enumerate(devices):
-                    print("{}. {}".format(i, d))
+                    print(f"{i}. {d}")
                 while True:
                     idx = input("Select the index of the required device: ")
                     try:
@@ -580,7 +584,6 @@ class CameraWindows:
 
             elif len(devices) == 1:
                 self.device = devices[0]
-
             else:
                 self.device = None
 

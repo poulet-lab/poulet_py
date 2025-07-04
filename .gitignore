@@ -17,6 +17,7 @@ results/
 site/
 site_lang/
 target/
+.ruff_cache/
 
 # files
 **/*.so
