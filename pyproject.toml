@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "poulet_py"
 description = "A library which hosts various neuroscience python methods"
 readme = "README.md"
-requires-python = ">=3.10,<3.14"
+requires-python = ">=3.9,<3.14"
 dynamic = ['version']
 license = "GPL-3.0-or-later"
 authors = [
@@ -18,6 +18,7 @@ classifiers = [
   "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
   "Programming Language :: Python",
   "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
@@ -168,7 +169,7 @@ ban-relative-imports = "all"
 extra-dependencies = ["poulet-py[all]"]
 
 [[tool.hatch.envs.hatch-test.matrix]]
-python = ["3.10", "3.11", "3.12", "3.13"]
+python = ["3.9", "3.10", "3.11", "3.12", "3.13"]
 dependencies = ["poulet-py[all]"]
 [tool.coverage.run]
 source_pkgs = ["poulet_py", "tests"]

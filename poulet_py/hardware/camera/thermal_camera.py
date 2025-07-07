@@ -322,10 +322,10 @@ class ThermalCamera:
                 fig, ax = plt.subplots(figsize=(8, 6))
 
                 # Display the image using imshow and capture the mappable object
-                im = ax.imshow(frame_data, cmap=colormap)
+                im = ax.imshow(frame_data, cmap=colormap, vmin=self.vminT, vmax=self.vmaxT)
 
                 # Add a colorbar to the mappable object
-                cbar = fig.colorbar(im, ax=ax, label="Temperature (°C)")
+                fig.colorbar(im, ax=ax, label="Temperature (°C)")
 
                 # Remove axis ticks and labels for a cleaner look
                 ax.axis("off")
