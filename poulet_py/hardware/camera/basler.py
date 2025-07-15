@@ -9,9 +9,6 @@ from typing import Literal
 import cv2
 from pypylon import pylon
 
-from poulet_py.tools import save_metadata_exp
-
-
 class BaslerCamera:
     """
     A class to interact with multiple Basler cameras using pypylon and OpenCV.
@@ -282,7 +279,7 @@ class BaslerCamera:
         }
 
         # Save initial metadata
-        save_metadata_exp(metadata, data_save_folder, "Video_metadata")
+        self.save_metadata(data_save_folder, "video_metadata")
 
         # Setup the Basler camera outside of the loop to ensure the preview is shown before any recording starts
 
@@ -316,7 +313,6 @@ class BaslerCamera:
                     self.save_metadata()
 
                     # Save metadata for each recording
-                    save_metadata_exp(metadata, data_save_folder, f"test_{rec_count + 1}")
 
                     # Buffer period before the next recording
                     if rec_count < total_rec - 1:
