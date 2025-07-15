@@ -9,6 +9,7 @@ from typing import Literal
 import cv2
 from pypylon import pylon
 
+
 class BaslerCamera:
     """
     A class to interact with multiple Basler cameras using pypylon and OpenCV.
