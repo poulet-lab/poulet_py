@@ -406,7 +406,6 @@ class ThermalCamera:
         div = make_axes_locatable(ax)
         cax = div.append_axes("right", "5%", "5%")
 
-        # Initialize with a dummy frame
         dummy = np.zeros((120, 160))
         img = ax.imshow(
             dummy, interpolation="nearest", vmin=self.vminT, vmax=self.vmaxT, animated=True
@@ -420,7 +419,6 @@ class ThermalCamera:
         pressed = False
         try:
             while True:
-                # Retrieve data from the camera
                 if self.windows:
                     data = self.windows_camera.get_frame()
                 else:
@@ -428,15 +426,13 @@ class ThermalCamera:
                 if data is None:
                     print("Data is none")
                     data = np.zeros((120, 160))
-                # Convert raw data (Kelvin*100) to Celsius
+
                 data = (data - 27315) / 100
 
-                # Update the plot with the new data
                 img.set_data(data)
                 fig.canvas.draw_idle()
                 plt.pause(0.2)
 
-                # Handle keyboard events
                 if keyboard.is_pressed("r"):
                     if not pressed:
                         print("Manual FFC")
@@ -447,17 +443,7 @@ class ThermalCamera:
                         now = datetime.now()
                         dt_string = now.strftime("day_%d_%m_%Y_time_%H_%M_%S")
                         try:
-                            # Save as HDF5 file; ensure self.pathset is set
-                            with h5py.File(f"{self.pathset}/{dt_string}.hdf5", "w") as f:
-                                f.create_dataset("image", data=data)
-                            print("Thermal pic saved as hdf5")
-                            if self.png:
-                                plt.imsave(
-                                    f"{self.pathset}/{dt_string}.png",
-                                    data,
-                                    vmin=self.vminT,
-                                    vmax=self.vmaxT,
-                                )
+                            self.capture_frame()
                         except Exception as e:
                             self.log_error(e)
                             print("There isn't a set path!")
@@ -505,7 +491,6 @@ class ThermalCamera:
         with open(metadata_path, "w") as f:
             json.dump(data, f, indent=4)
 
-    @staticmethod
     def log_error(self, error_message):
         """
         Logs an error message to the error log file.
