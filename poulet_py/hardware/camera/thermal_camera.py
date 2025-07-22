@@ -291,6 +291,7 @@ class ThermalCamera:
             )
 
             self.frame_number += 1
+            print(f"Frame captured! at {self.output_path}")
         else:
             print("Thermal data is none")
 
