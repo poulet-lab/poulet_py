@@ -418,13 +418,14 @@ class ThermalCamera:
         fig.colorbar(img, cax=cax)
 
         circle_artist = None
+
         def valid_circle(circle):
             if not isinstance(circle, dict):
                 return False
-            if 'centre' not in circle or 'radius' not in circle:
+            if "centre" not in circle or "radius" not in circle:
                 return False
-            centre = circle['centre']
-            radius = circle['radius']
+            centre = circle["centre"]
+            radius = circle["radius"]
             if not (isinstance(centre, (tuple, list)) and len(centre) == 2):
                 return False
             if not (isinstance(radius, (int, float)) and radius > 0):
@@ -453,11 +454,14 @@ class ThermalCamera:
 
                 # Draw overlay circle if valid
                 if valid_circle(overlay_circle):
-                    centre = overlay_circle['centre']
-                    radius = overlay_circle['radius']
+                    centre = overlay_circle["centre"]
+                    radius = overlay_circle["radius"]
                     circle_artist = Circle(
-                        (centre[0], centre[1]), radius,
-                        edgecolor='black', facecolor='none', linewidth=2
+                        (centre[0], centre[1]),
+                        radius,
+                        edgecolor="black",
+                        facecolor="none",
+                        linewidth=2,
                     )
                     ax.add_patch(circle_artist)
 
