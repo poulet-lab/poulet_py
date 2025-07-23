@@ -6,6 +6,7 @@ from datetime import datetime
 import h5py
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from matplotlib.patches import Circle
 import numpy as np
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
@@ -418,6 +419,7 @@ class ThermalCamera:
         fig.colorbar(img, cax=cax)
 
         circle_artist = None
+        mean_text_artist = None
 
         def valid_circle(circle):
             if not isinstance(circle, dict):
@@ -447,12 +449,13 @@ class ThermalCamera:
 
                 img.set_data(data)
 
-                # Remove previous circle if it exists
                 if circle_artist is not None:
                     circle_artist.remove()
                     circle_artist = None
+                if mean_text_artist is not None:
+                    mean_text_artist.remove()
+                    mean_text_artist = None
 
-                # Draw overlay circle if valid
                 if valid_circle(overlay_circle):
                     centre = overlay_circle["centre"]
                     radius = overlay_circle["radius"]
@@ -464,6 +467,25 @@ class ThermalCamera:
                         linewidth=2,
                     )
                     ax.add_patch(circle_artist)
+
+                    yy, xx = np.ogrid[:data.shape[0], :data.shape[1]]
+                    dist = np.sqrt((xx - centre[0]) ** 2 + (yy - centre[1]) ** 2)
+                    mask = dist <= radius
+                    if np.any(mask):
+                        mean_temp = np.mean(data[mask])
+                        text_x = centre[0] + radius + 10
+                        text_y = centre[1]
+                        mean_text_artist = ax.text(
+                            text_x,
+                            text_y,
+                            f"{mean_temp:.2f}",
+                            color="black",
+                            ha="left",
+                            va="center",
+                            fontsize=12,
+                            fontweight="bold",
+                            bbox=dict(facecolor="white", alpha=0.5, edgecolor="none"),
+                        )
 
                 fig.canvas.draw_idle()
                 plt.pause(0.2)
@@ -530,6 +552,7 @@ class ThermalCamera:
         """
         Logs an error message to the error log file.
         """
+        print("An error occurred:", error_message)
         if self.error_log_file is not None:
             logging.error(error_message)
         else:
