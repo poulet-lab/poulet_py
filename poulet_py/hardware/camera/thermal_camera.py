@@ -6,8 +6,8 @@ from datetime import datetime
 import h5py
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from matplotlib.patches import Circle
 import numpy as np
+from matplotlib.patches import Circle
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 try:
@@ -468,7 +468,7 @@ class ThermalCamera:
                     )
                     ax.add_patch(circle_artist)
 
-                    yy, xx = np.ogrid[:data.shape[0], :data.shape[1]]
+                    yy, xx = np.ogrid[: data.shape[0], : data.shape[1]]
                     dist = np.sqrt((xx - centre[0]) ** 2 + (yy - centre[1]) ** 2)
                     mask = dist <= radius
                     if np.any(mask):
