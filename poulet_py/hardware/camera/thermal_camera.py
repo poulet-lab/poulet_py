@@ -296,48 +296,33 @@ class ThermalCamera:
         else:
             print("Thermal data is none")
 
-    def export_frame_to_png(self, path, file_name, colormap="coolwarm"):
-        """
-        Loads thermal frames from an HDF5 file and saves each frame as a PNG.
 
-        Args:
-            hdf5_path (str): Path to the HDF5 file containing frames (e.g., "frame1", "frame2", etc.).
-            output_dir (str): Directory where PNG files will be saved.
-            colormap (str): Matplotlib colormap to use (default is "coolwarm").
-        """
-        # Ensure the output directory exists
-        # Open the HDF5 file in read mode
+    def export_frame_to_png(self, path, file_name, colormap="coolwarm"):
+        """Save all frames from the current HDF5 recording as PNG images."""
+
         with h5py.File(self.output_path, "r") as f:
-            # Get all dataset keys (e.g., "frame1", "frame2", etc.)
             frame_keys = list(f.keys())
-            # Sort keys numerically (remove 'frame' and convert to int)
             frame_keys.sort(key=lambda x: int(x.replace("frame", "")))
 
-            # Loop over each dataset (frame) in the file
             for frame_name in frame_keys:
-                # Load the frame data (already in Celsius)
                 frame_data = f[frame_name][()]
-
-                # Build output PNG path; for example, "frame1.png"
-                png_filename = os.path.join(path, f"{file_name}.png")
+                png_filename = os.path.join(
+                    path, f"{file_name}_{frame_name}.png"
+                )
 
                 fig, ax = plt.subplots(figsize=(8, 6))
-
-                # Display the image using imshow and capture the mappable object
-                im = ax.imshow(frame_data, cmap=colormap, vmin=self.vminT, vmax=self.vmaxT)
-
-                # Add a colorbar to the mappable object
+                im = ax.imshow(
+                    frame_data,
+                    cmap=colormap,
+                    vmin=self.vminT,
+                    vmax=self.vmaxT,
+                )
                 fig.colorbar(im, ax=ax, label="Temperature (°C)")
-
-                # Remove axis ticks and labels for a cleaner look
                 ax.axis("off")
-
-                # Adjust layout to ensure everything fits
                 plt.tight_layout()
-
-                # Save the figure to a PNG file
                 plt.savefig(png_filename, bbox_inches="tight")
                 plt.close(fig)
+
 
     def grab_data_func(self, func, **kwargs):
         """
