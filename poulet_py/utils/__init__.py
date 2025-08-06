@@ -1,15 +1,11 @@
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from poulet_py.hardware.camera.basler import BaslerCamera
-    from poulet_py.hardware.sensors import TCS, TCSCommand, TCSStimulus
+    from poulet_py.utils.oscilloscope import Oscilloscope
+    from poulet_py.utils.qst import TCSInterface
 
 
-IMPORTS = {
-    "TCSCommand": "hardware.sensors.qst",
-    "TCSStimulus": "hardware.sensors.qst",
-    "TCS": "hardware.sensors.qst",
-}
+IMPORTS = {"TCSInterface": "utils.qst", "Oscilloscope": "utils.oscilloscope"}
 
 
 def __getattr__(name: str) -> Any:
@@ -28,4 +24,4 @@ def __getattr__(name: str) -> Any:
     raise AttributeError(msg)
 
 
-__all__ = ["TCS", "TCSCommand", "TCSStimulus"]
+__all__ = ["Oscilloscope", "TCSInterface"]

@@ -1,14 +1,12 @@
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from poulet_py.hardware.camera.basler import BaslerCamera
-    from poulet_py.hardware.sensors import TCS, TCSCommand, TCSStimulus
-
+    from poulet_py.hardware.sensors.qst import TCS, TCSCommand, TCSStimulus
 
 IMPORTS = {
-    "TCSCommand": "hardware.sensors.qst",
     "TCSStimulus": "hardware.sensors.qst",
     "TCS": "hardware.sensors.qst",
+    "TCSCommand": "hardware.sensors.qst",
 }
 
 
@@ -24,7 +22,8 @@ def __getattr__(name: str) -> Any:
             f"To install it use: pip install poulet_py[{submodule}]"
             raise ImportError(msg) from e
 
-    msg = f"module 'poulet_py.hardware' has no attribute '{name}'"
+    msg = "module 'poulet_py.hardware.sensors' "
+    f"has no attribute '{name}'"
     raise AttributeError(msg)
 
 

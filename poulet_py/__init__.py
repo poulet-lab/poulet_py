@@ -1,28 +1,42 @@
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from poulet_py import hardware, tools
-    from poulet_py.config import LOGGER, SETTINGS
+    from poulet_py.config import LOGGER, SETTINGS, Settings, setup_logging
     from poulet_py.converters.seq import Seq
-    from poulet_py.tools.generators import generate_stimulus_sequence
-    from poulet_py.tools.organizational import (
+    from poulet_py.hardware import TCS, TCSCommand, TCSStimulus
+    from poulet_py.tools import (
         check_or_create,
         define_folder_name,
+        generate_stimulus_sequence,
+        go_to,
+        json_serializer,
         sanitize_path,
+        save_metadata_exp,
     )
-    from poulet_py.tools.serializers import json_serializer, save_metadata_exp
-
+    from poulet_py.utils import Oscilloscope, TCSInterface
 
 IMPORTS = {
-    "LOGGER": "config.logging",
-    "SETTINGS": "config.settings",
+    "config": "config",
+    "hardware": "hardware",
+    "tools": "tools",
+    "utils": "utils",
+    "LOGGER": "config",
+    "SETTINGS": "config",
+    "Settings": "config",
+    "setup_logging": "config",
+    "TCS": "hardware",
+    "TCSCommand": "hardware",
+    "TCSStimulus": "hardware",
     "Seq": "converters.seq",
-    "generate_stimulus_sequence": "tools.generators",
-    "check_or_create": "tools.organizational",
-    "define_folder_name": "tools.organizational",
-    "sanitize_path": "tools.organizational",
-    "json_serializer": "tools.serializers",
-    "save_metadata_exp": "tools.serializers",
+    "generate_stimulus_sequence": "tools",
+    "go_to": "tools",
+    "check_or_create": "tools",
+    "define_folder_name": "tools",
+    "sanitize_path": "tools",
+    "json_serializer": "tools",
+    "save_metadata_exp": "tools",
+    "Oscilloscope": "utils",
+    "TCSInterface": "utils",
 }
 
 
@@ -40,12 +54,22 @@ __all__ = [
     "LOGGER",
     "SETTINGS",
     "Seq",
+    "TCS",
+    "Oscilloscope",
+    "Settings",
+    "TCSCommand",
+    "TCSInterface",
+    "TCSStimulus",
     "check_or_create",
+    "config",
     "define_folder_name",
     "generate_stimulus_sequence",
+    "go_to",
     "hardware",
     "json_serializer",
     "sanitize_path",
     "save_metadata_exp",
+    "setup_logging",
     "tools",
+    "utils",
 ]

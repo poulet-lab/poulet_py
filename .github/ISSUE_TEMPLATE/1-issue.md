@@ -5,14 +5,14 @@ about: Please only raise an issue if you've been advised to do so after discussi
 
 The starting point for issues should usually be a discussion...
 
-https://github.com/poulet-lab/poulet_py/discussions
+https://github.com/orgs/poulet-lab/discussions
 
 Potential bugs may be raised as a "Potential Issue" discussion. The feature requests may be raised as an
 "Ideas" discussion.
 
 We can then decide if the discussion needs to be escalated into an "Issue" or not.
 
-This will make sure that everything is organised properly.
+This will make sure that everything is organized properly.
 ---
 
 **poulet_py version**:

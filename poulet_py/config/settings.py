@@ -36,9 +36,7 @@ Usage Examples
 
 4. Programmatically Updating Settings:
     >>> from poulet_py.config.settings import Settings
-    >>> custom_settings = Settings(
-    ...     log={"level": "error", "file": "/custom/path.log"}
-    ... )
+    >>> custom_settings = Settings(log={"level": "error", "file": "/custom/path.log"})
     >>> print(custom_settings.log.level)  # Output: "error"
     >>> print(custom_settings.log.file)  # Output: "/custom/path.log"
 """
