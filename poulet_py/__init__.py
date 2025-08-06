@@ -1,8 +1,8 @@
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from poulet_py import config, hardware, tools
     from poulet_py.config import LOGGER, SETTINGS, Settings, setup_logging
+    from poulet_py.hardware import TCS, TCSCommand, TCSStimulus
     from poulet_py.tools import (
         check_or_create,
         define_folder_name,
@@ -12,20 +12,29 @@ if TYPE_CHECKING:
         sanitize_path,
         save_metadata_exp,
     )
-
+    from poulet_py.utils import Oscilloscope, TCSInterface
 
 IMPORTS = {
+    "config": "config",
+    "hardware": "hardware",
+    "tools": "tools",
+    "utils": "utils",
     "LOGGER": "config",
     "SETTINGS": "config",
     "Settings": "config",
+    "setup_logging": "config",
+    "TCS": "hardware",
+    "TCSCommand": "hardware",
+    "TCSStimulus": "hardware",
     "generate_stimulus_sequence": "tools",
+    "go_to": "tools",
     "check_or_create": "tools",
     "define_folder_name": "tools",
-    "go_to": "tools",
     "sanitize_path": "tools",
     "json_serializer": "tools",
     "save_metadata_exp": "tools",
-    "setup_logging": "config",
+    "Oscilloscope": "utils",
+    "TCSInterface": "utils",
 }
 
 
@@ -42,7 +51,12 @@ def __getattr__(name: str) -> Any:
 __all__ = [
     "LOGGER",
     "SETTINGS",
+    "TCS",
+    "Oscilloscope",
     "Settings",
+    "TCSCommand",
+    "TCSInterface",
+    "TCSStimulus",
     "check_or_create",
     "config",
     "define_folder_name",
@@ -54,4 +68,5 @@ __all__ = [
     "save_metadata_exp",
     "setup_logging",
     "tools",
+    "utils",
 ]
