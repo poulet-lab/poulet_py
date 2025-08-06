@@ -191,9 +191,7 @@ class Oscilloscope:
 
                 # Create proxy artist for legend
                 if col not in [h.get_label() for h in self._legend_handles]:
-                    proxy = Line2D(
-                        [], [], color=colors[-1], linewidth=1.5, label=col
-                    )
+                    proxy = Line2D([], [], color=colors[-1], linewidth=1.5, label=col)
                     new_legend_handles.append(proxy)
 
             # Update or create LineCollection
@@ -248,9 +246,7 @@ class Oscilloscope:
 
         # Calculate padding
         x_pad = (x_max - x_min) * self.xpadding if len(x) > 1 else self.xpadding
-        y_pad = (
-            (y_max - y_min) * self.ypadding if y_max != y_min else self.ypadding
-        )
+        y_pad = (y_max - y_min) * self.ypadding if y_max != y_min else self.ypadding
 
         needs_update = (
             x_min - x_pad < self._last_xmin

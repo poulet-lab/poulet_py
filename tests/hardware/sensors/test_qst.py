@@ -102,9 +102,7 @@ class TestTCSCommandExecution:
             patch.object(tcs, "write") as mock_write,
             patch.object(tcs, "_expect_response") as mock_expect,
         ):
-            tcs.execute_command(
-                TCSCommand.READ_INFO, expected_pattern=re.compile(".*")
-            )
+            tcs.execute_command(TCSCommand.READ_INFO, expected_pattern=re.compile(".*"))
             mock_write.assert_called_once_with(b"H")
             mock_expect.assert_called_once()
 

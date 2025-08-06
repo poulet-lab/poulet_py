@@ -153,9 +153,7 @@ class TCSInterface(TCS):
         """Clear the stimulus sequence."""
         self._stimulus = []
 
-    def run(
-        self, plot: bool = False, max_plot_samples: int = 1000
-    ) -> list[dict]:
+    def run(self, plot: bool = False, max_plot_samples: int = 1000) -> list[dict]:
         """
         Execute the configured experiment.
 
@@ -187,9 +185,7 @@ class TCSInterface(TCS):
         self._setup_run(plot, max_plot_samples)
 
         try:
-            for idx, stimulus in tqdm(
-                enumerate(self.stimuli), total=self.n_trials
-            ):
+            for idx, stimulus in tqdm(enumerate(self.stimuli), total=self.n_trials):
                 self._execute_trial(idx, stimulus)
         finally:
             self._cleanup_run(plot)
@@ -215,9 +211,7 @@ class TCSInterface(TCS):
         data.set_index("timestamp", inplace=True)
         return data
 
-    def _setup_run(
-        self, plot: bool = False, max_plot_samples: int = 1000
-    ) -> None:
+    def _setup_run(self, plot: bool = False, max_plot_samples: int = 1000) -> None:
         """Initialize experiment run."""
         if not self.stimuli:
             msg = "Stimuli must be set before running the experiment"
@@ -246,9 +240,7 @@ class TCSInterface(TCS):
         interstimulus_period = self._get_interstimulus_period()
         start_time = time() * 1000
 
-        while self._should_continue_trial(
-            start_time, stimulus.duration + interstimulus_period
-        ):
+        while self._should_continue_trial(start_time, stimulus.duration + interstimulus_period):
             reading = self.get_readings()
 
             if reading:

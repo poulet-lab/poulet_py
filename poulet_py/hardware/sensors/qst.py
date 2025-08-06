@@ -190,16 +190,10 @@ class TCSStimulus(BaseModel):
         return [
             TCSCommand.SURFACE_SELECTION.format(surface_map[self.surface]),
             TCSCommand.BASELINE_TEMPERATURE.format(int(self.baseline * 10)),
-            TCSCommand.TARGET_TEMPERATURE.format(
-                self.surface, int(self.target * 10)
-            ),
-            TCSCommand.STIMULATION_RATE.format(
-                self.surface, int(self.rise_rate * 10)
-            ),
+            TCSCommand.TARGET_TEMPERATURE.format(self.surface, int(self.target * 10)),
+            TCSCommand.STIMULATION_RATE.format(self.surface, int(self.rise_rate * 10)),
             TCSCommand.STIMULATION_DURATION.format(self.surface, self.duration),
-            TCSCommand.RETURN_SPEED.format(
-                self.surface, int(self.return_speed * 10)
-            ),
+            TCSCommand.RETURN_SPEED.format(self.surface, int(self.return_speed * 10)),
         ]
 
 
@@ -248,9 +242,7 @@ class TCS:
         self._stop_event = Event()
         self._write_lock = Lock()
         self._read_lock = Lock()
-        self._thread = Thread(
-            target=self._read_loop, daemon=True, name="TCS Serial Reader"
-        )
+        self._thread = Thread(target=self._read_loop, daemon=True, name="TCS Serial Reader")
         self._current_search = None  # (pattern, event, result)
         self._stimulus = TCSStimulus()
 
@@ -324,9 +316,7 @@ class TCS:
             if self._thread.is_alive():
                 LOGGER.warning("Reader thread did not stop gracefully")
             del self._thread
-            self._thread = Thread(
-                target=self._read_loop, daemon=True, name="TCS Serial Reader"
-            )
+            self._thread = Thread(target=self._read_loop, daemon=True, name="TCS Serial Reader")
             self._stop_event.clear()
 
     def _read_loop(self):
@@ -343,9 +333,7 @@ class TCS:
                         if self._current_search:
                             pattern, event, _ = self._current_search
                             if match := search(pattern, data):
-                                LOGGER.debug(
-                                    f"Matched pattern {pattern.pattern}"
-                                )
+                                LOGGER.debug(f"Matched pattern {pattern.pattern}")
                                 self._current_search = (
                                     pattern,
                                     event,
@@ -383,17 +371,13 @@ class TCS:
             LOGGER.debug(f"Sending command: {command}")
             bytes_written = self._serial.write(command)
             if bytes_written != len(command):
-                LOGGER.warning(
-                    f"Partial write: {bytes_written}/{len(command)} bytes"
-                )
+                LOGGER.warning(f"Partial write: {bytes_written}/{len(command)} bytes")
             return bytes_written
         except Exception as e:
             msg = f"Write operation failed: {e}"
             raise RuntimeError(msg) from e
 
-    def _expect_response(
-        self, pattern: Pattern
-    ) -> tuple[int, Match[str]] | None:
+    def _expect_response(self, pattern: Pattern) -> tuple[int, Match[str]] | None:
         """
         Wait for a response matching the given pattern.
 
@@ -444,9 +428,7 @@ class TCS:
 
         Examples
         --------
-        >>> tcs.execute_command(
-        ...     TCSCommand.READ_INFO, expected_pattern=compile(r"Firmware:(.*)")
-        ... )
+        >>> tcs.execute_command(TCSCommand.READ_INFO, expected_pattern=compile(r"Firmware:(.*)"))
         """
         self.write(command.format(*args))
 
@@ -464,11 +446,7 @@ class TCS:
             If initialization fails
         """
         try:
-            self.write(
-                TCSCommand.SET_MAX_TEMPERATURE.format(
-                    int(self.maximum_temperature * 10)
-                )
-            )
+            self.write(TCSCommand.SET_MAX_TEMPERATURE.format(int(self.maximum_temperature * 10)))
 
             info = self.info()
             match = search(
@@ -548,11 +526,7 @@ class TCS:
             self.write(TCSCommand.TRIGGER_STIMULATION.format())
 
             if self.beep:
-                self.write(
-                    TCSCommand.BUZZER.format(
-                        min(999, self.stimulus.duration // 10), 44
-                    )
-                )
+                self.write(TCSCommand.BUZZER.format(min(999, self.stimulus.duration // 10), 44))
             self.write(
                 TCSCommand.TRIGGER_CHANNEL_DURATION.format(
                     self.trigger_out_channel,
