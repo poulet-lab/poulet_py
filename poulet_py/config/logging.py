@@ -56,9 +56,7 @@ def setup_logging(
     """
     if file is not None:
         file_handler = FileHandler(file)
-        file_handler.setFormatter(
-            Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-        )
+        file_handler.setFormatter(Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
         logger.addHandler(file_handler)
     else:
         console = Console(width=terminal_width) if terminal_width else Console()

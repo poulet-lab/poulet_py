@@ -39,9 +39,7 @@ class BaslerCamera:
         self.cameras = pylon.InstantCameraArray(self.max_cameras)
         for i in range(self.max_cameras):
             self.cameras[i].Attach(tlFactory.CreateDevice(self.devices[i]))
-            print(
-                "Using device", self.cameras[i].GetDeviceInfo().GetModelName()
-            )
+            print("Using device", self.cameras[i].GetDeviceInfo().GetModelName())
 
         self.frames_per_second = None
         self.outs = {}  # VideoWriter objects keyed by camera index
@@ -132,9 +130,7 @@ class BaslerCamera:
             timestamp (float): Timestamp to record.
         """
         try:
-            with open(
-                self.timestamps_files[camera_index], mode="a", newline=""
-            ) as csvfile:
+            with open(self.timestamps_files[camera_index], mode="a", newline="") as csvfile:
                 writer = csv.writer(csvfile)
                 writer.writerow([timestamp])
         except Exception as e:
@@ -173,9 +169,7 @@ class BaslerCamera:
             if not self.cameras.IsGrabbing():
                 return
 
-            grabResult = self.cameras.RetrieveResult(
-                5000, pylon.TimeoutHandling_ThrowException
-            )
+            grabResult = self.cameras.RetrieveResult(5000, pylon.TimeoutHandling_ThrowException)
             camera_index = grabResult.GetCameraContext()
 
             if grabResult.GrabSucceeded():
@@ -206,9 +200,7 @@ class BaslerCamera:
 
         while self.cameras.IsGrabbing():
             try:
-                grabResult = self.cameras.RetrieveResult(
-                    5000, pylon.TimeoutHandling_ThrowException
-                )
+                grabResult = self.cameras.RetrieveResult(5000, pylon.TimeoutHandling_ThrowException)
                 camera_index = grabResult.GetCameraContext()
 
                 if grabResult.GrabSucceeded():
@@ -217,9 +209,7 @@ class BaslerCamera:
 
                     # Resize if requested.
                     if window_width is not None and window_height is not None:
-                        img_bgr = cv2.resize(
-                            img_bgr, (round(window_width), round(window_height))
-                        )
+                        img_bgr = cv2.resize(img_bgr, (round(window_width), round(window_height)))
 
                     window_name = f"Camera {camera_index}"
                     cv2.imshow(window_name, img_bgr)
@@ -294,9 +284,7 @@ class BaslerCamera:
 
         try:
             print("Stream preview started...")
-            time.sleep(
-                5
-            )  # Display the preview for 5 seconds (adjust as needed)
+            time.sleep(5)  # Display the preview for 5 seconds (adjust as needed)
 
             for rec_count in range(total_rec):
                 start_time = time.time()
@@ -341,6 +329,4 @@ class BaslerCamera:
             logging.error(error_message)
         else:
             print(f"An error occurred: {error_message}")
-            print(
-                "Set the error log file path to log the error with set_error_log_path()."
-            )
+            print("Set the error log file path to log the error with set_error_log_path().")
