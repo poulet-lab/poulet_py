@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from poulet_py.config import LOGGER, SETTINGS, Settings, setup_logging
+    from poulet_py.converters.seq import Seq
     from poulet_py.hardware import TCS, TCSCommand, TCSStimulus
     from poulet_py.tools import (
         check_or_create,
@@ -26,6 +27,7 @@ IMPORTS = {
     "TCS": "hardware",
     "TCSCommand": "hardware",
     "TCSStimulus": "hardware",
+    "Seq": "converters.seq",
     "generate_stimulus_sequence": "tools",
     "go_to": "tools",
     "check_or_create": "tools",
@@ -53,6 +55,7 @@ __all__ = [
     "SETTINGS",
     "TCS",
     "Oscilloscope",
+    "Seq",
     "Settings",
     "TCSCommand",
     "TCSInterface",
