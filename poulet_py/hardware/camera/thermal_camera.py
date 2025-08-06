@@ -43,9 +43,7 @@ def py_frame_callback(frame, userptr):
     )
 
     # Ensure frame size is correct
-    if frame.contents.data_bytes != (
-        2 * frame.contents.width * frame.contents.height
-    ):
+    if frame.contents.data_bytes != (2 * frame.contents.width * frame.contents.height):
         return
 
     # Add frame data to queue if not full
@@ -59,9 +57,7 @@ if not platform.system() == "Windows":
 
     BUF_SIZE = 2
     q = Queue(BUF_SIZE)
-    PTR_PY_FRAME_CALLBACK = CFUNCTYPE(None, POINTER(uvc_frame), c_void_p)(
-        py_frame_callback
-    )
+    PTR_PY_FRAME_CALLBACK = CFUNCTYPE(None, POINTER(uvc_frame), c_void_p)(py_frame_callback)
     tiff_frame = 1
     colorMapType = 0
 else:
@@ -122,9 +118,7 @@ class ThermalCamera:
                 exit(1)
 
             try:
-                res = libuvc.uvc_find_device(
-                    ctx, byref(dev), PT_USB_VID, PT_USB_PID, 0
-                )
+                res = libuvc.uvc_find_device(ctx, byref(dev), PT_USB_VID, PT_USB_PID, 0)
                 print(res)
                 if res < 0:
                     print("uvc_find_device error")
@@ -139,9 +133,7 @@ class ThermalCamera:
 
                     print("device opened!")
 
-                    frame_formats = uvc_get_frame_formats_by_guid(
-                        devh, VS_FMT_GUID_Y16
-                    )
+                    frame_formats = uvc_get_frame_formats_by_guid(devh, VS_FMT_GUID_Y16)
                     if len(frame_formats) == 0:
                         print("device does not support Y16")
                         exit(1)
@@ -274,9 +266,7 @@ class ThermalCamera:
         if self.video_format == "hdf5":
             self.hpy_file = h5py.File(self.output_path, "w")
         else:
-            assert False, (
-                "Invalid video format. Please set the video format to 'hdf5'."
-            )
+            assert False, "Invalid video format. Please set the video format to 'hdf5'."
 
     def capture_frame(self):
         """
@@ -286,9 +276,7 @@ class ThermalCamera:
 
         # Warning if hdf5 file is not created
         if self.video_format != "hdf5":
-            assert False, (
-                "Invalid video format. Please set the video format to 'hdf5'."
-            )
+            assert False, "Invalid video format. Please set the video format to 'hdf5'."
 
         if self.windows:
             thermal_image_kelvin_data = self.windows_camera.get_frame()
@@ -296,9 +284,7 @@ class ThermalCamera:
             thermal_image_kelvin_data = q.get(True, 500)
 
         if thermal_image_kelvin_data is not None:
-            thermal_image_celsius_data = (
-                thermal_image_kelvin_data - 27315
-            ) / 100
+            thermal_image_celsius_data = (thermal_image_kelvin_data - 27315) / 100
 
             self.hpy_file.create_dataset(
                 (f"frame{self.frame_number}"), data=thermal_image_celsius_data
@@ -306,9 +292,7 @@ class ThermalCamera:
 
             # get current time
             timestamp = time.time() - self.start_time
-            self.hpy_file.create_dataset(
-                (f"time{self.frame_number}"), data=[timestamp]
-            )
+            self.hpy_file.create_dataset((f"time{self.frame_number}"), data=[timestamp])
 
             self.frame_number += 1
         else:
@@ -330,9 +314,7 @@ class ThermalCamera:
 
         # Warning if hdf5 file is not created
         if self.video_format != "hdf5":
-            assert False, (
-                "Invalid video format. Please set the video format to 'hdf5'."
-            )
+            assert False, "Invalid video format. Please set the video format to 'hdf5'."
 
         print("Starting to grab data")
         try:
@@ -346,9 +328,7 @@ class ThermalCamera:
                     # make an empty frame
                     thermal_image_celsius_data = np.zeros([120, 160])
 
-                thermal_image_celsius_data = (
-                    thermal_image_kelvin_data - 27315
-                ) / 100
+                thermal_image_celsius_data = (thermal_image_kelvin_data - 27315) / 100
 
                 end = func(
                     thermal_image_data=thermal_image_celsius_data,
@@ -439,13 +419,9 @@ class ThermalCamera:
                     if not pressed:
                         try:
                             now = datetime.now()
-                            dt_string = now.strftime(
-                                "day_%d_%m_%Y_time_%H_%M_%S"
-                            )
+                            dt_string = now.strftime("day_%d_%m_%Y_time_%H_%M_%S")
                             print(dt_string)
-                            f = h5py.File(
-                                f"{self.pathset}/{dt_string}.hdf5", "w"
-                            )
+                            f = h5py.File(f"{self.pathset}/{dt_string}.hdf5", "w")
                             f.create_dataset("image", data=data)
                             f = None
                             print("Thermal pic saved as hdf5")
@@ -489,9 +465,7 @@ class ThermalCamera:
         Saves metadata about the recording to a JSON file in the output directory.
         """
         metadata_file_name = f"{self.output_file_name.split('.')[0]}.json"
-        metadata_path = os.path.join(
-            os.path.dirname(self.output_path), metadata_file_name
-        )
+        metadata_path = os.path.join(os.path.dirname(self.output_path), metadata_file_name)
 
         data = {
             "camera": "thermal",
@@ -521,9 +495,7 @@ class ThermalCamera:
             logging.error(error_message)
         else:
             print(f"An error occurred: {error_message}")
-            print(
-                "Set the error log file path to log the error with set_error_log_path()."
-            )
+            print("Set the error log file path to log the error with set_error_log_path().")
 
 
 # imports

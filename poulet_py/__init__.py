@@ -1,34 +1,37 @@
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from poulet_py import hardware, tools
-    from poulet_py.config import LOGGER, SETTINGS
-    from poulet_py.hardware.sensors.qst import TCS, TCSCommand, TCSStimulus
-    from poulet_py.tools.generators import generate_stimulus_sequence
-    from poulet_py.tools.organizational import (
+    from poulet_py.config import LOGGER, SETTINGS, Settings, setup_logging
+    from poulet_py.hardware import TCS, TCSCommand, TCSStimulus
+    from poulet_py.tools import (
         check_or_create,
         define_folder_name,
+        generate_stimulus_sequence,
+        go_to,
+        json_serializer,
         sanitize_path,
+        save_metadata_exp,
     )
-    from poulet_py.tools.serializers import json_serializer, save_metadata_exp
-    from poulet_py.utils.oscilloscope import Oscilloscope
-    from poulet_py.utils.qst import TCSInterface
-
+    from poulet_py.utils import Oscilloscope, TCSInterface
 
 IMPORTS = {
-    "LOGGER": "config.logging",
-    "SETTINGS": "config.settings",
-    "TCS": "hardware.sensors.qst",
-    "TCSCommand": "hardware.sensors.qst",
-    "TCSStimulus": "hardware.sensors.qst",
-    "generate_stimulus_sequence": "tools.generators",
-    "check_or_create": "tools.organizational",
-    "define_folder_name": "tools.organizational",
-    "sanitize_path": "tools.organizational",
-    "json_serializer": "tools.serializers",
-    "save_metadata_exp": "tools.serializers",
-    "Oscilloscope": "utils.oscilloscope",
-    "TCSInterface": "utils.qst",
+    "config": "config",
+    "hardware": "hardware",
+    "tools": "tools",
+    "utils": "utils",
+    "LOGGER": "config",
+    "SETTINGS": "config",
+    "TCS": "hardware",
+    "TCSCommand": "hardware",
+    "TCSStimulus": "hardware",
+    "generate_stimulus_sequence": "tools",
+    "check_or_create": "tools",
+    "define_folder_name": "tools",
+    "sanitize_path": "tools",
+    "json_serializer": "tools",
+    "save_metadata_exp": "tools",
+    "Oscilloscope": "utils",
+    "TCSInterface": "utils",
 }
 
 
@@ -47,16 +50,20 @@ __all__ = [
     "SETTINGS",
     "TCS",
     "Oscilloscope",
+    "Settings",
     "TCSCommand",
     "TCSInterface",
     "TCSStimulus",
     "check_or_create",
+    "config",
     "define_folder_name",
     "generate_stimulus_sequence",
-    "generate_trials",
+    "go_to",
     "hardware",
     "json_serializer",
     "sanitize_path",
     "save_metadata_exp",
+    "setup_logging",
     "tools",
+    "utils",
 ]

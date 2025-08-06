@@ -2,7 +2,7 @@ try:
     from random import shuffle
     from typing import Any, Literal
 except ImportError as e:
-    msg = "Missing 'tools' module. To install it use: pip install poulet_py[tools]"  # noqa: E501
+    msg = "Missing 'tools' module. To install it use: pip install poulet_py[tools]"
     raise ImportError(msg) from e
 
 
