@@ -12,9 +12,7 @@ from poulet_py import Seq
 def sample_seq():
     """Fixture that mocks ONLY Seq.__iter__ with dummy frames."""
     # Generate dummy frames (10 frames of 480x640 uint16)
-    dummy_frames = [
-        random.randint(0, 256, (480, 640), dtype=uint16) for _ in range(10)
-    ]
+    dummy_frames = [random.randint(0, 256, (480, 640), dtype=uint16) for _ in range(10)]
 
     # Create a real Seq instance
     seq = Seq("dummy.seq")

@@ -53,9 +53,9 @@ def __getattr__(name: str) -> Any:
 __all__ = [
     "LOGGER",
     "SETTINGS",
-    "Seq",
     "TCS",
     "Oscilloscope",
+    "Seq",
     "Settings",
     "TCSCommand",
     "TCSInterface",

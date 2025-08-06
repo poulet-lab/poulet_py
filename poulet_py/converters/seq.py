@@ -44,10 +44,7 @@ class Seq(SeqBase):
         list
             List of frames (as ndarray or bytes if unprocessed).
         """
-        return [
-            frame.get_image() if isinstance(frame, Fff) else frame
-            for frame in self
-        ]
+        return [frame.get_image() if isinstance(frame, Fff) else frame for frame in self]
 
     def to_numpy(self, *, dtype: type | None = None) -> ndarray:
         """Convert the sequence to a NumPy array.
@@ -96,9 +93,7 @@ class Seq(SeqBase):
         """
         data = self.to_numpy(dtype=dtype)
         with File(path, mode) as f:
-            ds = f.create_dataset(
-                key, data=data, compression=complib, compression_opts=complevel
-            )
+            ds = f.create_dataset(key, data=data, compression=complib, compression_opts=complevel)
 
             if meta:
                 for k, v in meta.items():
