@@ -18,20 +18,20 @@ The library is organized into three core modules:
 ## Installation
 ### Basic Installation
 ```sh
-pip install -U .
+pip install -U . -c constraints.txt
 ```
 
 ### Optional Dependencies
 Install specific modules:
 ```sh
-pip install -U .[hardware]    # Only hardware dependencies
-pip install -U .[tools,utils] # Tools + utilities
-pip install -U .[all]         # Everything
+pip install -U .[hardware] -c constraints.txt     # Only hardware dependencies
+pip install -U .[tools,utils] -c constraints.txt  # Tools + utilities
+pip install -U .[all] -c constraints.txt          # Everything
 ```
 
 ### Development Mode (Editable Install)
 ```sh
-pip install -U -e .[all]  # For contributors
+pip install -U -e .[all] -c constraints.txt       # For contributors
 ```
 
 ## Configuration
