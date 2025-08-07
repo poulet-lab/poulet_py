@@ -7,12 +7,12 @@ Poulet provides a collection of tools for neuroscience researchers, including:
 * Data analysis utilities
 * Experimental workflow automation
 
-The library is organized into three core modules:
+The library is organized into these core modules:
 
 |Module        |Description|
 | --------     | ------- |
 |**config**    |It contains the SETTINGS and LOGGER constants for loading environmental variables and logging.|
-|**Converters**|For converting different filetypes to common data science (h5, plk, etc.).|
+|**converters**|For converting different filetypes to common data science (h5, plk, etc.).|
 |**hardware**  |Low-level drivers and interfaces for external devices (e.g., amplifiers, stimulator).|
 |**tools**     |Helper functions (serializers, generators, file I/O) – typically class-free.|
 |**utils**     |High-level interactive tools for experiments and data processing.|
