@@ -19,7 +19,6 @@ Missing 'camera' module. Install options:
     raise ImportError(msg) from e
 
 
-
 class BaslerCamera:
     """
     A class to interact with multiple Basler cameras using pypylon and OpenCV.

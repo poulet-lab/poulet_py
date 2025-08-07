@@ -15,6 +15,7 @@ Examples
 ...     readings = tcs.get_readings()
 ...     print(readings)
 """
+
 try:
     from atexit import register
     from enum import Enum
