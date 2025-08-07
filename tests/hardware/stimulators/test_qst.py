@@ -4,7 +4,7 @@ from unittest.mock import Mock, call, patch
 
 import pytest
 
-from poulet_py.hardware.sensors.qst import TCS, TCSCommand, TCSStimulus
+from poulet_py import TCS, TCSCommand, TCSStimulus
 
 
 # Fixtures

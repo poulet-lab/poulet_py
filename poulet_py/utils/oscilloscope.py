@@ -10,7 +10,12 @@ try:
     from numpy import arange, array, column_stack, ndarray
     from pandas import DataFrame
 except ImportError as e:
-    msg = "Missing 'osc' module. To install it use: pip install poulet_py[osc]"
+    msg = """
+Missing 'camera' module. Install options:
+- Dedicated:    pip install poulet_py[osc]
+- Module:       pip install poulet_py[utils]
+- Full:         pip install poulet_py[all]
+"""
     raise ImportError(msg) from e
 
 
@@ -165,7 +170,7 @@ class Oscilloscope:
             self._x.clear()
             self._y.clear()
 
-    def _update(self, frame) -> list[LineCollection]:
+    def _update(self) -> list[LineCollection]:
         """Internal animation update handler.
 
         Parameters
@@ -186,7 +191,7 @@ class Oscilloscope:
             new_legend_handles = []
 
             for i, col in enumerate(y.columns):
-                segments.append(column_stack([x, y[col].values]))
+                segments.append(column_stack((x, y[col].values)))
                 colors.append(self._color_cycle[i % len(self._color_cycle)])
 
                 # Create proxy artist for legend

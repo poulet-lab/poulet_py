@@ -6,12 +6,17 @@ try:
     from pandas import DataFrame
     from tqdm import tqdm
 
-    from poulet_py.hardware.sensors.qst import TCS, TCSStimulus
+    from poulet_py.hardware.stimulator.qst import TCS, TCSStimulus
     from poulet_py.tools.generators import generate_stimulus_sequence
     from poulet_py.utils.oscilloscope import Oscilloscope
 
 except ImportError as e:
-    msg = "Missing 'qst' module. To install it use: pip install poulet_py[qst]"
+    msg = """
+Missing 'camera' module. Install options:
+- Dedicated:    pip install poulet_py[osc, qst]
+- Module:       pip install poulet_py[utils]
+- Full:         pip install poulet_py[all]
+"""
     raise ImportError(msg) from e
 
 
@@ -89,14 +94,14 @@ class TCSInterface(TCS):
             response_timeout=response_timeout,
         )
 
-        self.interstimulus_period = interstimulus_period
-        self.n_trials = n_trials
-        self.mode = mode
+        self.interstimulus_period: int | list[int] = interstimulus_period
+        self.n_trials: int = n_trials
+        self.mode: Literal["random", "fixed"] = mode
 
-        self._stimuli = []
-        if self.stimuli is not None:
+        if stimuli is not None:
             self.stimuli = stimuli
 
+        self._stimuli: list[TCSStimulus] = []
         self._readings: list[dict[str, float | int]] = []
         self._oscilloscope: Oscilloscope | None = None
 
@@ -153,7 +158,7 @@ class TCSInterface(TCS):
         """Clear the stimulus sequence."""
         self._stimulus = []
 
-    def run(self, plot: bool = False, max_plot_samples: int = 1000) -> list[dict]:
+    def run(self, *, plot: bool = False, max_plot_samples: int = 1000) -> list[dict]:
         """
         Execute the configured experiment.
 
@@ -182,13 +187,13 @@ class TCSInterface(TCS):
         - trial: Trial number
         - Other relevant parameters
         """
-        self._setup_run(plot, max_plot_samples)
+        self._setup_run(plot=plot, max_plot_samples=max_plot_samples)
 
         try:
             for idx, stimulus in tqdm(enumerate(self.stimuli), total=self.n_trials):
                 self._execute_trial(idx, stimulus)
         finally:
-            self._cleanup_run(plot)
+            self._cleanup_run()
 
         return self._readings
 
@@ -211,7 +216,7 @@ class TCSInterface(TCS):
         data.set_index("timestamp", inplace=True)
         return data
 
-    def _setup_run(self, plot: bool = False, max_plot_samples: int = 1000) -> None:
+    def _setup_run(self, *, plot: bool = False, max_plot_samples: int = 1000) -> None:
         """Initialize experiment run."""
         if not self.stimuli:
             msg = "Stimuli must be set before running the experiment"
@@ -238,7 +243,7 @@ class TCSInterface(TCS):
         self.trigger()
 
         interstimulus_period = self._get_interstimulus_period()
-        start_time = time() * 1000
+        start_time = int(time() * 1000)
 
         while self._should_continue_trial(start_time, stimulus.duration + interstimulus_period):
             reading = self.get_readings()
@@ -258,7 +263,7 @@ class TCSInterface(TCS):
             self._oscilloscope = None
         self.close()
 
-    def _handle_plotting(self, reading: dict) -> float:
+    def _handle_plotting(self, reading: dict) -> None:
         """Update the real-time plot if enabled."""
         if self._oscilloscope is not None:
             timestamp = reading.pop("timestamp")

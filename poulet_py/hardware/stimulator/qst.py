@@ -16,16 +16,25 @@ Examples
 ...     print(readings)
 """
 
-from atexit import register
-from enum import Enum
-from re import Match, Pattern, compile, match, search
-from threading import Event, Lock, Thread
-from time import time_ns
+try:
+    from atexit import register
+    from enum import Enum
+    from re import Match, Pattern, compile, match, search
+    from threading import Event, Lock, Thread
+    from time import time_ns
 
-from pydantic import BaseModel, Field
-from serial import Serial
+    from pydantic import BaseModel, Field
+    from serial import Serial
 
-from poulet_py.config.logging import LOGGER
+    from poulet_py.config.logging import LOGGER
+except ImportError as e:
+    msg = """
+Missing 'qst' module. Install options:
+- Dedicated:    pip install poulet_py[qst]
+- Module:       pip install poulet_py[hardware]
+- Full:         pip install poulet_py[all]
+"""
+    raise ImportError(msg) from e
 
 
 class TCSCommand(bytes, Enum):

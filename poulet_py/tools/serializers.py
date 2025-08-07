@@ -8,7 +8,11 @@ try:
     from deprecated import deprecated
     from orjson import OPT_INDENT_2, OPT_SERIALIZE_NUMPY, JSONEncodeError, dumps
 except ImportError as e:
-    msg = "Missing 'tools' module. To install it use: pip install poulet_py[tools]"
+    msg = """
+Missing 'tools' module. Install options:
+- Module:       pip install poulet_py[tools]
+- Full:         pip install poulet_py[all]
+"""
     raise ImportError(msg) from e
 
 

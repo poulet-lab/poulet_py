@@ -1,9 +1,18 @@
-import csv
-import logging
-import os
-import time
+try:
+    import csv
+    import logging
+    import os
+    import time
 
-import serial
+    import serial
+except ImportError as e:
+    msg = """
+Missing 'arduino' module. Install options:
+- Dedicated:    pip install poulet_py[arduino]
+- Module:       pip install poulet_py[hardware]
+- Full:         pip install poulet_py[all]
+"""
+    raise ImportError(msg) from e
 
 
 class Arduino:

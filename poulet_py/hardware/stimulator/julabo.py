@@ -1,8 +1,18 @@
-import csv
-import os
-import time
+try:
+    import csv
+    import os
+    import time
 
-import serial
+    import serial
+    from dotenv import find_dotenv, load_dotenv
+except ImportError as e:
+    msg = """
+Missing 'julabo' module. Install options:
+- Dedicated:    pip install poulet_py[julabo]
+- Module:       pip install poulet_py[hardware]
+- Full:         pip install poulet_py[all]
+"""
+    raise ImportError(msg) from e
 
 
 class JulaboChiller:
@@ -19,9 +29,6 @@ class JulaboChiller:
         """
         if port is None:
             # check in env cariable
-            import os
-
-            from dotenv import find_dotenv, load_dotenv
 
             dotenv_path = find_dotenv(usecwd=True)
             load_dotenv(dotenv_path)

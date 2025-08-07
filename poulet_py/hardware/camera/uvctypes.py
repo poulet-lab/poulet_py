@@ -1,5 +1,14 @@
-import platform
-from ctypes import *
+try:
+    import platform
+    from ctypes import *
+except ImportError as e:
+    msg = """
+Missing 'camera' module. Install options:
+- Dedicated:    pip install poulet_py[camera]
+- Module:       pip install poulet_py[hardware]
+- Full:         pip install poulet_py[all]
+"""
+    raise ImportError(msg) from e
 
 try:
     if platform.system() == "Darwin":

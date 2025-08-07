@@ -1,12 +1,22 @@
-from pathlib import Path
-from pickle import HIGHEST_PROTOCOL
-from typing import Any
+try:
+    from pathlib import Path
+    from pickle import HIGHEST_PROTOCOL
+    from typing import Any
 
-from flirpy.io.fff import Fff
-from flirpy.io.seq import Seq as SeqBase
-from h5py import File
-from numpy import array, ndarray
-from pandas._typing import CompressionOptions
+    from flirpy.io.fff import Fff
+    from flirpy.io.seq import Seq as SeqBase
+    from h5py import File
+    from numpy import array, ndarray
+    from pandas._typing import CompressionOptions
+    from pandas.io.pickle import to_pickle as pd_to_pickle
+except ImportError as e:
+    msg = """
+Missing 'seq' module. Install options:
+- Dedicated:    pip install poulet_py[seq]
+- Module:       pip install poulet_py[converters]
+- Full:         pip install poulet_py[all]
+"""
+    raise ImportError(msg) from e
 
 
 class Seq(SeqBase):
@@ -134,6 +144,4 @@ class Seq(SeqBase):
             Pickle protocol version.
         """
         data = self.to_numpy(dtype=dtype)
-        from pandas.io.pickle import to_pickle
-
-        to_pickle(data, path, compression=compression, protocol=protocol)
+        pd_to_pickle(data, path, compression=compression, protocol=protocol)

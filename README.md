@@ -11,7 +11,9 @@ The library is organized into three core modules:
 
 |Module        |Description|
 | --------     | ------- |
-|**hardware**  |Low-level drivers and interfaces for external devices (e.g., amplifiers, stimulators).|
+|**config**    |It contains the SETTINGS and LOGGER constants for loading environmental variables and logging.|
+|**Converters**|For converting different filetypes to common data science (h5, plk, etc.).|
+|**hardware**  |Low-level drivers and interfaces for external devices (e.g., amplifiers, stimulator).|
 |**tools**     |Helper functions (serializers, generators, file I/O) – typically class-free.|
 |**utils**     |High-level interactive tools for experiments and data processing.|
 
