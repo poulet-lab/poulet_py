@@ -1,17 +1,19 @@
-from inspect import stack
-from os import chdir
-
-from poulet_py.config.logging import LOGGER
-
 try:
     from datetime import datetime, timezone
-    from os import makedirs
+    from inspect import stack
+    from os import chdir, makedirs
     from pathlib import Path
     from re import sub
 
     from deprecated import deprecated
+
+    from poulet_py.config.logging import LOGGER
 except ImportError as e:
-    msg = "Missing 'tools' module. To install it use: pip install poulet_py[tools]"
+    msg = """
+Missing 'tools' module. Install options:
+- Module:       pip install poulet_py[tools]
+- Full:         pip install poulet_py[all]
+"""
     raise ImportError(msg) from e
 
 

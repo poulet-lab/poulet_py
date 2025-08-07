@@ -25,6 +25,7 @@ classifiers = [
 ]
 
 dependencies = [
+  "lazy_loader",
   "pydantic",
   "pydantic-settings",
   "python-dotenv",
@@ -50,7 +51,16 @@ constraints-file = "constraints.txt"
 
 [project.optional-dependencies]
 ## Main modules ##
-hardware = [
+hardware = ["poulet_py[camera, arduino, julabo, qst]"]
+converters = ["poulet_py[seq]"]
+tools = ["orjson"]
+utils = ["poulet_py[qst, osc]"]
+## Sub-modules ##
+# optional, define them on their corresponding module
+# Converters
+seq = ["flirpy", "zstd", "pandas", "tqdm", "pillow", "h5py"]
+# Hardware
+camera = [
   "pypylon",
   "opencv-python",
   "numpy",
@@ -60,19 +70,14 @@ hardware = [
   "keyboard",
   "pywin32; platform_system == 'Windows'",
   "pythonnet",
-  "poulet_py[qst]",
 ]
-converters = ["flirpy", "zstd", "pandas"]
-tools = ["orjson"]
-utils = ["poulet_py[qst]", "poulet_py[oscilloscope]"]
-## Sub-modules ##
-# optional, define them on their corresponding module
-# Hardware
+arduino = ["pyserial"]
+julabo = ["pyserial"]
 qst = ["pandas", "tqdm", "pyserial"]
 # Tools
 
 # Utils
-oscilloscope = ["pandas", "matplotlib", "numpy"]
+osc = ["pandas", "matplotlib", "numpy"]
 # Install all modules
 all = ["poulet_py[hardware, converters, tools, utils]"]
 

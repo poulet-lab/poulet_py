@@ -1,13 +1,23 @@
-import csv
-import datetime
-import json
-import logging
-import os
-import time
-from typing import Literal
+try:
+    import csv
+    import datetime
+    import json
+    import logging
+    import os
+    import time
+    from typing import Literal
 
-import cv2
-from pypylon import pylon
+    import cv2
+    from pypylon import pylon
+except ImportError as e:
+    msg = """
+Missing 'camera' module. Install options:
+- Dedicated:    pip install poulet_py[camera]
+- Module:       pip install poulet_py[hardware]
+- Full:         pip install poulet_py[all]
+"""
+    raise ImportError(msg) from e
+
 
 
 class BaslerCamera:

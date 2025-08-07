@@ -18,7 +18,7 @@ with patch.dict(
         "pandas": MagicMock(),
     },
 ):
-    from poulet_py.utils.oscilloscope import Oscilloscope
+    from poulet_py import Oscilloscope
 
 
 @pytest.fixture
