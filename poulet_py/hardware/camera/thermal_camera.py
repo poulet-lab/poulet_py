@@ -296,7 +296,6 @@ class ThermalCamera:
         else:
             print("Thermal data is none")
 
-
     def export_frame_to_png(self, path, file_name, colormap="coolwarm"):
         """Save all frames from the current HDF5 recording as PNG images."""
 
@@ -306,9 +305,7 @@ class ThermalCamera:
 
             for frame_name in frame_keys:
                 frame_data = f[frame_name][()]
-                png_filename = os.path.join(
-                    path, f"{file_name}_{frame_name}.png"
-                )
+                png_filename = os.path.join(path, f"{file_name}_{frame_name}.png")
 
                 fig, ax = plt.subplots(figsize=(8, 6))
                 im = ax.imshow(
@@ -322,7 +319,6 @@ class ThermalCamera:
                 plt.tight_layout()
                 plt.savefig(png_filename, bbox_inches="tight")
                 plt.close(fig)
-
 
     def grab_data_func(self, func, **kwargs):
         """
