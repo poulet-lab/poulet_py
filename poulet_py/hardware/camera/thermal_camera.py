@@ -60,12 +60,12 @@ try:
         tiff_frame = 1
         colorMapType = 0
 
-        # Initialize COM
-        pythoncom.CoInitialize()
-
+    else:
         folder = "x64" if platform.architecture()[0] == "64bit" else "x86"
-        path = os.path.sep.join(__file__.split(os.path.sep)[:-1])
-        sys.path.append(os.path.sep.join([path, folder]))
+        path = os.path.sep.join(__file__.split(os.path.sep)[:-4])
+        sys.path.append(os.path.sep.join([path, "bin", "leptonUVC", folder]))
+        print(path)
+        print(os.path.sep.join([path, "bin", folder]))
         clr.AddReference("LeptonUVC")
         clr.AddReference("ManagedIR16Filters")
 
@@ -79,8 +79,6 @@ try:
         # Register signal handlers for clean exit
         signal.signal(signal.SIGINT, handle_exit)
         signal.signal(signal.SIGTERM, handle_exit)
-
-    else:
         import pythoncom
 except ImportError as e:
     msg = """
@@ -114,6 +112,7 @@ class ThermalCamera:
 
         self.shutter_manual = False
 
+        self.windows = False
         # Check whether we are in Windows
         if platform.system() == "Windows":
             self.windows = True
@@ -326,6 +325,30 @@ class ThermalCamera:
         else:
             print("Thermal data is none")
 
+    def export_frame_to_png(self, path, file_name, colormap="coolwarm"):
+        """Save all frames from the current HDF5 recording as PNG images."""
+
+        with h5py.File(self.output_path, "r") as f:
+            frame_keys = list(f.keys())
+            frame_keys.sort(key=lambda x: int(x.replace("frame", "")))
+
+            for frame_name in frame_keys:
+                frame_data = f[frame_name][()]
+                png_filename = os.path.join(path, f"{file_name}_{frame_name}.png")
+
+                fig, ax = plt.subplots(figsize=(8, 6))
+                im = ax.imshow(
+                    frame_data,
+                    cmap=colormap,
+                    vmin=self.vminT,
+                    vmax=self.vmaxT,
+                )
+                fig.colorbar(im, ax=ax, label="Temperature (°C)")
+                ax.axis("off")
+                plt.tight_layout()
+                plt.savefig(png_filename, bbox_inches="tight")
+                plt.close(fig)
+
     def grab_data_func(self, func, **kwargs):
         """
         Grabs data from the thermal camera and processes it using the provided function.
@@ -469,7 +492,7 @@ class ThermalCamera:
 
                 elif keyboard.is_pressed("e"):
                     if not pressed:
-                        print("We are done")
+                        print("Exiting live plot")
                         break
 
                 else:
@@ -548,6 +571,10 @@ class CameraWindows:
         Initialize the camera and start capturing frames.
         """
         devices = []
+        
+        pythoncom.CoInitialize()
+        time.sleep(1)
+
         for i in self.CCI.GetDevices():
             if i.Name.startswith("PureThermal"):
                 devices.append(i)
@@ -598,7 +625,7 @@ class CameraWindows:
 
         self.device.sys.SetFfcShutterModeObj(new_shutter_mode_obj)
 
-    def perform_manualff(self):
+    def perform_manual_ffc(self):
         """
         Perform a manual flat field correction.
         """
