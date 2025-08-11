@@ -571,7 +571,7 @@ class CameraWindows:
         Initialize the camera and start capturing frames.
         """
         devices = []
-        
+
         pythoncom.CoInitialize()
         time.sleep(1)
 
