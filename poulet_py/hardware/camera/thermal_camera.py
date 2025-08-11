@@ -641,7 +641,7 @@ class CameraWindows:
 
         self.device.sys.SetFfcShutterModeObj(new_shutter_mode_obj)
 
-    def perform_manualff(self):
+    def perform_manual_ffc(self):
         """
         Perform a manual flat field correction.
         """
