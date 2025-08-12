@@ -2,13 +2,13 @@ try:
     import csv
     import datetime
     import json
-    import logging
     import os
     import time
     from typing import Literal
 
     import cv2
     from pypylon import pylon
+    from poulet_py.config.logging import LOGGER, setup_logging
 except ImportError as e:
     msg = """
 Missing 'camera' module. Install options:
@@ -48,7 +48,9 @@ class BaslerCamera:
         self.cameras = pylon.InstantCameraArray(self.max_cameras)
         for i in range(self.max_cameras):
             self.cameras[i].Attach(tlFactory.CreateDevice(self.devices[i]))
-            print("Using device", self.cameras[i].GetDeviceInfo().GetModelName())
+            LOGGER.info(
+                f"Using device {self.cameras[i].GetDeviceInfo().GetModelName()}"
+            )
 
         self.frames_per_second = None
         self.outs = {}  # VideoWriter objects keyed by camera index
@@ -83,6 +85,8 @@ class BaslerCamera:
             file_name (str): Name of the error log file.
         """
         self.error_log_file = os.path.join(path, file_name)
+        self._file_logger = LOGGER.getChild(f"hardware.camera.basler.{id(self)}")
+        setup_logging(self._file_logger, level="error", file=self.error_log_file)
 
     def set_output_file(self, path, extra_name, base_file_name="basler-camera"):
         """
@@ -155,7 +159,7 @@ class BaslerCamera:
             if not cam.IsOpen():
                 cam.Open()
         self.cameras.StartGrabbing()
-        print("Started streaming on all cameras.")
+        LOGGER.info("Started streaming on all cameras.")
 
     def stop_streaming(self):
         """
@@ -167,7 +171,7 @@ class BaslerCamera:
                 cam.Close()
             if i in self.outs and self.outs[i] is not None:
                 self.outs[i].release()
-        print("Stopped streaming and closed all cameras.")
+        LOGGER.info("Stopped streaming and closed all cameras.")
 
     def capture_frame(self):
         """
@@ -205,7 +209,7 @@ class BaslerCamera:
             window_width (int, optional): Width to resize the window.
             window_height (int, optional): Height to resize the window.
         """
-        print("Press 'e' to quit the video stream.")
+        LOGGER.info("Press 'e' to quit the video stream.")
 
         while self.cameras.IsGrabbing():
             try:
@@ -292,12 +296,12 @@ class BaslerCamera:
         self.start_streaming()
 
         try:
-            print("Stream preview started...")
+            LOGGER.info("Stream preview started...")
             time.sleep(5)  # Display the preview for 5 seconds (adjust as needed)
 
             for rec_count in range(total_rec):
                 start_time = time.time()
-                print("Recording started....")
+                LOGGER.info("Recording started....")
 
                 current_time = datetime.datetime.now().strftime("%H%M%S")
                 self.set_output_file(
@@ -306,36 +310,27 @@ class BaslerCamera:
                 )
 
                 try:
-                    print("Starting capture...")
+                    LOGGER.info("Starting capture...")
                     self.set_timer(start_time)
-                    print("Recording finished")
+                    LOGGER.info("Recording finished")
 
                 except Exception as e:
-                    print(f"Error during capture: {e}")
+                    LOGGER.exception("Error during capture")
 
                 finally:
-                    print(f"Frames captured: {self.frame_number}")
+                    LOGGER.info(f"Frames captured: {self.frame_number}")
                     self.save_metadata()
 
                     # Buffer period before the next recording
                     if rec_count < total_rec - 1:
-                        print("Buffer period")
+                        LOGGER.info("Buffer period")
                         time.sleep(buffer_s)
 
         finally:
             self.stop_streaming()
 
-    @staticmethod
     def log_error(self, error_message):
-        """
-        Logs an error message to the error log file if set;
-        otherwise, prints the error.
-
-        Args:
-            error_message: The error message or exception.
-        """
-        if self.error_log_file:
-            logging.error(error_message)
-        else:
-            print(f"An error occurred: {error_message}")
-            print("Set the error log file path to log the error with set_error_log_path().")
+        LOGGER.error(error_message)
+        file_logger = getattr(self, "_file_logger", None)
+        if file_logger is not None:
+            file_logger.error(error_message)

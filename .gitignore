@@ -31,3 +31,4 @@ target/
 coverage.*
 example.sqlite
 .env
+.cursor*

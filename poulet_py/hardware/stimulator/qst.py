@@ -13,7 +13,8 @@ Examples
 ...     tcs.stimulus = stimulus
 ...     tcs.trigger()
 ...     readings = tcs.get_readings()
-...     print(readings)
+...     from poulet_py.config.logging import LOGGER
+...     LOGGER.info(readings)
 """
 
 try:

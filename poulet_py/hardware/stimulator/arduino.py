@@ -1,10 +1,10 @@
 try:
     import csv
-    import logging
     import os
     import time
 
     import serial
+    from poulet_py.config.logging import LOGGER, setup_logging
 except ImportError as e:
     msg = """
 Missing 'arduino' module. Install options:
@@ -52,7 +52,7 @@ class Arduino:
 
             except Exception as e:
                 self.arduinos[key]["last_value"] = float("nan")
-                print(f"Exception from arduino read_data method: {e}")
+                LOGGER.exception("Exception from arduino read_data method")
                 self.log_error(f"Exception from arduino {key} read_data method: {e}")
 
     def set_error_log_path(self, folder_path, error_file_name):
@@ -63,7 +63,9 @@ class Arduino:
             folder_path (str): Path to the folder where the error log will be stored.
             error_file_name (str): Name of the error log file.
         """
-        self.error_log_path = os.path.join(folder_path, error_file_name)
+        self.error_log_file = os.path.join(folder_path, error_file_name)
+        self._file_logger = LOGGER.getChild(f"hardware.stimulator.arduino.{id(self)}")
+        setup_logging(self._file_logger, level="error", file=self.error_log_file)
 
     def set_output_file(self, path, extra_name, data_columns=["data"], base_file_name="arduino"):
         """
@@ -117,19 +119,14 @@ class Arduino:
         for key in self.arduinos.keys():
             try:
                 self.arduinos[key]["arduino"].close()
-                print(f"Closed connection on port {self.arduinos[key]['port']}")
+                LOGGER.info(f"Closed connection on port {self.arduinos[key]['port']}")
             except Exception as e:
                 self.log_error(
                     f"Error closing connection on port {self.arduinos[key]['port']}: {e}"
                 )
 
-    @staticmethod
     def log_error(self, error_message):
-        """
-        Logs an error message to the error log file.
-        """
-        if self.error_log_file is not None:
-            logging.error(error_message)
-        else:
-            print(f"An error occurred: {error_message}")
-            print("Set the error log file path to log the error with set_error_log_path().")
+        LOGGER.error(error_message)
+        file_logger = getattr(self, "_file_logger", None)
+        if file_logger is not None:
+            file_logger.error(error_message)
