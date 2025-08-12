@@ -14,6 +14,7 @@ Examples
 ...     tcs.trigger()
 ...     readings = tcs.get_readings()
 ...     from poulet_py.config.logging import LOGGER
+...
 ...     LOGGER.info(readings)
 """
 

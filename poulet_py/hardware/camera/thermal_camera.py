@@ -21,10 +21,11 @@ try:
     import json
     import signal
     import sys
-    from poulet_py.config.logging import LOGGER, setup_logging
 
     import clr
     from scipy import ndimage
+
+    from poulet_py.config.logging import LOGGER, setup_logging
 
     def py_frame_callback(frame, userptr):
         """

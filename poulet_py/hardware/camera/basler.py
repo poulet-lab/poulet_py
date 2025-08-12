@@ -8,6 +8,7 @@ try:
 
     import cv2
     from pypylon import pylon
+
     from poulet_py.config.logging import LOGGER, setup_logging
 except ImportError as e:
     msg = """
@@ -44,9 +45,7 @@ class BaslerCamera:
         self.cameras = pylon.InstantCameraArray(self.max_cameras)
         for i in range(self.max_cameras):
             self.cameras[i].Attach(tlFactory.CreateDevice(self.devices[i]))
-            LOGGER.info(
-                f"Using device {self.cameras[i].GetDeviceInfo().GetModelName()}"
-            )
+            LOGGER.info(f"Using device {self.cameras[i].GetDeviceInfo().GetModelName()}")
 
         self.frames_per_second = None
         self.outs = {}  # VideoWriter objects keyed by camera index
@@ -296,7 +295,7 @@ class BaslerCamera:
                     self.set_timer(start_time)
                     LOGGER.info("Recording finished")
 
-                except Exception as e:
+                except Exception:
                     LOGGER.exception("Error during capture")
 
                 finally:
