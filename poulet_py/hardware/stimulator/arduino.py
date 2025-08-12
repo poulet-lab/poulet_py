@@ -4,6 +4,7 @@ try:
     import time
 
     import serial
+
     from poulet_py.config.logging import LOGGER, setup_logging
 except ImportError as e:
     msg = """

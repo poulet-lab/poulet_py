@@ -5,6 +5,7 @@ try:
 
     import serial
     from dotenv import find_dotenv, load_dotenv
+
     from poulet_py.config.logging import LOGGER
 except ImportError as e:
     msg = """
