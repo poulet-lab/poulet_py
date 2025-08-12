@@ -2,15 +2,12 @@ from logging import DEBUG, FileHandler, _nameToLevel, getLogger
 
 from rich.logging import RichHandler
 
-from poulet_py.config.logging import LOGGER, setup_logging
-from poulet_py.config.settings import SETTINGS
+from poulet_py import LOGGER, SETTINGS, setup_logging
 
 
 def test_setup_logging_with_file_handler(tmpdir):
     logger = getLogger("test_logger_file")
-    setup_logging(
-        logger=logger, level="debug", file=str(tmpdir.join("test.log"))
-    )
+    setup_logging(logger=logger, level="debug", file=str(tmpdir.join("test.log")))
 
     assert len(logger.handlers) == 1
     assert isinstance(logger.handlers[0], FileHandler)

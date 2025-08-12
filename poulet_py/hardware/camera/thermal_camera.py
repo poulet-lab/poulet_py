@@ -1,71 +1,93 @@
-import os
-import platform
-import time
-from datetime import datetime
-
-import h5py
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-import numpy as np
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-
 try:
-    import keyboard
-except ImportError:
-    pass
-try:
-    from queue import Queue
-except ImportError:
-    from Queue import Queue
-import json
-import logging
-import signal
-import sys
+    import os
+    import platform
+    import time
+    from datetime import datetime
 
-import clr
-from scipy import ndimage
+    import h5py
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
 
+    try:
+        import keyboard
+    except ImportError:
+        pass
+    try:
+        from queue import Queue
+    except ImportError:
+        from Queue import Queue
+    import json
+    import logging
+    import signal
+    import sys
 
-def py_frame_callback(frame, userptr):
-    """
-    Callback function to handle frames from the camera.
+    import clr
+    from scipy import ndimage
 
-    Args:
-        frame: The frame data from the camera.
-        userptr: User pointer.
-    """
-    array_pointer = cast(
-        frame.contents.data,
-        POINTER(c_uint16 * (frame.contents.width * frame.contents.height)),
-    )
-    data = np.frombuffer(array_pointer.contents, dtype=np.uint16).reshape(
-        frame.contents.height, frame.contents.width
-    )
+    def py_frame_callback(frame, userptr):
+        """
+        Callback function to handle frames from the camera.
 
-    # Ensure frame size is correct
-    if frame.contents.data_bytes != (
-        2 * frame.contents.width * frame.contents.height
-    ):
-        return
+        Args:
+            frame: The frame data from the camera.
+            userptr: User pointer.
+        """
+        array_pointer = cast(
+            frame.contents.data,
+            POINTER(c_uint16 * (frame.contents.width * frame.contents.height)),
+        )
+        data = np.frombuffer(array_pointer.contents, dtype=np.uint16).reshape(
+            frame.contents.height, frame.contents.width
+        )
 
-    # Add frame data to queue if not full
-    if not q.full():
-        q.put(data)
+        # Ensure frame size is correct
+        if frame.contents.data_bytes != (2 * frame.contents.width * frame.contents.height):
+            return
 
+        # Add frame data to queue if not full
+        if not q.full():
+            q.put(data)
 
-# Check whether we are in Windows
-if not platform.system() == "Windows":
-    from uvctypes import *
+    # Check whether we are in Windows
+    if not platform.system() == "Windows":
+        from poulet_py.hardware.camera.uvctypes import *
 
-    BUF_SIZE = 2
-    q = Queue(BUF_SIZE)
-    PTR_PY_FRAME_CALLBACK = CFUNCTYPE(None, POINTER(uvc_frame), c_void_p)(
-        py_frame_callback
-    )
-    tiff_frame = 1
-    colorMapType = 0
-else:
-    import pythoncom
+        BUF_SIZE = 2
+        q = Queue(BUF_SIZE)
+        PTR_PY_FRAME_CALLBACK = CFUNCTYPE(None, POINTER(uvc_frame), c_void_p)(py_frame_callback)
+        tiff_frame = 1
+        colorMapType = 0
+
+    else:
+        folder = "x64" if platform.architecture()[0] == "64bit" else "x86"
+        path = os.path.sep.join(__file__.split(os.path.sep)[:-4])
+        sys.path.append(os.path.sep.join([path, "bin", "leptonUVC", folder]))
+        print(path)
+        print(os.path.sep.join([path, "bin", folder]))
+        clr.AddReference("LeptonUVC")
+        clr.AddReference("ManagedIR16Filters")
+
+        from IR16Filters import IR16Capture, NewBytesFrameEvent
+        from Lepton import CCI
+
+        def handle_exit(sig, frame):
+            print("Exiting and cleaning up...")
+            pythoncom.CoUninitialize()
+
+        # Register signal handlers for clean exit
+        signal.signal(signal.SIGINT, handle_exit)
+        signal.signal(signal.SIGTERM, handle_exit)
+        import pythoncom
+except ImportError as e:
+    msg = """
+Missing 'camera' module. Install options:
+- Dedicated:    pip install poulet_py[camera]
+- Module:       pip install poulet_py[hardware]
+- Full:         pip install poulet_py[all]
+"""
+    raise ImportError(msg) from e
 
 
 class ThermalCamera:
@@ -90,6 +112,7 @@ class ThermalCamera:
 
         self.shutter_manual = False
 
+        self.windows = False
         # Check whether we are in Windows
         if platform.system() == "Windows":
             self.windows = True
@@ -122,9 +145,7 @@ class ThermalCamera:
                 exit(1)
 
             try:
-                res = libuvc.uvc_find_device(
-                    ctx, byref(dev), PT_USB_VID, PT_USB_PID, 0
-                )
+                res = libuvc.uvc_find_device(ctx, byref(dev), PT_USB_VID, PT_USB_PID, 0)
                 print(res)
                 if res < 0:
                     print("uvc_find_device error")
@@ -139,9 +160,7 @@ class ThermalCamera:
 
                     print("device opened!")
 
-                    frame_formats = uvc_get_frame_formats_by_guid(
-                        devh, VS_FMT_GUID_Y16
-                    )
+                    frame_formats = uvc_get_frame_formats_by_guid(devh, VS_FMT_GUID_Y16)
                     if len(frame_formats) == 0:
                         print("device does not support Y16")
                         exit(1)
@@ -274,9 +293,7 @@ class ThermalCamera:
         if self.video_format == "hdf5":
             self.hpy_file = h5py.File(self.output_path, "w")
         else:
-            assert False, (
-                "Invalid video format. Please set the video format to 'hdf5'."
-            )
+            assert False, "Invalid video format. Please set the video format to 'hdf5'."
 
     def capture_frame(self):
         """
@@ -286,9 +303,7 @@ class ThermalCamera:
 
         # Warning if hdf5 file is not created
         if self.video_format != "hdf5":
-            assert False, (
-                "Invalid video format. Please set the video format to 'hdf5'."
-            )
+            assert False, "Invalid video format. Please set the video format to 'hdf5'."
 
         if self.windows:
             thermal_image_kelvin_data = self.windows_camera.get_frame()
@@ -296,9 +311,7 @@ class ThermalCamera:
             thermal_image_kelvin_data = q.get(True, 500)
 
         if thermal_image_kelvin_data is not None:
-            thermal_image_celsius_data = (
-                thermal_image_kelvin_data - 27315
-            ) / 100
+            thermal_image_celsius_data = (thermal_image_kelvin_data - 27315) / 100
 
             self.hpy_file.create_dataset(
                 (f"frame{self.frame_number}"), data=thermal_image_celsius_data
@@ -306,13 +319,35 @@ class ThermalCamera:
 
             # get current time
             timestamp = time.time() - self.start_time
-            self.hpy_file.create_dataset(
-                (f"time{self.frame_number}"), data=[timestamp]
-            )
+            self.hpy_file.create_dataset((f"time{self.frame_number}"), data=[timestamp])
 
             self.frame_number += 1
         else:
             print("Thermal data is none")
+
+    def export_frame_to_png(self, path, file_name, colormap="coolwarm"):
+        """Save all frames from the current HDF5 recording as PNG images."""
+
+        with h5py.File(self.output_path, "r") as f:
+            frame_keys = list(f.keys())
+            frame_keys.sort(key=lambda x: int(x.replace("frame", "")))
+
+            for frame_name in frame_keys:
+                frame_data = f[frame_name][()]
+                png_filename = os.path.join(path, f"{file_name}_{frame_name}.png")
+
+                fig, ax = plt.subplots(figsize=(8, 6))
+                im = ax.imshow(
+                    frame_data,
+                    cmap=colormap,
+                    vmin=self.vminT,
+                    vmax=self.vmaxT,
+                )
+                fig.colorbar(im, ax=ax, label="Temperature (°C)")
+                ax.axis("off")
+                plt.tight_layout()
+                plt.savefig(png_filename, bbox_inches="tight")
+                plt.close(fig)
 
     def grab_data_func(self, func, **kwargs):
         """
@@ -330,9 +365,7 @@ class ThermalCamera:
 
         # Warning if hdf5 file is not created
         if self.video_format != "hdf5":
-            assert False, (
-                "Invalid video format. Please set the video format to 'hdf5'."
-            )
+            assert False, "Invalid video format. Please set the video format to 'hdf5'."
 
         print("Starting to grab data")
         try:
@@ -346,9 +379,7 @@ class ThermalCamera:
                     # make an empty frame
                     thermal_image_celsius_data = np.zeros([120, 160])
 
-                thermal_image_celsius_data = (
-                    thermal_image_kelvin_data - 27315
-                ) / 100
+                thermal_image_celsius_data = (thermal_image_kelvin_data - 27315) / 100
 
                 end = func(
                     thermal_image_data=thermal_image_celsius_data,
@@ -439,13 +470,9 @@ class ThermalCamera:
                     if not pressed:
                         try:
                             now = datetime.now()
-                            dt_string = now.strftime(
-                                "day_%d_%m_%Y_time_%H_%M_%S"
-                            )
+                            dt_string = now.strftime("day_%d_%m_%Y_time_%H_%M_%S")
                             print(dt_string)
-                            f = h5py.File(
-                                f"{self.pathset}/{dt_string}.hdf5", "w"
-                            )
+                            f = h5py.File(f"{self.pathset}/{dt_string}.hdf5", "w")
                             f.create_dataset("image", data=data)
                             f = None
                             print("Thermal pic saved as hdf5")
@@ -465,7 +492,7 @@ class ThermalCamera:
 
                 elif keyboard.is_pressed("e"):
                     if not pressed:
-                        print("We are done")
+                        print("Exiting live plot")
                         break
 
                 else:
@@ -489,9 +516,7 @@ class ThermalCamera:
         Saves metadata about the recording to a JSON file in the output directory.
         """
         metadata_file_name = f"{self.output_file_name.split('.')[0]}.json"
-        metadata_path = os.path.join(
-            os.path.dirname(self.output_path), metadata_file_name
-        )
+        metadata_path = os.path.join(os.path.dirname(self.output_path), metadata_file_name)
 
         data = {
             "camera": "thermal",
@@ -521,35 +546,7 @@ class ThermalCamera:
             logging.error(error_message)
         else:
             print(f"An error occurred: {error_message}")
-            print(
-                "Set the error log file path to log the error with set_error_log_path()."
-            )
-
-
-# imports
-
-
-# Initialize COM
-pythoncom.CoInitialize()
-
-folder = "x64" if platform.architecture()[0] == "64bit" else "x86"
-path = os.path.sep.join(__file__.split(os.path.sep)[:-1])
-sys.path.append(os.path.sep.join([path, folder]))
-clr.AddReference("LeptonUVC")
-clr.AddReference("ManagedIR16Filters")
-
-from IR16Filters import IR16Capture, NewBytesFrameEvent
-from Lepton import CCI
-
-
-def handle_exit(sig, frame):
-    print("Exiting and cleaning up...")
-    pythoncom.CoUninitialize()
-
-
-# Register signal handlers for clean exit
-signal.signal(signal.SIGINT, handle_exit)
-signal.signal(signal.SIGTERM, handle_exit)
+            print("Set the error log file path to log the error with set_error_log_path().")
 
 
 class CameraWindows:
@@ -574,6 +571,10 @@ class CameraWindows:
         Initialize the camera and start capturing frames.
         """
         devices = []
+
+        pythoncom.CoInitialize()
+        time.sleep(1)
+
         for i in self.CCI.GetDevices():
             if i.Name.startswith("PureThermal"):
                 devices.append(i)
@@ -624,7 +625,7 @@ class CameraWindows:
 
         self.device.sys.SetFfcShutterModeObj(new_shutter_mode_obj)
 
-    def perform_manualff(self):
+    def perform_manual_ffc(self):
         """
         Perform a manual flat field correction.
         """

@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "poulet_py"
 description = "A library which hosts various neuroscience python methods"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.14"
 dynamic = ['version']
 license = "GPL-3.0-or-later"
 authors = [
@@ -21,13 +21,16 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
 ]
 
 dependencies = [
-  "pydantic>=2.10.6,<2.11",
-  "pydantic-settings>=2.8.1,<2.9",
-  "python-dotenv>=1.0.1,<1.1",
-  "rich>=13.9.4,<13.10",
+  "lazy_loader",
+  "pydantic",
+  "pydantic-settings",
+  "python-dotenv",
+  "rich",
+  "deprecated",
 ]
 
 keywords = ["poulet_py"]
@@ -40,28 +43,43 @@ Source = "https://github.com/poulet-lab/poulet_py"
 
 
 [tool.hatch.version]
-path = "poulet_py/__init__.py"
+path = "poulet_py/__about__.py"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+constraints-file = "constraints.txt"
 
 [project.optional-dependencies]
-hardware = [
-  "pypylon>=3.0.1,<=4.0.0",
-  "opencv-python==4.9.0.80",
-  "numpy==1.26.4",
-  "scipy==1.13.1",
-  "matplotlib==3.9.0",
-  "matplotlib-inline==0.1.7",
-  "h5py==3.11.0",
-  "keyboard==0.13.5",
-  "pywin32==306; platform_system == 'Windows'",
-  "pythonnet>=3.0.5,<3.1",
+## Main modules ##
+hardware = ["poulet_py[camera, arduino, julabo, qst]"]
+converters = ["poulet_py[seq]"]
+tools = ["orjson"]
+utils = ["poulet_py[qst, osc]"]
+## Sub-modules ##
+# optional, define them on their corresponding module
+# Converters
+seq = ["flirpy", "zstd", "pandas", "tqdm", "pillow", "h5py"]
+# Hardware
+camera = [
+  "pypylon",
+  "opencv-python",
+  "numpy",
+  "scipy",
+  "matplotlib",
+  "h5py",
+  "keyboard",
+  "pywin32; platform_system == 'Windows'",
+  "pythonnet",
 ]
+arduino = ["pyserial"]
+julabo = ["pyserial"]
+qst = ["pandas", "tqdm", "pyserial"]
+# Tools
 
-tools = []
-
-utils = ["pandas==2.2.2"]
-
-all = ["poulet_py[hardware,tools,utils]"]
-
+# Utils
+osc = ["pandas", "matplotlib", "numpy"]
+# Install all modules
+all = ["poulet_py[hardware, converters, tools, utils]"]
 
 [tool.hatch.envs.lint]
 detached = true
@@ -79,7 +97,7 @@ strict = true
 ignore_missing_imports = true
 
 [tool.ruff]
-line-length = 80
+line-length = 100
 indent-width = 4
 exclude = [
   ".bzr",
@@ -162,13 +180,18 @@ max-args = 15
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
 
+[tool.hatch.envs.hatch-test]
+extra-dependencies = ["poulet-py[all]"]
+
 [[tool.hatch.envs.hatch-test.matrix]]
-python = ["3.8", "3.9", "3.10", "3.11", "3.12"]
+python = ["3.10", "3.11", "3.12", "3.13"]
+dependencies = ["'poulet-py[all]'"]
 
 [tool.coverage.run]
 source_pkgs = ["poulet_py", "tests"]
 branch = true
 parallel = true
+omit = ["src/hello_world/__about__.py"]
 
 [tool.coverage.paths]
 poulet_py = ["poulet_py", "*/poulet-py/poulet_py"]

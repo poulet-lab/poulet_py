@@ -1,6 +1,3 @@
-# ruff: noqa F401
+from lazy_loader import attach_stub
 
-__all__ = ["generators", "organizational"]
-
-from poulet_py.tools.generators import generate_trials
-from poulet_py.tools.organisational import check_or_create, define_folder_name
+__getattr__, __dir__, __all__ = attach_stub(__name__, __file__)

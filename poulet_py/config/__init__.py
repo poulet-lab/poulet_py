@@ -1,5 +1,3 @@
-# ruff: noqa F401
-__all__ = ["logging", "settings"]
+from lazy_loader import attach_stub
 
-from poulet_py.config.logging import LOGGER
-from poulet_py.config.settings import SETTINGS, Settings
+__getattr__, __dir__, __all__ = attach_stub(__name__, __file__)

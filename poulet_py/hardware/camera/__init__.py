@@ -1,6 +1,3 @@
-# ruff: noqa F401
+from lazy_loader import attach_stub
 
-__all__ = ["basler", "thermal_camera"]
-
-from poulet_py.hardware.camera.basler import BaslerCamera
-from poulet_py.hardware.camera.thermal_camera import ThermalCamera
+__getattr__, __dir__, __all__ = attach_stub(__name__, __file__)
