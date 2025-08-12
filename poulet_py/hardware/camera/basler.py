@@ -33,18 +33,14 @@ class BaslerCamera:
         Args:
             max_cameras (int): The maximum number of cameras to use.
         """
-        # Get the transport layer factory
         tlFactory = pylon.TlFactory.GetInstance()
 
-        # Get all attached devices and exit application if no device is found.
         self.devices = tlFactory.EnumerateDevices()
         if len(self.devices) == 0:
             raise pylon.RuntimeException("No camera present.")
 
-        # Limit the number of cameras to the available devices or max_cameras.
         self.max_cameras = min(len(self.devices), max_cameras)
 
-        # Create an InstantCameraArray for the found devices.
         self.cameras = pylon.InstantCameraArray(self.max_cameras)
         for i in range(self.max_cameras):
             self.cameras[i].Attach(tlFactory.CreateDevice(self.devices[i]))
@@ -68,13 +64,10 @@ class BaslerCamera:
         """
         self.frames_per_second = frames_per_second
         for cam in self.cameras:
-            # Open the camera if not already open.
             if not cam.IsOpen():
                 cam.Open()
             cam.AcquisitionFrameRateEnable.SetValue(True)
             cam.AcquisitionFrameRate.SetValue(frames_per_second)
-            # It is safe to leave the camera open until streaming starts.
-            # Alternatively, you can close it here and re-open later.
 
     def set_error_log_path(self, path, file_name):
         """
@@ -102,14 +95,12 @@ class BaslerCamera:
         fourcc = cv2.VideoWriter_fourcc(*"MP4V")
 
         for i, cam in enumerate(self.cameras):
-            # Ensure the camera is open so that we can read its parameters.
             if not cam.IsOpen():
                 cam.Open()
 
             frame_width = int(cam.Width.Value)
             frame_height = int(cam.Height.Value)
 
-            # Construct the video output file name and path for this camera.
             self.output_file_name = f"{base_file_name}_{extra_name}_cam{i}.mp4"
             self.output_path = os.path.join(path, self.output_file_name)
             self.outs[i] = cv2.VideoWriter(
@@ -119,7 +110,6 @@ class BaslerCamera:
                 (frame_width, frame_height),
             )
 
-            # Setup the timestamps CSV file.
             timestamps_file = os.path.join(
                 path, f"{base_file_name}_{extra_name}_cam{i}_timestamps.csv"
             )
@@ -131,7 +121,6 @@ class BaslerCamera:
                     writer.writerow(["timestamp"])
 
             self.frame_numbers[i] = 1
-            # Optionally close the camera if you plan to open it later in streaming.
             cam.Close()
 
     def save_timestamp(self, camera_index, timestamp):
@@ -154,7 +143,6 @@ class BaslerCamera:
         Starts the grabbing (streaming) for all cameras.
         """
         self.start_time = time.time()
-        # Ensure each camera is open before starting acquisition.
         for cam in self.cameras:
             if not cam.IsOpen():
                 cam.Open()
@@ -187,9 +175,7 @@ class BaslerCamera:
 
             if grabResult.GrabSucceeded():
                 img = grabResult.Array
-                # Convert grayscale to BGR (adjust if your camera outputs color images)
                 img_bgr = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-                # Write frame to the video file for this camera.
                 self.outs[camera_index].write(img_bgr)
 
                 timestamp = time.time() - self.start_time
@@ -220,7 +206,6 @@ class BaslerCamera:
                     img = grabResult.Array
                     img_bgr = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
 
-                    # Resize if requested.
                     if window_width is not None and window_height is not None:
                         img_bgr = cv2.resize(img_bgr, (round(window_width), round(window_height)))
 
@@ -251,7 +236,6 @@ class BaslerCamera:
             metadata_file_name = f"{base_file_name}_{extra_name}_cam{i}.json"
             metadata_path = os.path.join(self.output_path, metadata_file_name)
 
-            # Re-open camera if needed to read properties.
             if not cam.IsOpen():
                 cam.Open()
             data = {
@@ -279,7 +263,6 @@ class BaslerCamera:
         fps: int = 30,
         video_format: Literal["mp4", "avi"] = "mp4",
     ):
-        # Metadata to be saved in the JSON file
         metadata = {
             "cage ID": cage_id,
             "total no of mice in a cage": n_mouse,
@@ -290,7 +273,6 @@ class BaslerCamera:
             "video format": video_format,
         }
 
-        # Setup the Basler camera outside of the loop to ensure the preview is shown before any recording starts
 
         self.set_frames_per_second(30)
         self.start_streaming()
@@ -321,7 +303,6 @@ class BaslerCamera:
                     LOGGER.info(f"Frames captured: {self.frame_number}")
                     self.save_metadata()
 
-                    # Buffer period before the next recording
                     if rec_count < total_rec - 1:
                         LOGGER.info("Buffer period")
                         time.sleep(buffer_s)

@@ -29,7 +29,6 @@ class JulaboChiller:
             timeout (int or float, optional): The read timeout value. Default is 1 second.
         """
         if port is None:
-            # check in env cariable
 
             dotenv_path = find_dotenv(usecwd=True)
             load_dotenv(dotenv_path)

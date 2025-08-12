@@ -27,7 +27,6 @@ class Arduino:
             ports = []
         self.arduinos = {}
 
-        # Establish serial connections for each port
         for index, port in enumerate(ports):
             temp_arduino = serial.Serial(port, 9600, timeout=1)
             temp_arduino.flushInput()
@@ -77,12 +76,10 @@ class Arduino:
             base_file_name (str): Base name of the output file. Defaults to 'arduino'.
         """
         for key in self.arduinos.keys():
-            # Create the output file name
             extra_name = extra_name + str(key)
             self.output_file_name = f"{base_file_name}_{extra_name}.csv"
             self.arduinos[key]["output_file"] = os.path.join(path, self.output_file_name)
 
-            # Create the CSV file and write the header if it doesn't exist
             if not os.path.isfile(self.arduinos[key]["output_file"]):
                 with open(self.arduinos[key]["output_file"], mode="w", newline="") as csvfile:
                     writer = csv.writer(csvfile)

@@ -42,15 +42,12 @@ try:
             frame.contents.height, frame.contents.width
         )
 
-        # Ensure frame size is correct
         if frame.contents.data_bytes != (2 * frame.contents.width * frame.contents.height):
             return
 
-        # Add frame data to queue if not full
         if not q.full():
             q.put(data)
 
-    # Check whether we are in Windows
     if not platform.system() == "Windows":
         from poulet_py.hardware.camera.uvctypes import *
 
@@ -75,7 +72,6 @@ try:
             LOGGER.info("Exiting and cleaning up...")
             pythoncom.CoUninitialize()
 
-        # Register signal handlers for clean exit
         signal.signal(signal.SIGINT, handle_exit)
         signal.signal(signal.SIGTERM, handle_exit)
         import pythoncom
@@ -112,7 +108,6 @@ class ThermalCamera:
         self.shutter_manual = False
 
         self.windows = False
-        # Check whether we are in Windows
         if platform.system() == "Windows":
             self.windows = True
             self.windows_camera = CameraWindows()
@@ -276,7 +271,6 @@ class ThermalCamera:
         """
         global devh
 
-        # check if there's a file open
         if self.video_format == "hdf5" and self.create_hdf5_file:
             self.hpy_file.close()
 
@@ -302,7 +296,6 @@ class ThermalCamera:
         and writes it to the output file.
         """
 
-        # Warning if hdf5 file is not created
         if self.video_format != "hdf5":
             assert False, "Invalid video format. Please set the video format to 'hdf5'."
 
@@ -318,7 +311,6 @@ class ThermalCamera:
                 (f"frame{self.frame_number}"), data=thermal_image_celsius_data
             )
 
-            # get current time
             timestamp = time.time() - self.start_time
             self.hpy_file.create_dataset((f"time{self.frame_number}"), data=[timestamp])
 
@@ -364,7 +356,6 @@ class ThermalCamera:
         """
         end = False
 
-        # Warning if hdf5 file is not created
         if self.video_format != "hdf5":
             assert False, "Invalid video format. Please set the video format to 'hdf5'."
 
@@ -377,7 +368,6 @@ class ThermalCamera:
                     thermal_image_kelvin_data = q.get(True, 500)
                 if thermal_image_kelvin_data is None:
                     LOGGER.warning("Data is none")
-                    # make an empty frame
                     thermal_image_celsius_data = np.zeros([120, 160])
 
                 thermal_image_celsius_data = (thermal_image_kelvin_data - 27315) / 100
@@ -445,7 +435,6 @@ class ThermalCamera:
                     data = q.get(True, 500)
                 if data is None:
                     LOGGER.warning("Data is none")
-                    # make an empty frame
                     data = np.zeros([120, 160])
 
                 data = (data - 27315) / 100
