@@ -272,7 +272,6 @@ class BaslerCamera:
             "video format": video_format,
         }
 
-
         self.set_frames_per_second(30)
         self.start_streaming()
 
