@@ -1,29 +1,77 @@
 from datetime import UTC, datetime
+from json import dumps
+from os import environ
 from pathlib import Path
 from sys import setrecursionlimit
 
+from requests import get
 from tomllib import load
 
 setrecursionlimit(5000)
 
-pyproject_path = Path(__file__).parents[2] / "pyproject.toml"
-with open(pyproject_path, "rb") as f:
-    pyproject = load(f)
 
-release = pyproject["project"]["version"]
+def get_rtd_versions(project):
+    """Fetch and format versions from Read the Docs API v3"""
+    api_url = f"https://readthedocs.org/api/v3/projects/{project}/versions/?active=true"
+    try:
+        response = get(api_url, timeout=15)
+        response.raise_for_status()
+        versions = response.json()
+
+        return [
+            {
+                "name": v["slug"],
+                "version": v["slug"],
+                "url": f"https://{project}.readthedocs.io/en/{v['slug']}/",
+                "preferred": v["slug"] == "stable",
+            }
+            for v in versions["results"]
+            if not v["hidden"]
+        ]
+    except Exception as e:
+        print(f"Error fetching versions: {e}")
+        return []
+
+
+versions = [
+    {
+        "name": "stable",
+        "version": "stable",
+        "url": "http://localhost:8000/",
+        "preferred": True,
+    },
+    {
+        "name": "latest",
+        "version": "latest",
+        "url": "http://localhost:8000/",
+    },
+]
+
+if environ.get("READTHEDOCS") == "True":
+    rtd_project = environ.get("READTHEDOCS_PROJECT")
+    # Generate proper version data
+    versions = get_rtd_versions(rtd_project)
+
+static_dir = Path("_static")
+static_dir.mkdir(exist_ok=True)
+(static_dir / "switcher.json").write_text(dumps(versions))
 
 project = "Poulet Py"
 copyright = f"{datetime.now(UTC).year}, Poulet Lab"
 author = "Poulet Lab"
 
+pyproject_path = Path(__file__).parents[2] / "pyproject.toml"
+with open(pyproject_path, "rb") as f:
+    pyproject = load(f)
+    release = pyproject["project"]["version"]
+
 extensions = [
     "sphinx.ext.autodoc",
-    "sphinx.ext.napoleon",  # For NumPy docstrings
+    "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
     "sphinx.ext.intersphinx",
     "sphinx.ext.autosummary",
     "sphinx_autodoc_typehints",
-    "sphinx_multiversion",
 ]
 
 # Autodoc settings
@@ -57,14 +105,12 @@ html_theme_options = {
     "navbar_end": ["theme-switcher", "navbar-icon-links"],
     "navbar_persistent": ["search-button"],
     "secondary_sidebar_items": ["page-toc", "edit-this-page", "sourcelink"],
-    "show_version_warning_banner": True,
+    "switcher": {
+        "json_url": "_static/switcher.json",
+        "version_match": environ.get("READTHEDOCS_VERSION", "latest"),
+    },
 }
 html_context = {"default_mode": "auto"}
-
-# Multiversion settings
-smv_tag_whitelist = r"^\d+\.\d+\.\d+$"  # Include tags like 1.0.0
-smv_branch_whitelist = r"^main|dev$"  # Include dev and main branch
-smv_remote_whitelist = r"^origin$"  # Use origin remote
 
 # Static Files
 html_static_path = ["_static"]
