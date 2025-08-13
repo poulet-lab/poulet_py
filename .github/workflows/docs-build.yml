@@ -19,12 +19,9 @@ jobs:
       - name: Build docs
         run: hatch run docs:api
 
-      - name: Build docs
-        run: hatch run docs:build
-
-      - name: Deploy to GitHub Pages
-        if: github.ref == 'refs/heads/main'
-        uses: peaceiris/actions-gh-pages@v3
+      - name: Commit changes if needed
+        uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./docs/build
+          commit_message: "Autocreate api reference docs"
+          commit_user_name: "github-actions[bot]"
+          commit_user_email: "github-actions[bot]@users.noreply.github.com"
