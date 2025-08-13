@@ -1,11 +1,11 @@
-name: Generate Docs API reference
+name: Docs
 
 on:
   push:
     branches: ["**", "!main"]
 
 jobs:
-  build:
+  generate-api-reference:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout branch
