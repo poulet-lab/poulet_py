@@ -1,0 +1,20 @@
+/* Hide the sidebar on landing page */
+.home .bd-sidebar {
+    display: none;
+}
+
+/* Make landing page content full width */
+.home .bd-main .bd-content {
+    max-width: 100%;
+    flex-grow: 1;
+}
+
+/* Remove "This Page" header but keep content */
+.sidebar-secondary-item h3 {
+    display: none !important;
+}
+
+/* Optional: Adjust spacing if needed */
+.sidebar-secondary-item .this-page-menu {
+    margin-top: 0;
+}

@@ -3,8 +3,8 @@ poulet\_py.converters package
 
 .. automodule:: poulet_py.converters
    :members:
-   :undoc-members:
    :show-inheritance:
+   :undoc-members:
 
 Submodules
 ----------

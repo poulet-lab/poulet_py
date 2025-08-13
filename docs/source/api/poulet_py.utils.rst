@@ -3,8 +3,8 @@ poulet\_py.utils package
 
 .. automodule:: poulet_py.utils
    :members:
-   :undoc-members:
    :show-inheritance:
+   :undoc-members:
 
 Submodules
 ----------

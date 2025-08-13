@@ -3,8 +3,8 @@ poulet\_py.hardware.stimulator package
 
 .. automodule:: poulet_py.hardware.stimulator
    :members:
-   :undoc-members:
    :show-inheritance:
+   :undoc-members:
 
 Submodules
 ----------

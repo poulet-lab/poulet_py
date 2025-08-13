@@ -76,34 +76,32 @@ qst = ["pandas", "tqdm", "pyserial"]
 osc = ["pandas", "matplotlib", "numpy"]
 # Install all modules
 all = ["poulet_py[hardware, converters, tools, utils]"]
-
-[tool.hatch.envs.docs]
-dependencies = [
+# Docs
+docs = [
   "sphinx",
   "pydata-sphinx-theme",
-  "numpydoc",
-  "nbsphinx",
-  "myst-parser",
-  "sphinx-copybutton",
-  "sphinx-design",
-  "sphinx-autosummary-accessors",
+  "sphinx-autodoc-typehints",
+  "sphinx-git",
+  "sphinx-multiversion",
   "ipython",
-  "poulet_py[all]",
 ]
+
+[tool.hatch.envs.docs]
+dependencies = ["poulet_py[all,docs]"]
 
 [tool.hatch.envs.docs.scripts]
 api = """
-sphinx-apidoc \
--o docs/source/api/ \
-poulet_py/ \
---force \
---module-first \
---templatedir docs/source/_templates/apidoc \
---separate
-"""
+sphinx-apidoc -o docs/source/api/ \
+poulet_py/ --force --separate \
+--templatedir docs/_templates/apidoc \
+--module-first -M -H "API reference"
 
+"""
+multiversion = """
+sphinx-multiversion docs/source docs/build/html
+"""
 build = """
-rm -rf docs/build docs/source/api/ && 
+rm -rf docs/build && 
 hatch run docs:api && 
 sphinx-build -b html docs/source docs/build -j auto
 """
@@ -111,6 +109,7 @@ serve = """
 hatch run docs:build && 
 python -m http.server --directory docs/build 8000
 """
+
 [tool.hatch.envs.lint]
 dependencies = ["mypy", "ruff"]
 

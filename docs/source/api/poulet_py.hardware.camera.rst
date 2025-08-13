@@ -3,8 +3,8 @@ poulet\_py.hardware.camera package
 
 .. automodule:: poulet_py.hardware.camera
    :members:
-   :undoc-members:
    :show-inheritance:
+   :undoc-members:
 
 Submodules
 ----------
