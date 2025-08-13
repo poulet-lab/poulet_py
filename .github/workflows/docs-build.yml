@@ -1,10 +1,8 @@
-name: Docs CI
+name: Generate Docs API reference
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    branches: ["**", "!main"]
 
 jobs:
   build:
@@ -22,6 +20,6 @@ jobs:
       - name: Commit changes if needed
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "Autocreate api reference docs"
+          commit_message: "Auto generate api reference docs"
           commit_user_name: "github-actions[bot]"
           commit_user_email: "github-actions[bot]@users.noreply.github.com"
