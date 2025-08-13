@@ -3,11 +3,11 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
+version = "0.1.1"
 name = "poulet_py"
 description = "A library which hosts various neuroscience python methods"
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
-dynamic = ['version']
 license = "GPL-3.0-or-later"
 authors = [
   { name = "Viktor Karamanis", email = "viktor.karamanis@outlook.com" },
@@ -40,10 +40,6 @@ Homepage = "https://github.com/poulet-lab/poulet_py"
 Documentation = "https://github.com/poulet-lab/poulet_py"
 Changelog = "https://github.com/poulet-lab/poulet_py/release-notes/"
 Source = "https://github.com/poulet-lab/poulet_py"
-
-
-[tool.hatch.version]
-path = "poulet_py/__about__.py"
 
 [tool.hatch.metadata]
 allow-direct-references = true
@@ -80,10 +76,41 @@ qst = ["pandas", "tqdm", "pyserial"]
 osc = ["pandas", "matplotlib", "numpy"]
 # Install all modules
 all = ["poulet_py[hardware, converters, tools, utils]"]
+# Docs
+docs = [
+  "sphinx",
+  "pydata-sphinx-theme",
+  "sphinx-autodoc-typehints",
+  "sphinx-git",
+  "sphinx-multiversion",
+  "ipython",
+]
+
+[tool.hatch.envs.docs]
+dependencies = ["poulet_py[all,docs]"]
+
+[tool.hatch.envs.docs.scripts]
+api = """
+sphinx-apidoc -o docs/source/api/ \
+poulet_py/ --force --separate \
+--templatedir docs/_templates/apidoc \
+--module-first -M -H "API reference"
+
+"""
+multiversion = """
+sphinx-multiversion docs/source docs/build/html
+"""
+build = """
+rm -rf docs/build && 
+hatch run docs:api && 
+sphinx-build -b html docs/source docs/build -j auto
+"""
+serve = """
+hatch run docs:build && 
+python -m http.server --directory docs/build 8000
+"""
 
 [tool.hatch.envs.lint]
-detached = true
-require = ["default"]
 dependencies = ["mypy", "ruff"]
 
 [tool.hatch.envs.lint.scripts]
@@ -181,11 +208,11 @@ max-args = 15
 ban-relative-imports = "all"
 
 [tool.hatch.envs.hatch-test]
-extra-dependencies = ["poulet-py[all]"]
+extra-dependencies = ["poulet_py[all]"]
 
 [[tool.hatch.envs.hatch-test.matrix]]
 python = ["3.10", "3.11", "3.12", "3.13"]
-dependencies = ["'poulet-py[all]'"]
+dependencies = ["'poulet_py[all]'"]
 
 [tool.coverage.run]
 source_pkgs = ["poulet_py", "tests"]
@@ -194,8 +221,8 @@ parallel = true
 omit = ["src/hello_world/__about__.py"]
 
 [tool.coverage.paths]
-poulet_py = ["poulet_py", "*/poulet-py/poulet_py"]
-tests = ["tests", "*/poulet-py/tests"]
+poulet_py = ["poulet_py", "*/poulet_py/poulet_py"]
+tests = ["tests", "*/poulet_py/tests"]
 
 [tool.coverage.report]
 exclude_lines = ["no cov", "if __name__ == .__main__.:", "if TYPE_CHECKING:"]
