@@ -82,7 +82,6 @@ docs = [
   "pydata-sphinx-theme",
   "sphinx-autodoc-typehints",
   "sphinx-git",
-  "sphinx-multiversion",
   "ipython",
 ]
 
@@ -91,15 +90,12 @@ dependencies = ["poulet_py[all,docs]"]
 
 [tool.hatch.envs.docs.scripts]
 api = """
-sphinx-apidoc -o docs/source/api/ \
-poulet_py/ --force --separate \
+sphinx-apidoc -o docs/source/api \
+poulet_py --force --separate \
 --templatedir docs/_templates/apidoc \
 --module-first -M -H "API reference"
+"""
 
-"""
-multiversion = """
-sphinx-multiversion docs/source docs/build/html
-"""
 build = """
 rm -rf docs/build && 
 hatch run docs:api && 
