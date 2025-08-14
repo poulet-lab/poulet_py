@@ -18,22 +18,28 @@ The library is organized into these core modules:
 |**utils**     |High-level interactive tools for experiments and data processing.|
 
 ## Installation
-### Basic Installation
+### Minimal Installation
 ```sh
-pip install -U . -c constraints.txt
+pip install -U .
 ```
 
 ### Optional Dependencies
 Install specific modules:
 ```sh
-pip install -U .[hardware] -c constraints.txt     # Only hardware dependencies
-pip install -U .[tools,utils] -c constraints.txt  # Tools + utilities
-pip install -U .[all] -c constraints.txt          # Everything
+pip install -U .[hardware]          # Only hardware dependencies
+pip install -U .[tools,utils]       # Tools + utilities
+
+# Special case for seq or all:
+pip install -U git+https://github.com/LJMUAstroecology/flirpy.git
+pip install -U .[seq]
+
+pip install -U .[all]               # Everything
 ```
 
 ### Development Mode (Editable Install)
 ```sh
-pip install -U -e .[all] -c constraints.txt       # For contributors
+pip install -U git+https://github.com/LJMUAstroecology/flirpy.git
+pip install -U -e .[all]            # For contributors
 ```
 
 ## Configuration
