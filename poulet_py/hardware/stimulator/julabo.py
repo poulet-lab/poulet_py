@@ -5,6 +5,8 @@ try:
 
     import serial
     from dotenv import find_dotenv, load_dotenv
+
+    from poulet_py.config.logging import LOGGER
 except ImportError as e:
     msg = """
 Missing 'julabo' module. Install options:
@@ -28,8 +30,6 @@ class JulaboChiller:
             timeout (int or float, optional): The read timeout value. Default is 1 second.
         """
         if port is None:
-            # check in env cariable
-
             dotenv_path = find_dotenv(usecwd=True)
             load_dotenv(dotenv_path)
             self.port = os.getenv("CHILLER_PORT")
@@ -96,8 +96,8 @@ class JulaboChiller:
             with open(self.output_file, mode="a", newline="") as csvfile:
                 writer = csv.writer(csvfile)
                 writer.writerow([timestamp, temperature])
-        except Exception as e:
-            print(f"Error saving temperature: {e}")
+        except Exception:
+            LOGGER.exception("Error saving temperature")
 
     def read(self):
         """Read data from the chiller.
@@ -114,8 +114,8 @@ class JulaboChiller:
                 return data
             else:
                 return None
-        except Exception as e:
-            print(f"Error reading from serial port: {e}")
+        except Exception:
+            LOGGER.exception("Error reading from serial port")
             return None
 
     def write(self, command):
@@ -127,8 +127,8 @@ class JulaboChiller:
         try:
             self.ser.write(command.encode("ascii") + b"\r\n")
             time.sleep(0.1)  # Give the device some time to process the command
-        except Exception as e:
-            print(f"Error writing to serial port: {e}")
+        except Exception:
+            LOGGER.exception("Error writing to serial port")
 
     def close_port(self):
         """Close the serial port connection."""

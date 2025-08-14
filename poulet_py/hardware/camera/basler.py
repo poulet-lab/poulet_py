@@ -2,13 +2,14 @@ try:
     import csv
     import datetime
     import json
-    import logging
     import os
     import time
     from typing import Literal
 
     import cv2
     from pypylon import pylon
+
+    from poulet_py.config.logging import LOGGER, setup_logging
 except ImportError as e:
     msg = """
 Missing 'camera' module. Install options:
@@ -33,22 +34,18 @@ class BaslerCamera:
         Args:
             max_cameras (int): The maximum number of cameras to use.
         """
-        # Get the transport layer factory
         tlFactory = pylon.TlFactory.GetInstance()
 
-        # Get all attached devices and exit application if no device is found.
         self.devices = tlFactory.EnumerateDevices()
         if len(self.devices) == 0:
             raise pylon.RuntimeException("No camera present.")
 
-        # Limit the number of cameras to the available devices or max_cameras.
         self.max_cameras = min(len(self.devices), max_cameras)
 
-        # Create an InstantCameraArray for the found devices.
         self.cameras = pylon.InstantCameraArray(self.max_cameras)
         for i in range(self.max_cameras):
             self.cameras[i].Attach(tlFactory.CreateDevice(self.devices[i]))
-            print("Using device", self.cameras[i].GetDeviceInfo().GetModelName())
+            LOGGER.info(f"Using device {self.cameras[i].GetDeviceInfo().GetModelName()}")
 
         self.frames_per_second = None
         self.outs = {}  # VideoWriter objects keyed by camera index
@@ -66,13 +63,10 @@ class BaslerCamera:
         """
         self.frames_per_second = frames_per_second
         for cam in self.cameras:
-            # Open the camera if not already open.
             if not cam.IsOpen():
                 cam.Open()
             cam.AcquisitionFrameRateEnable.SetValue(True)
             cam.AcquisitionFrameRate.SetValue(frames_per_second)
-            # It is safe to leave the camera open until streaming starts.
-            # Alternatively, you can close it here and re-open later.
 
     def set_error_log_path(self, path, file_name):
         """
@@ -83,6 +77,8 @@ class BaslerCamera:
             file_name (str): Name of the error log file.
         """
         self.error_log_file = os.path.join(path, file_name)
+        self._file_logger = LOGGER.getChild(f"hardware.camera.basler.{id(self)}")
+        setup_logging(self._file_logger, level="error", file=self.error_log_file)
 
     def set_output_file(self, path, extra_name, base_file_name="basler-camera"):
         """
@@ -98,14 +94,12 @@ class BaslerCamera:
         fourcc = cv2.VideoWriter_fourcc(*"MP4V")
 
         for i, cam in enumerate(self.cameras):
-            # Ensure the camera is open so that we can read its parameters.
             if not cam.IsOpen():
                 cam.Open()
 
             frame_width = int(cam.Width.Value)
             frame_height = int(cam.Height.Value)
 
-            # Construct the video output file name and path for this camera.
             self.output_file_name = f"{base_file_name}_{extra_name}_cam{i}.mp4"
             self.output_path = os.path.join(path, self.output_file_name)
             self.outs[i] = cv2.VideoWriter(
@@ -115,7 +109,6 @@ class BaslerCamera:
                 (frame_width, frame_height),
             )
 
-            # Setup the timestamps CSV file.
             timestamps_file = os.path.join(
                 path, f"{base_file_name}_{extra_name}_cam{i}_timestamps.csv"
             )
@@ -127,7 +120,6 @@ class BaslerCamera:
                     writer.writerow(["timestamp"])
 
             self.frame_numbers[i] = 1
-            # Optionally close the camera if you plan to open it later in streaming.
             cam.Close()
 
     def save_timestamp(self, camera_index, timestamp):
@@ -150,12 +142,11 @@ class BaslerCamera:
         Starts the grabbing (streaming) for all cameras.
         """
         self.start_time = time.time()
-        # Ensure each camera is open before starting acquisition.
         for cam in self.cameras:
             if not cam.IsOpen():
                 cam.Open()
         self.cameras.StartGrabbing()
-        print("Started streaming on all cameras.")
+        LOGGER.info("Started streaming on all cameras.")
 
     def stop_streaming(self):
         """
@@ -167,7 +158,7 @@ class BaslerCamera:
                 cam.Close()
             if i in self.outs and self.outs[i] is not None:
                 self.outs[i].release()
-        print("Stopped streaming and closed all cameras.")
+        LOGGER.info("Stopped streaming and closed all cameras.")
 
     def capture_frame(self):
         """
@@ -183,9 +174,7 @@ class BaslerCamera:
 
             if grabResult.GrabSucceeded():
                 img = grabResult.Array
-                # Convert grayscale to BGR (adjust if your camera outputs color images)
                 img_bgr = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-                # Write frame to the video file for this camera.
                 self.outs[camera_index].write(img_bgr)
 
                 timestamp = time.time() - self.start_time
@@ -205,7 +194,7 @@ class BaslerCamera:
             window_width (int, optional): Width to resize the window.
             window_height (int, optional): Height to resize the window.
         """
-        print("Press 'e' to quit the video stream.")
+        LOGGER.info("Press 'e' to quit the video stream.")
 
         while self.cameras.IsGrabbing():
             try:
@@ -216,7 +205,6 @@ class BaslerCamera:
                     img = grabResult.Array
                     img_bgr = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
 
-                    # Resize if requested.
                     if window_width is not None and window_height is not None:
                         img_bgr = cv2.resize(img_bgr, (round(window_width), round(window_height)))
 
@@ -247,7 +235,6 @@ class BaslerCamera:
             metadata_file_name = f"{base_file_name}_{extra_name}_cam{i}.json"
             metadata_path = os.path.join(self.output_path, metadata_file_name)
 
-            # Re-open camera if needed to read properties.
             if not cam.IsOpen():
                 cam.Open()
             data = {
@@ -275,7 +262,6 @@ class BaslerCamera:
         fps: int = 30,
         video_format: Literal["mp4", "avi"] = "mp4",
     ):
-        # Metadata to be saved in the JSON file
         metadata = {
             "cage ID": cage_id,
             "total no of mice in a cage": n_mouse,
@@ -286,18 +272,16 @@ class BaslerCamera:
             "video format": video_format,
         }
 
-        # Setup the Basler camera outside of the loop to ensure the preview is shown before any recording starts
-
         self.set_frames_per_second(30)
         self.start_streaming()
 
         try:
-            print("Stream preview started...")
+            LOGGER.info("Stream preview started...")
             time.sleep(5)  # Display the preview for 5 seconds (adjust as needed)
 
             for rec_count in range(total_rec):
                 start_time = time.time()
-                print("Recording started....")
+                LOGGER.info("Recording started....")
 
                 current_time = datetime.datetime.now().strftime("%H%M%S")
                 self.set_output_file(
@@ -306,36 +290,26 @@ class BaslerCamera:
                 )
 
                 try:
-                    print("Starting capture...")
+                    LOGGER.info("Starting capture...")
                     self.set_timer(start_time)
-                    print("Recording finished")
+                    LOGGER.info("Recording finished")
 
-                except Exception as e:
-                    print(f"Error during capture: {e}")
+                except Exception:
+                    LOGGER.exception("Error during capture")
 
                 finally:
-                    print(f"Frames captured: {self.frame_number}")
+                    LOGGER.info(f"Frames captured: {self.frame_number}")
                     self.save_metadata()
 
-                    # Buffer period before the next recording
                     if rec_count < total_rec - 1:
-                        print("Buffer period")
+                        LOGGER.info("Buffer period")
                         time.sleep(buffer_s)
 
         finally:
             self.stop_streaming()
 
-    @staticmethod
     def log_error(self, error_message):
-        """
-        Logs an error message to the error log file if set;
-        otherwise, prints the error.
-
-        Args:
-            error_message: The error message or exception.
-        """
-        if self.error_log_file:
-            logging.error(error_message)
-        else:
-            print(f"An error occurred: {error_message}")
-            print("Set the error log file path to log the error with set_error_log_path().")
+        LOGGER.error(error_message)
+        file_logger = getattr(self, "_file_logger", None)
+        if file_logger is not None:
+            file_logger.error(error_message)

@@ -19,12 +19,13 @@ try:
     except ImportError:
         from Queue import Queue
     import json
-    import logging
     import signal
     import sys
 
     import clr
     from scipy import ndimage
+
+    from poulet_py.config.logging import LOGGER, setup_logging
 
     def py_frame_callback(frame, userptr):
         """
@@ -42,15 +43,12 @@ try:
             frame.contents.height, frame.contents.width
         )
 
-        # Ensure frame size is correct
         if frame.contents.data_bytes != (2 * frame.contents.width * frame.contents.height):
             return
 
-        # Add frame data to queue if not full
         if not q.full():
             q.put(data)
 
-    # Check whether we are in Windows
     if not platform.system() == "Windows":
         from poulet_py.hardware.camera.uvctypes import *
 
@@ -64,8 +62,7 @@ try:
         folder = "x64" if platform.architecture()[0] == "64bit" else "x86"
         path = os.path.sep.join(__file__.split(os.path.sep)[:-4])
         sys.path.append(os.path.sep.join([path, "bin", "leptonUVC", folder]))
-        print(path)
-        print(os.path.sep.join([path, "bin", folder]))
+
         clr.AddReference("LeptonUVC")
         clr.AddReference("ManagedIR16Filters")
 
@@ -73,10 +70,9 @@ try:
         from Lepton import CCI
 
         def handle_exit(sig, frame):
-            print("Exiting and cleaning up...")
+            LOGGER.info("Exiting and cleaning up...")
             pythoncom.CoUninitialize()
 
-        # Register signal handlers for clean exit
         signal.signal(signal.SIGINT, handle_exit)
         signal.signal(signal.SIGTERM, handle_exit)
         import pythoncom
@@ -113,13 +109,12 @@ class ThermalCamera:
         self.shutter_manual = False
 
         self.windows = False
-        # Check whether we are in Windows
         if platform.system() == "Windows":
             self.windows = True
             self.windows_camera = CameraWindows()
 
-        print("Object thermal camera initialized")
-        print(f"vminT = {self.vminT} and vmaxT = {self.vmaxT}")
+        LOGGER.info("Object thermal camera initialized")
+        LOGGER.info(f"vminT = {self.vminT} and vmaxT = {self.vmaxT}")
 
     def start_streaming(self):
         global devh
@@ -137,32 +132,32 @@ class ThermalCamera:
             dev = POINTER(uvc_device)()
             devh = POINTER(uvc_device_handle)()
             ctrl = uvc_stream_ctrl()
-            print(ctrl.__dict__)
+            LOGGER.debug(ctrl.__dict__)
 
             res = libuvc.uvc_init(byref(ctx), 0)
             if res < 0:
-                print("uvc_init error")
+                LOGGER.error("uvc_init error")
                 exit(1)
 
             try:
                 res = libuvc.uvc_find_device(ctx, byref(dev), PT_USB_VID, PT_USB_PID, 0)
-                print(res)
+                LOGGER.debug(res)
                 if res < 0:
-                    print("uvc_find_device error")
+                    LOGGER.error("uvc_find_device error")
                     exit(1)
 
                 try:
                     res = libuvc.uvc_open(dev, byref(devh))
-                    print(res)
+                    LOGGER.debug(res)
                     if res < 0:
-                        print("uvc_open error")
+                        LOGGER.error("uvc_open error")
                         exit(1)
 
-                    print("device opened!")
+                    LOGGER.info("device opened!")
 
                     frame_formats = uvc_get_frame_formats_by_guid(devh, VS_FMT_GUID_Y16)
                     if len(frame_formats) == 0:
-                        print("device does not support Y16")
+                        LOGGER.error("device does not support Y16")
                         exit(1)
 
                     libuvc.uvc_get_stream_ctrl_format_size(
@@ -178,24 +173,24 @@ class ThermalCamera:
                         devh, byref(ctrl), PTR_PY_FRAME_CALLBACK, None, 0
                     )
                     if res < 0:
-                        print(f"uvc_start_streaming failed: {res}")
+                        LOGGER.error(f"uvc_start_streaming failed: {res}")
                         exit(1)
 
-                    print("done starting stream, displaying settings")
+                    LOGGER.info("done starting stream, displaying settings")
                     print_shutter_info(devh)
-                    print("resetting settings to default")
+                    LOGGER.info("resetting settings to default")
                     set_auto_ffc(devh)
                     set_gain_high(devh)
-                    print("current settings")
+                    LOGGER.info("current settings")
                     print_shutter_info(devh)
 
                 except:
                     libuvc.uvc_unref_device(dev)
-                    print("Failed to Open Device")
+                    LOGGER.error("Failed to Open Device")
                     exit(1)
             except:
                 libuvc.uvc_exit(ctx)
-                print("Failed to Find Device")
+                LOGGER.error("Failed to Find Device")
                 exit(1)
 
     def set_timer(self, start_time):
@@ -215,6 +210,8 @@ class ThermalCamera:
             path (str): The path to the error log file.
         """
         self.error_log_file = os.path.join(path, file_name)
+        self._file_logger = LOGGER.getChild(f"hardware.camera.thermal.{id(self)}")
+        setup_logging(self._file_logger, level="error", file=self.error_log_file)
 
     def set_output_file(
         self,
@@ -245,14 +242,14 @@ class ThermalCamera:
         """
         global devh
 
-        print("Shutter is now manual.")
+        LOGGER.info("Shutter is now manual.")
         try:
             if self.windows:
                 self.windows_camera.set_shutter_manual()
             else:
                 set_manual_ffc(devh)
         except:
-            print("Failed to set shutter to manual.")
+            LOGGER.error("Failed to set shutter to manual.")
         finally:
             self.shutter_manual = True
 
@@ -262,7 +259,7 @@ class ThermalCamera:
         """
         global devh
 
-        print("Manual FFC")
+        LOGGER.info("Manual FFC")
         if self.windows:
             self.windows_camera.perform_manual_ffc()
         else:
@@ -275,11 +272,10 @@ class ThermalCamera:
         """
         global devh
 
-        # check if there's a file open
         if self.video_format == "hdf5" and self.create_hdf5_file:
             self.hpy_file.close()
 
-        print("Stop streaming")
+        LOGGER.info("Stop streaming")
         if self.windows:
             self.windows_camera.stop_streaming()
         else:
@@ -301,7 +297,6 @@ class ThermalCamera:
         and writes it to the output file.
         """
 
-        # Warning if hdf5 file is not created
         if self.video_format != "hdf5":
             assert False, "Invalid video format. Please set the video format to 'hdf5'."
 
@@ -317,13 +312,12 @@ class ThermalCamera:
                 (f"frame{self.frame_number}"), data=thermal_image_celsius_data
             )
 
-            # get current time
             timestamp = time.time() - self.start_time
             self.hpy_file.create_dataset((f"time{self.frame_number}"), data=[timestamp])
 
             self.frame_number += 1
         else:
-            print("Thermal data is none")
+            LOGGER.warning("Thermal data is none")
 
     def export_frame_to_png(self, path, file_name, colormap="coolwarm"):
         """Save all frames from the current HDF5 recording as PNG images."""
@@ -363,11 +357,10 @@ class ThermalCamera:
         """
         end = False
 
-        # Warning if hdf5 file is not created
         if self.video_format != "hdf5":
             assert False, "Invalid video format. Please set the video format to 'hdf5'."
 
-        print("Starting to grab data")
+        LOGGER.info("Starting to grab data")
         try:
             while not end:
                 if self.windows:
@@ -375,8 +368,7 @@ class ThermalCamera:
                 else:
                     thermal_image_kelvin_data = q.get(True, 500)
                 if thermal_image_kelvin_data is None:
-                    print("Data is none")
-                    # make an empty frame
+                    LOGGER.warning("Data is none")
                     thermal_image_celsius_data = np.zeros([120, 160])
 
                 thermal_image_celsius_data = (thermal_image_kelvin_data - 27315) / 100
@@ -401,9 +393,9 @@ class ThermalCamera:
         The min and max values of the heatmap are specified.
         You can take a pic too.
         """
-        print('Press "r" to refresh the shutter.')
-        print('Press "t" to take a thermal pic.')
-        print('Press "e" to exit.')
+        LOGGER.info('Press "r" to refresh the shutter.')
+        LOGGER.info('Press "t" to take a thermal pic.')
+        LOGGER.info('Press "e" to exit.')
 
         mpl.rc("image", cmap="coolwarm")
 
@@ -443,8 +435,7 @@ class ThermalCamera:
                 else:
                     data = q.get(True, 500)
                 if data is None:
-                    print("Data is none")
-                    # make an empty frame
+                    LOGGER.warning("Data is none")
                     data = np.zeros([120, 160])
 
                 data = (data - 27315) / 100
@@ -471,11 +462,11 @@ class ThermalCamera:
                         try:
                             now = datetime.now()
                             dt_string = now.strftime("day_%d_%m_%Y_time_%H_%M_%S")
-                            print(dt_string)
+                            LOGGER.info(dt_string)
                             f = h5py.File(f"{self.pathset}/{dt_string}.hdf5", "w")
                             f.create_dataset("image", data=data)
                             f = None
-                            print("Thermal pic saved as hdf5")
+                            LOGGER.info("Thermal pic saved as hdf5")
                             if self.png:
                                 plt.imsave(
                                     f"{self.pathset}/{dt_string}.png",
@@ -486,13 +477,13 @@ class ThermalCamera:
 
                         except Exception as e:
                             self.log_error(e)
-                            print("There isn't a set path!")
+                            LOGGER.error("There isn't a set path!")
 
                     pressed = True
 
                 elif keyboard.is_pressed("e"):
                     if not pressed:
-                        print("Exiting live plot")
+                        LOGGER.info("Exiting live plot")
                         break
 
                 else:
@@ -537,16 +528,11 @@ class ThermalCamera:
         with open(metadata_path, "w") as f:
             json.dump(data, f, indent=4)
 
-    @staticmethod
     def log_error(self, error_message):
-        """
-        Logs an error message to the error log file.
-        """
-        if self.error_log_file is not None:
-            logging.error(error_message)
-        else:
-            print(f"An error occurred: {error_message}")
-            print("Set the error log file path to log the error with set_error_log_path().")
+        LOGGER.error(error_message)
+        file_logger = getattr(self, "_file_logger", None)
+        if file_logger is not None:
+            file_logger.error(error_message)
 
 
 class CameraWindows:
@@ -580,9 +566,9 @@ class CameraWindows:
                 devices.append(i)
 
         if len(devices) > 1:
-            print("Multiple Pure Thermal devices have been found.\n")
+            LOGGER.warning("Multiple Pure Thermal devices have been found.")
             for i, d in enumerate(devices):
-                print(f"{i}. {d}")
+                LOGGER.info(f"{i}. {d}")
             while True:
                 idx = input("Select the index of the required device: ")
                 try:
@@ -591,7 +577,7 @@ class CameraWindows:
                         self.device = devices[idx]
                         break
                 except ValueError:
-                    print("Unrecognized input value.\n")
+                    LOGGER.warning("Unrecognized input value.")
 
         elif len(devices) == 1:
             self.device = devices[0]
