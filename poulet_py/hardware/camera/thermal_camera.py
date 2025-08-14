@@ -453,8 +453,8 @@ class ThermalCamera:
 
                 if keyboard.is_pressed("r"):
                     if not pressed:
-                        LOGGER.info("Manual FFC")
-                        self.performManualff()
+                        print("Manual FFC")
+                        self.perform_manual_ffc()
                         pressed = True
 
                 elif keyboard.is_pressed("t"):

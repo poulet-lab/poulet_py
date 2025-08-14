@@ -1,0 +1,41 @@
+name: Docs
+
+on:
+  push:
+    branches: [dev]
+
+jobs:
+  generate-api-reference:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install Hatch
+        uses: pypa/hatch@install
+
+      - name: Build docs
+        run: hatch run docs:api
+
+      - name: Check for doc changes
+        id: changes
+        run: |
+          if git diff --quiet; then
+            echo "changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create PR for doc updates
+        if: steps.changes.outputs.changes == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "Auto-generate API reference docs"
+          branch: "docs/auto-update-api-reference"
+          delete-branch: true
+          title: "Docs: Auto-update API reference"
+          body: "Automatically generated API reference documentation updates"
+          labels: "documentation, automated"
+          base: "dev"

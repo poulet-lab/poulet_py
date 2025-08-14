@@ -11,6 +11,7 @@
 __pycache__/
 virtualenv/
 build/
+docs/build
 dist/
 node_modules/
 results/
@@ -32,3 +33,4 @@ coverage.*
 example.sqlite
 .env
 .cursor*
+docs/source/_static/switcher.json
