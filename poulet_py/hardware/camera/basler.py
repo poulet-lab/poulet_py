@@ -263,7 +263,6 @@ class BaslerCamera:
         fps: int = 30,
         video_format: Literal["mp4", "avi"] = "mp4",
     ):
-
         self.set_frames_per_second(30)
         self.start_streaming()
 
