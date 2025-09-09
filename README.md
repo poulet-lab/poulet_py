@@ -1,6 +1,8 @@
 # Poulet Py – Neuroscience Python Library from Poulet Lab
 A modular Python library for neuroscientific hardware control, data analysis, and experimental setups.
 
+[![Unit Tests](https://github.com/poulet-lab/poulet_py/actions/workflows/test-suite.yml/badge.svg?branch=main)](https://github.com/poulet-lab/poulet_py/actions/workflows/test-suite.yml)
+
 ## Overview
 Poulet provides a collection of tools for neuroscience researchers, including:
 * Hardware communication (e.g., serial devices, DAQ interfaces)
