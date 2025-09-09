@@ -101,16 +101,17 @@ class BaslerCamera:
             frame_height = int(cam.Height.Value)
 
             self.output_file_name = f"{base_file_name}_{extra_name}_cam{i}.mp4"
-            self.output_path = os.path.join(path, self.output_file_name)
+            self.output_path = os.path.join(path)
+            self.output_file = os.path.join(self.output_path, self.output_file_name)
             self.outs[i] = cv2.VideoWriter(
-                self.output_path,
+                self.output_file,
                 fourcc,
                 self.frames_per_second,
                 (frame_width, frame_height),
             )
 
             timestamps_file = os.path.join(
-                path, f"{base_file_name}_{extra_name}_cam{i}_timestamps.csv"
+                self.output_path, f"{base_file_name}_{extra_name}_cam{i}_timestamps.csv"
             )
             self.timestamps_files[i] = timestamps_file
 
@@ -262,22 +263,12 @@ class BaslerCamera:
         fps: int = 30,
         video_format: Literal["mp4", "avi"] = "mp4",
     ):
-        metadata = {
-            "cage ID": cage_id,
-            "total no of mice in a cage": n_mouse,
-            "Mouse ID": mouse_ids,
-            "duration_s": duration_s,
-            "condition": condition,
-            "fps": fps,
-            "video format": video_format,
-        }
-
         self.set_frames_per_second(30)
         self.start_streaming()
 
         try:
             LOGGER.info("Stream preview started...")
-            time.sleep(5)  # Display the preview for 5 seconds (adjust as needed)
+            time.sleep(5)
 
             for rec_count in range(total_rec):
                 start_time = time.time()
@@ -307,6 +298,15 @@ class BaslerCamera:
 
         finally:
             self.stop_streaming()
+
+    def set_timer(self, start_time):
+        """
+        Sets the timer for the camera.
+
+        Args:
+            start_time (float): The time at which the camera recording started.
+        """
+        self.start_time = start_time
 
     def log_error(self, error_message):
         LOGGER.error(error_message)
