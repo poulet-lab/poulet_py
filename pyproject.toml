@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-version = "0.1.1"
+version = "0.1.2"
 name = "poulet_py"
 description = "A library which hosts various neuroscience python methods"
 readme = "README.md"
@@ -18,19 +18,18 @@ classifiers = [
   "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
   "Programming Language :: Python",
   "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
 ]
 
 dependencies = [
-  "lazy_loader",
-  "pydantic",
-  "pydantic-settings",
-  "python-dotenv",
-  "rich",
-  "deprecated",
+  "lazy_loader==0.4.*",
+  "pydantic==2.11.*",
+  "pydantic-settings==2.10.*",
+  "python-dotenv==1.1.*",
+  "rich==14.1.*",
+  "deprecated==1.2.*",
 ]
 
 keywords = ["poulet_py"]
@@ -54,35 +53,42 @@ utils = ["poulet_py[qst, osc]"]
 ## Sub-modules ##
 # optional, define them on their corresponding module
 # Converters
-seq = ["flirpy", "zstd", "pandas", "tqdm", "pillow", "h5py"]
+seq = [
+  "setuptools==80.9.*", # needed for flirpy as it depends on pkg_resources
+  "flirpy", # install it separately from github repo
+  "zstd==1.5.*",
+  "pandas==2.3.*",
+  "tqdm==4.67.*",
+  "pillow==11.3.*",
+  "h5py==3.14.*",
+]
 # Hardware
 camera = [
-  "pypylon",
-  "opencv-python",
-  "numpy",
-  "scipy",
-  "matplotlib",
-  "h5py",
-  "keyboard",
-  "pywin32; platform_system == 'Windows'",
-  "pythonnet",
+  "pypylon==4.2.*",
+  "opencv-python==4.12.*",
+  "numpy==2.2.*",
+  "scipy==1.16.*",
+  "matplotlib==3.10.*",
+  "h5py==3.14.*",
+  "keyboard==0.13.*",
+  "pywin32==311; platform_system == 'Windows'",
+  "pythonnet==3.0.*",
 ]
-arduino = ["pyserial"]
-julabo = ["pyserial"]
-qst = ["pandas", "tqdm", "pyserial"]
+arduino = ["pyserial==3.5.*"]
+julabo = ["pyserial==3.5.*"]
+qst = ["pandas==2.3.*", "tqdm==4.67.*", "pyserial==3.5.*"]
 # Tools
 
 # Utils
-osc = ["pandas", "matplotlib", "numpy"]
+osc = ["pandas==2.3.*", "matplotlib==3.10.*", "numpy==2.2.*"]
 # Install all modules
 all = ["poulet_py[hardware, converters, tools, utils]"]
 # Docs
 docs = [
-  "sphinx",
-  "pydata-sphinx-theme",
-  "sphinx-autodoc-typehints",
-  "sphinx-git",
-  "ipython",
+  "sphinx==8.2.*",
+  "pydata-sphinx-theme==0.16.*",
+  "sphinx-autodoc-typehints==3.2.*",
+  "ipython==9.4.*",
 ]
 
 [tool.hatch.envs.docs]
@@ -107,7 +113,7 @@ python -m http.server --directory docs/build 8000
 """
 
 [tool.hatch.envs.lint]
-dependencies = ["mypy", "ruff"]
+dependencies = ["mypy==1.17.*", "ruff==0.12.*"]
 
 [tool.hatch.envs.lint.scripts]
 typing = "mypy --install-types --non-interactive {args:poulet_py tests}"
@@ -204,11 +210,19 @@ max-args = 15
 ban-relative-imports = "all"
 
 [tool.hatch.envs.hatch-test]
-extra-dependencies = ["poulet_py[all]"]
+extra-dependencies = [
+  "pytest==8.4.*",
+  "flirpy @ git+https://github.com/LJMUAstroecology/flirpy.git",
+  "poulet_py[all]",
+]
 
 [[tool.hatch.envs.hatch-test.matrix]]
-python = ["3.10", "3.11", "3.12", "3.13"]
-dependencies = ["'poulet_py[all]'"]
+python = ["3.11", "3.12", "3.13"]
+dependencies = [
+  "pytest==8.4.*",
+  "flirpy @ git+https://github.com/LJMUAstroecology/flirpy.git",
+  "'poulet_py[all]'",
+]
 
 [tool.coverage.run]
 source_pkgs = ["poulet_py", "tests"]
