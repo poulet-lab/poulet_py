@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-version = "0.1.1"
+version = "0.1.2"
 name = "poulet_py"
 description = "A library which hosts various neuroscience python methods"
 readme = "README.md"
