@@ -1,8 +1,10 @@
 name: Upload Python Package
 
 on:
-  release:
-    types: [published]
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -14,6 +16,8 @@ jobs:
     steps:
       - name: Checkout branch
         uses: actions/checkout@v5
+        with:
+          fetch-tags: true
 
       - name: Install Hatch
         uses: pypa/hatch@install
