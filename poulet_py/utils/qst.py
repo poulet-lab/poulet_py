@@ -6,9 +6,7 @@ try:
     from pandas import DataFrame
     from tqdm import tqdm
 
-    from poulet_py.hardware.stimulator.qst import TCS, TCSStimulus
-    from poulet_py.tools.generators import generate_stimulus_sequence
-    from poulet_py.utils.oscilloscope import Oscilloscope
+    from poulet_py import TCS, BaseTrigger, Oscilloscope, TCSStimulus, generate_stimulus_sequence
 
 except ImportError as e:
     msg = """
@@ -30,7 +28,7 @@ class TCSInterface(TCS):
     Parameters
     ----------
     port : str
-        Serial port to which the device is connected.
+        Serial port to which the device is connected.s
     maximum_temperature : float, optional
         Maximum allowed temperature in °C (default: 40).
     beep : bool, optional
@@ -45,6 +43,8 @@ class TCSInterface(TCS):
         Number of trials to run (default: 1).
     stimuli : list[TCSStimulus], optional
         List of stimulus configurations (default: None).
+    stimulus_trigger: BaseTrigger, optional
+        A Trigger found in poulet_py/hardware/triggers to trigger the next stimulus
     mode : {'random', 'fixed'}, optional
         Stimulus presentation mode (default: 'random').
     interstimulus_period : int or list[int], optional
@@ -82,6 +82,7 @@ class TCSInterface(TCS):
         response_timeout: float = 2,
         n_trials: int = 1,
         stimuli: list[TCSStimulus] | None = None,
+        stimulus_trigger: BaseTrigger | None = None,
         mode: Literal["random", "fixed"] = "random",
         interstimulus_period: int | list[int] = 0,
     ):
@@ -92,11 +93,13 @@ class TCSInterface(TCS):
             trigger_out_channel=trigger_out_channel,
             read_timeout=read_timeout,
             response_timeout=response_timeout,
+            stimulus_trigger=stimulus_trigger,
         )
 
         self.interstimulus_period: int | list[int] = interstimulus_period
         self.n_trials: int = n_trials
         self.mode: Literal["random", "fixed"] = mode
+        self.stimulus_trigger: BaseTrigger | None = stimulus_trigger
 
         if stimuli is not None:
             self.stimuli = stimuli

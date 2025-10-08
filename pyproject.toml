@@ -45,17 +45,12 @@ allow-direct-references = true
 constraints-file = "constraints.txt"
 
 [project.optional-dependencies]
-## Main modules ##
-hardware = ["poulet_py[camera, arduino, julabo, qst]"]
-converters = ["poulet_py[seq]"]
-tools = ["orjson"]
-utils = ["poulet_py[qst, osc]"]
 ## Sub-modules ##
 # optional, define them on their corresponding module
 # Converters
 seq = [
   "setuptools==80.9.*", # needed for flirpy as it depends on pkg_resources
-  "flirpy", # install it separately from github repo
+  "flirpy",             # install it separately from github repo
   "zstd==1.5.*",
   "pandas==2.3.*",
   "tqdm==4.67.*",
@@ -77,12 +72,19 @@ camera = [
 arduino = ["pyserial==3.5.*"]
 julabo = ["pyserial==3.5.*"]
 qst = ["pandas==2.3.*", "tqdm==4.67.*", "pyserial==3.5.*"]
+triggers = ["poulet_py[gpio]"]
+gpio = ["gpiozero==2.0.*"]
 # Tools
 
 # Utils
 osc = ["pandas==2.3.*", "matplotlib==3.10.*", "numpy==2.2.*"]
+## Main modules ##
+converters = ["poulet_py[seq]"]
+hardware = ["poulet_py[camera, arduino, julabo, qst, triggers]"]
+tools = ["orjson"]
+utils = ["poulet_py[qst, osc]"]
 # Install all modules
-all = ["poulet_py[hardware, converters, tools, utils]"]
+all = ["poulet_py[converters, hardware, tools, utils]"]
 # Docs
 docs = [
   "sphinx==8.2.*",
