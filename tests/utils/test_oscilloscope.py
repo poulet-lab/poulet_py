@@ -1,6 +1,6 @@
 # test_oscilloscope.py
-import pytest
 import matplotlib
+import pytest
 
 matplotlib.use("Agg")  # prevent GUI during tests
 
