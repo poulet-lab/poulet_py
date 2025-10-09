@@ -53,9 +53,9 @@ class GPIOTrigger(BaseTrigger):
         """Wait for GPIO event."""
         try:
             start = time()
-            self.triggered = False
+            self._triggered = False
 
-            while not self.triggered:
+            while not self._triggered:
                 if self.timeout and time() - start > self.timeout:
                     return False
                 sleep(0.001)
