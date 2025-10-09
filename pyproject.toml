@@ -62,7 +62,7 @@ camera = [
   "pypylon==4.2.*",
   "opencv-python==4.12.*",
   "numpy==2.2.*",
-  "scipy==1.16.*",
+  "scipy>=1.16,<1.16",
   "matplotlib==3.10.*",
   "h5py==3.14.*",
   "keyboard==0.13.*",
