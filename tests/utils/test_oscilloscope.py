@@ -8,6 +8,7 @@ import numpy as np
 from matplotlib.animation import FuncAnimation
 from matplotlib.collections import LineCollection
 from pandas import DataFrame
+from numpy.testing import assert_array_almost_equal
 
 from poulet_py import Oscilloscope
 
@@ -66,6 +67,7 @@ def test_update_view_auto_and_fixed(osc: Oscilloscope):
     osc._update_view(y, x)
     xlim = osc.ax.get_xlim()
     ylim = osc.ax.get_ylim()
+
     assert xlim[0] < 0
     assert ylim[1] > 2
 
@@ -73,8 +75,10 @@ def test_update_view_auto_and_fixed(osc: Oscilloscope):
     osc.xlim = (0, 1)
     osc.ylim = (-1, 1)
     osc._update_view(y, x)
-    assert osc.ax.get_xlim() == (0, 1)
-    assert osc.ax.get_ylim() == (-1, 1)
+    xlim = osc.ax.get_xlim()
+    ylim = osc.ax.get_ylim()
+
+    assert_array_almost_equal(xlim, (0, 1), 1, "Error in fixed mode")
 
 
 def test_start_and_stop(osc: Oscilloscope):

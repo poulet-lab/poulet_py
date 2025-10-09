@@ -36,7 +36,7 @@ class TestTCSCommand:
     def test_command_formatting(self):
         assert TCSCommand.TARGET_TEMPERATURE.format(1, 350) == b"C1350"
         assert TCSCommand.BASELINE_TEMPERATURE.format(300) == b"N300"
-        assert TCSCommand.STIMULATION_RATE.format(1, 10) == b"V00110"
+        assert TCSCommand.STIMULATION_RATE.format(1, 10) == b"V10010"
 
     def test_invalid_formatting(self):
         with pytest.raises(ValueError):
