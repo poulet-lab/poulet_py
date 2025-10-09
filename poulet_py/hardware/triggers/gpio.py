@@ -25,7 +25,7 @@ class GPIOTrigger(BaseTrigger):
     edge: Literal["rising", "falling", "both"] = Field("rising", description="Edge to detect")
 
     _triggered: bool = PrivateAttr(False)
-    _device:Button | None =  PrivateAttr(None)
+    _device: Button | None = PrivateAttr(None)
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -40,7 +40,7 @@ class GPIOTrigger(BaseTrigger):
         except Exception as e:
             msg = f"Failed to initialize GPIO pin {self.pin}: {e}"
             raise RuntimeError(msg) from e
-  
+
     def _on_rising(self):
         if self.edge in ("rising", "both"):
             self._triggered = True
@@ -52,8 +52,8 @@ class GPIOTrigger(BaseTrigger):
     def wait(self) -> bool:
         """Wait for GPIO event."""
         try:
-            start = time()            
-            self.triggered= False
+            start = time()
+            self.triggered = False
 
             while not self.triggered:
                 if self.timeout and time() - start > self.timeout:

@@ -7,8 +7,8 @@ matplotlib.use("Agg")  # prevent GUI during tests
 import numpy as np
 from matplotlib.animation import FuncAnimation
 from matplotlib.collections import LineCollection
-from pandas import DataFrame
 from numpy.testing import assert_array_almost_equal
+from pandas import DataFrame
 
 from poulet_py import Oscilloscope
 
