@@ -9,6 +9,9 @@ from .hardware import (
     TCSCommand,
     TCSStimulus,
     ThermalCamera,
+    BaseTrigger,
+    GPIOTrigger,
+    KeyboardTrigger,
 )
 from .tools import (
     check_or_create,
@@ -43,4 +46,7 @@ __all__ = [
     "sanitize_path",
     "save_metadata_exp",
     "setup_logging",
+    "BaseTrigger",
+    "GPIOTrigger",
+    "KeyboardTrigger",
 ]

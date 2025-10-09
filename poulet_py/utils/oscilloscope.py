@@ -170,7 +170,7 @@ class Oscilloscope:
             self._x.clear()
             self._y.clear()
 
-    def _update(self) -> list[LineCollection]:
+    def _update(self, frame) -> list[LineCollection]:
         """Internal animation update handler.
 
         Parameters
