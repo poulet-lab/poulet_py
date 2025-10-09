@@ -9,7 +9,7 @@ try:
     import cv2
     from pypylon import pylon
 
-    from poulet_py.config.logging import LOGGER, setup_logging
+    from poulet_py import LOGGER, setup_logging
 except ImportError as e:
     msg = """
 Missing 'camera' module. Install options:

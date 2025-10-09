@@ -5,7 +5,7 @@ try:
 
     import serial
 
-    from poulet_py.config.logging import LOGGER, setup_logging
+    from poulet_py import LOGGER, setup_logging
 except ImportError as e:
     msg = """
 Missing 'arduino' module. Install options:
