@@ -26,7 +26,7 @@ try:
     from pydantic import BaseModel, Field
     from serial import Serial
 
-    from poulet_py.config.logging import LOGGER
+    from poulet_py import LOGGER, BaseTrigger
 except ImportError as e:
     msg = """
 Missing 'qst' module. Install options:
@@ -103,7 +103,7 @@ class TCSCommand(bytes, Enum):
     STIMULATION_DURATION = b"D%d%05d"
     # xxx=001-255 (trigger_channel), yyy=010-999 (duration), unit=ms, default: 255300
     TRIGGER_CHANNEL_DURATION = b"T%03d%03d"
-    # Buzzer ddd: duration in 10× ms, fff: frequency in 10× Hz
+    # Buzzer ddd: duration in 10X ms, fff: frequency in 10× Hz
     BUZZER = b"Z%03d%03d"
 
     def format(self, *args: int | float) -> bytes:
@@ -141,6 +141,32 @@ class TCSCommand(bytes, Enum):
 class TCSStimulus(BaseModel):
     """
     Configuration for thermal stimulation parameters.
+
+    Attributes
+    ----------
+    surface : int
+        Target surface (0-5, where 0 means all surfaces).
+    baseline : float
+        Baseline temperature in °C (20-45).
+    target : float
+        Target temperature in °C (0-60).
+    rise_rate : float
+        Temperature rise rate in °C/s (0.1-999.9).
+    return_speed : float
+        Temperature return speed in °C/s (0.1-999.9).
+    duration : int
+        Stimulation duration in ms (10-99999).
+
+    Methods
+    -------
+    commands() -> list
+        Generate the sequence of commands needed to configure this stimulus.
+
+    Examples
+    --------
+    >>> stimulus = TCSStimulus(surface=1)
+    >>> stimulus.commands()
+    [b'S10000', b'N300', b'C1000', b'V10010', b'D100100', b'R10010']
     """
 
     surface: int = Field(
@@ -163,7 +189,7 @@ class TCSStimulus(BaseModel):
     )
     rise_rate: float = Field(
         1,
-        description="Temperature rise rate in °C/s (0.1-999.9",
+        description="Temperature rise rate in °C/s (0.1-999.9)",
         ge=0.1,
         le=999.9,
     )
@@ -186,7 +212,7 @@ class TCSStimulus(BaseModel):
 
         Returns
         -------
-        Tuple[bytes, ...]
+        list
             Sequence of formatted command strings
 
         Examples
@@ -209,35 +235,68 @@ class TCSStimulus(BaseModel):
 class TCS:
     """
     Interface for communicating with a TCS thermal stimulator.
+
+    Parameters
+    ----------
+    port : str
+        Serial port to which the device is connected.
+    maximum_temperature : float, optional
+        Maximum allowed temperature in °C (default: 40).
+    beep : bool, optional
+        Whether to enable audible beeps (default: False).
+    trigger_out_channel : int, optional
+        Output channel for trigger signals (default: 255).
+    read_timeout : float, optional
+        Timeout for read operations in seconds (default: 2).
+    response_timeout : float, optional
+        Timeout for device responses in seconds (default: 2).
+    stimulus_trigger : BaseTrigger, optional
+        A Trigger found in poulet_py/hardware/triggers to trigger the next stimulus.
+
+    Methods
+    -------
+    init() -> None
+        Initialize the TCS connection and verify communication.
+    close() -> None
+        Close the connection and clean up resources.
+    info() -> str
+        Get device information including firmware version and probe details.
+    reset() -> None
+        Reset the TCS device to its default state.
+    trigger() -> None
+        Execute the configured stimulation.
+    get_readings() -> dict
+        Get current temperature readings from all sensors.
+
+    Examples
+    --------
+    >>> with TCS(port="/dev/ttyUSB0") as tcs:
+    >>>     tcs.init()
+    >>>     stimulus = TCSStimulus(surface=1, target=35.0)
+    >>>     tcs.stimulus = stimulus
+    >>>     tcs.trigger()
+    >>>     readings = tcs.get_readings()
+    >>>     print(readings)
     """
 
     def __init__(
         self,
         port: str,
         *,
-        maximum_temperature: float = 40,
+        maximum_temperature: float = 40.0,
         beep: bool = False,
         trigger_out_channel: int = 255,
-        read_timeout: float = 2,
-        response_timeout: float = 2,
+        read_timeout: float = 2.0,
+        response_timeout: float = 2.0,
+        stimulus_trigger: BaseTrigger | None = None,
     ):
-        """
-        Initialize TCS interface with validation.
-
-        Args:
-            port: Serial port device path (e.g. '/dev/ttyUSB0' or 'COM3')
-            maximum_temperature: Safety limit for maximum allowed temperature (0-60°C)
-            beep: Whether to enable audible beep during stimulation
-            trigger_out_channel: Output channel of trigger signal (1-255)
-            read_timeout: Serial read timeout in seconds
-            response_timeout: Timeout for command responses in seconds
-        """
-        self.port = port
-        self.maximum_temperature = maximum_temperature
-        self.beep = beep
-        self.trigger_out_channel = trigger_out_channel
-        self.read_timeout = read_timeout
-        self.response_timeout = response_timeout
+        self.port: str = port
+        self.maximum_temperature: float = maximum_temperature
+        self.beep: bool = beep
+        self.trigger_out_channel: int = trigger_out_channel
+        self.read_timeout: float = read_timeout
+        self.response_timeout: float = response_timeout
+        self.stimulus_trigger: BaseTrigger | None = stimulus_trigger
 
         self._validate()
 
@@ -254,29 +313,6 @@ class TCS:
         self._thread = Thread(target=self._read_loop, daemon=True, name="TCS Serial Reader")
         self._current_search = None  # (pattern, event, result)
         self._stimulus = TCSStimulus()
-
-    def _validate(self):
-        """Validate all fields according to their constraints."""
-        msg = ""
-        if not match(r"^(COM\d+|/dev/ttyUSB\d+|/dev/tty\.usb\w+)$", self.port):
-            msg += "Port must match pattern: 'COM<number>'"
-            " or '/dev/ttyUSB<number>'"
-            " or '/dev/tty.usb<something>'\n"
-
-        if not 0 <= self.maximum_temperature <= 60:  # noqa: PLR2004
-            msg += "Maximum temperature must be between 0 and 60°C\n"
-
-        if not 1 <= self.trigger_out_channel <= 255:  # noqa: PLR2004
-            msg += "Trigger out channel must be between 1 and 255\n"
-
-        if self.read_timeout <= 0:
-            msg += "Read timeout must be positive\n"
-
-        if self.response_timeout <= 0:
-            msg += "Response timeout must be positive\n"
-
-        if msg:
-            raise ValueError(msg)
 
     @property
     def stimulus(self) -> TCSStimulus:
@@ -308,6 +344,29 @@ class TCS:
     def stimulus(self):
         with self._write_lock:
             self._stimulus = TCSStimulus()
+
+    def _validate(self):
+        """Validate all fields according to their constraints."""
+        msg = ""
+        if not match(r"^(COM\d+|/dev/ttyUSB\d+|/dev/tty\.usb\w+)$", self.port):
+            msg += "Port must match pattern: 'COM<number>'"
+            " or '/dev/ttyUSB<number>'"
+            " or '/dev/tty.usb<something>'\n"
+
+        if not 0 <= self.maximum_temperature <= 60:  # noqa: PLR2004
+            msg += "Maximum temperature must be between 0 and 60°C\n"
+
+        if not 1 <= self.trigger_out_channel <= 255:  # noqa: PLR2004
+            msg += "Trigger out channel must be between 1 and 255\n"
+
+        if self.read_timeout <= 0:
+            msg += "Read timeout must be positive\n"
+
+        if self.response_timeout <= 0:
+            msg += "Response timeout must be positive\n"
+
+        if msg:
+            raise ValueError(msg)
 
     def _start_reader(self):
         """Start the background serial reader thread if not already running."""
@@ -531,6 +590,11 @@ class TCS:
         try:
             for command in self.stimulus.commands():
                 self.write(command)
+
+            if self.stimulus_trigger is not None:
+                if not self.stimulus_trigger.wait():
+                    msg = "Trigger Failed, canceling stimulation"
+                    raise RuntimeError(msg)
 
             self.write(TCSCommand.TRIGGER_STIMULATION.format())
 
