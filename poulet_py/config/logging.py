@@ -3,7 +3,7 @@ from logging import FileHandler, Formatter, Logger, getLogger
 from rich.console import Console
 from rich.logging import RichHandler
 
-from poulet_py.config.settings import SETTINGS
+from poulet_py import SETTINGS
 
 
 def setup_logging(

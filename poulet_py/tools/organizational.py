@@ -7,7 +7,7 @@ try:
 
     from deprecated import deprecated
 
-    from poulet_py.config.logging import LOGGER
+    from poulet_py import LOGGER
 except ImportError as e:
     msg = """
 Missing 'tools' module. Install options:
