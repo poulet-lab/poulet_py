@@ -14,3 +14,4 @@ Subpackages
 
    poulet_py.hardware.camera
    poulet_py.hardware.stimulator
+   poulet_py.hardware.triggers
