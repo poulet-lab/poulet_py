@@ -89,7 +89,7 @@ all = ["poulet_py[converters, hardware, tools, utils]"]
 docs = [
   "sphinx==8.2.*",
   "pydata-sphinx-theme==0.16.*",
-  "sphinx-autodoc-typehints==3.2.*",
+  "sphinx-autodoc-typehints>=3.2,<3.1",
   "ipython==9.4.*",
 ]
 
