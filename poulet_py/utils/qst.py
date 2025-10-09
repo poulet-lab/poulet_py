@@ -96,6 +96,10 @@ class TCSInterface(TCS):
             stimulus_trigger=stimulus_trigger,
         )
 
+        self._stimuli: list[TCSStimulus] = []
+        self._readings: list[dict[str, float | int]] = []
+        self._oscilloscope: Oscilloscope | None = None
+
         self.interstimulus_period: int | list[int] = interstimulus_period
         self.n_trials: int = n_trials
         self.mode: Literal["random", "fixed"] = mode
@@ -103,10 +107,6 @@ class TCSInterface(TCS):
 
         if stimuli is not None:
             self.stimuli = stimuli
-
-        self._stimuli: list[TCSStimulus] = []
-        self._readings: list[dict[str, float | int]] = []
-        self._oscilloscope: Oscilloscope | None = None
 
     @property
     def stimuli(self) -> list[TCSStimulus]:
