@@ -3,6 +3,7 @@ build:
   os: ubuntu-lts-latest
   apt_packages:
     - libuvc-dev
+    - swig
   tools:
     python: latest
 sphinx:
