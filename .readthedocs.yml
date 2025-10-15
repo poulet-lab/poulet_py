@@ -4,6 +4,7 @@ build:
   apt_packages:
     - libuvc-dev
     - swig
+    - liblgpio-dev
   tools:
     python: latest
 sphinx:
