@@ -377,8 +377,9 @@ class TCS:
             # Start reader thread if not already running
             self._start_reader()
             self._serial.flush()
-            LOGGER.debug(f"Sending command: {command}")
+            # LOGGER.debug(f"Sending command: {command}")
             bytes_written = self._serial.write(command)
+            # LOGGER.info(command)
             if bytes_written != len(command):
                 LOGGER.warning(f"Partial write: {bytes_written}/{len(command)} bytes")
             return bytes_written
