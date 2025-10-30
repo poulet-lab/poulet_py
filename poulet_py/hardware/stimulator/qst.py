@@ -437,9 +437,21 @@ class TCS:
             self._start_reader()
             self._serial.flush()
             LOGGER.debug(f"Sending command: {command}")
-            bytes_written = self._serial.write(command)
-            if bytes_written != len(command):
-                LOGGER.warning(f"Partial write: {bytes_written}/{len(command)} bytes")
+            command = command.decode("utf-8")
+
+            all_bytes_written = []
+            if len(command) > 1:
+                for letter in command:
+                    command = bytearray(letter, ("utf-8"))
+                    bytes_written = self._serial.write(command)
+                    if bytes_written != len(command):
+                        LOGGER.warning(f"Partial write: {bytes_written}/{len(command)} bytes")
+                    all_bytes_written.append(bytes_written)
+            else:
+                command = bytearray(command, ("utf-8"))
+                bytes_written = self._serial.write(command)
+                if bytes_written != len(command):
+                    LOGGER.warning(f"Partial write: {bytes_written}/{len(command)} bytes")
             return bytes_written
         except Exception as e:
             msg = f"Write operation failed: {e}"
