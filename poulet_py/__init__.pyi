@@ -12,6 +12,7 @@ from .hardware import (
     BaseTrigger,
     GPIOTrigger,
     KeyboardTrigger,
+    Soho,
 )
 from .tools import (
     check_or_create,
@@ -49,4 +50,5 @@ __all__ = [
     "BaseTrigger",
     "GPIOTrigger",
     "KeyboardTrigger",
+    "Soho",
 ]
