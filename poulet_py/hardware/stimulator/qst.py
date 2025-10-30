@@ -516,18 +516,18 @@ class TCS:
         try:
             self.write(TCSCommand.SET_MAX_TEMPERATURE.format(int(self.maximum_temperature * 10)))
 
-            info = self.info()
-            match = search(
-                compile(r"Firmware:(.*)\nProbe ID:(.*)\nProbe TYPE:(.*)\n"),
-                info,
-            )
+            # info = self.info()
+            # match = search(
+            #     compile(r"Firmware:(.*)\nProbe ID:(.*)\nProbe TYPE:(.*)\n"),
+            #     info,
+            # )
 
-            LOGGER.info(
-                "Initialized successfully\n"
-                f"Firmware: {match.group(1).strip() if match else 'Unknown'}\n"
-                f"Probe ID: {match.group(2).strip() if match else 'Unknown'}\n"
-                f"Probe TYPE: {match.group(3).strip() if match else 'Unknown'}"
-            )
+            # LOGGER.info(
+            #     "Initialized successfully\n"
+            #     f"Firmware: {match.group(1).strip() if match else 'Unknown'}\n"
+            #     f"Probe ID: {match.group(2).strip() if match else 'Unknown'}\n"
+            #     f"Probe TYPE: {match.group(3).strip() if match else 'Unknown'}"
+            # )
         except Exception as e:
             msg = "TCS initialization failed"
             raise RuntimeError(msg) from e
