@@ -28,7 +28,7 @@ dependencies = [
   "pydantic==2.11.*",
   "pydantic-settings>=2.10,<2.12",
   "python-dotenv==1.1.*",
-  "rich==14.1.*",
+  "rich>=14.1,<14.3",
   "deprecated==1.2.*",
 ]
 
