@@ -61,7 +61,7 @@ try:
     else:
         folder = "x64" if platform.architecture()[0] == "64bit" else "x86"
         path = os.path.sep.join(__file__.split(os.path.sep)[:-4])
-        sys.path.append(os.path.sep.join([path, "poulet_py", "bin", "leptonUVC", folder]))
+        sys.path.append(os.path.sep.join([path, "poulet_py", "artifacts", "leptonUVC", folder]))
 
         clr.AddReference("LeptonUVC")
         clr.AddReference("ManagedIR16Filters")
