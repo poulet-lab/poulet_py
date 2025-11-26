@@ -323,7 +323,7 @@ class ThermalCamera:
         """Save all frames from the current HDF5 recording as PNG images."""
 
         with h5py.File(self.output_path, "r") as f:
-            frame_keys = list(f.keys())
+            frame_keys = [key for key in f.keys() if key.startswith("frame")]
             frame_keys.sort(key=lambda x: int(x.replace("frame", "")))
 
             for frame_name in frame_keys:
