@@ -9,8 +9,8 @@ import tempfile
 import textwrap
 import urllib.request
 import zipfile
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 TEMPLATE_REPO = "poulet-lab/experiment-template"
 TEMPLATE_BRANCH = "main"
@@ -58,7 +58,9 @@ def _remove_git_directory(target: Path) -> None:
         shutil.rmtree(git_dir)
 
 
-def create_experiment(name: str, *, repo: str = TEMPLATE_REPO, branch: str = TEMPLATE_BRANCH) -> None:
+def create_experiment(
+    name: str, *, repo: str = TEMPLATE_REPO, branch: str = TEMPLATE_BRANCH
+) -> None:
     """Create a new experiment project using the template repository."""
 
     target = Path(name).resolve()
