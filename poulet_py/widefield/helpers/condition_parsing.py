@@ -3,9 +3,10 @@ Functions for parsing condition information from file attributes and comments.
 """
 
 import re
-from typing import Any, Dict, Optional
+from typing import Any
 
-def parse_comment(comment: str) -> Optional[Dict[str, Any]]:
+
+def parse_comment(comment: str) -> dict[str, Any] | None:
     """
     Parse condition information from comment string.
 
@@ -23,30 +24,26 @@ def parse_comment(comment: str) -> Optional[Dict[str, Any]]:
     """
     parsed = {}
 
-    temp_pattern = r'temp\s+(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)'
+    temp_pattern = r"temp\s+(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)"
     temp_match = re.search(temp_pattern, comment, re.IGNORECASE)
     if temp_match:
-        parsed['baseline_temperature'] = float(temp_match.group(1))
-        parsed['target_temperature'] = float(temp_match.group(2))
+        parsed["baseline_temperature"] = float(temp_match.group(1))
+        parsed["target_temperature"] = float(temp_match.group(2))
 
-    duration_pattern = r'(\d+(?:\.\d+)?)\s*sec'
+    duration_pattern = r"(\d+(?:\.\d+)?)\s*sec"
     duration_match = re.search(duration_pattern, comment, re.IGNORECASE)
     if duration_match:
-        parsed['duration'] = float(duration_match.group(1))
+        parsed["duration"] = float(duration_match.group(1))
 
-    repetitions_pattern = r'(\d+)\s*times?'
-    repetitions_match = re.search(
-        repetitions_pattern, comment, re.IGNORECASE
-    )
+    repetitions_pattern = r"(\d+)\s*times?"
+    repetitions_match = re.search(repetitions_pattern, comment, re.IGNORECASE)
     if repetitions_match:
-        parsed['repetitions'] = int(repetitions_match.group(1))
+        parsed["repetitions"] = int(repetitions_match.group(1))
 
     return parsed if parsed else None
 
 
-def get_condition_from_attributes(
-    attributes: Dict[str, Any]
-) -> Optional[Dict[str, Any]]:
+def get_condition_from_attributes(attributes: dict[str, Any]) -> dict[str, Any] | None:
     """
     Extract condition information from file attributes.
 
@@ -66,50 +63,45 @@ def get_condition_from_attributes(
     condition = {}
     parsed_from = []
 
-    protocol = attributes.get('protocol_name')
+    protocol = attributes.get("protocol_name")
     if protocol:
         if isinstance(protocol, bytes):
-            protocol = protocol.decode('utf-8')
-        condition['protocol'] = protocol
-        parsed_from.append('protocol_name')
+            protocol = protocol.decode("utf-8")
+        condition["protocol"] = protocol
+        parsed_from.append("protocol_name")
 
-    if 'target_temperature' in attributes:
-        condition['target_temperature'] = float(
-            attributes['target_temperature']
-        )
-        parsed_from.append('target_temperature')
+    if "target_temperature" in attributes:
+        condition["target_temperature"] = float(attributes["target_temperature"])
+        parsed_from.append("target_temperature")
 
-    if 'baseline_temperature' in attributes:
-        condition['baseline_temperature'] = float(
-            attributes['baseline_temperature']
-        )
-        parsed_from.append('baseline_temperature')
+    if "baseline_temperature" in attributes:
+        condition["baseline_temperature"] = float(attributes["baseline_temperature"])
+        parsed_from.append("baseline_temperature")
 
-    if 'duration' in attributes:
-        condition['duration'] = float(attributes['duration'])
-        parsed_from.append('duration')
+    if "duration" in attributes:
+        condition["duration"] = float(attributes["duration"])
+        parsed_from.append("duration")
 
-    if 'stim_length' in attributes:
-        condition['stim_length'] = float(attributes['stim_length'])
-        parsed_from.append('stim_length')
+    if "stim_length" in attributes:
+        condition["stim_length"] = float(attributes["stim_length"])
+        parsed_from.append("stim_length")
 
-    comment = attributes.get('comment', '')
+    comment = attributes.get("comment", "")
     if isinstance(comment, bytes):
-        comment = comment.decode('utf-8')
+        comment = comment.decode("utf-8")
 
     if comment:
-        condition['comment'] = comment
+        condition["comment"] = comment
 
-        if 'target_temperature' not in condition:
+        if "target_temperature" not in condition:
             parsed_comment = parse_comment(comment)
             if parsed_comment:
                 condition.update(parsed_comment)
-                parsed_from.append('comment_parsed')
+                parsed_from.append("comment_parsed")
 
-    condition['parsed_from'] = parsed_from
+    condition["parsed_from"] = parsed_from
 
     if not condition:
         return None
 
     return condition
-
