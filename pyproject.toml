@@ -78,13 +78,23 @@ gpio = ["gpiozero==2.0.*", "lgpio==0.2.*"]
 
 # Utils
 osc = ["pandas==2.3.*", "matplotlib==3.10.*", "numpy==2.2.*"]
+# Widefield
+widefield = [
+  "h5py==3.14.*",
+  "imageio==2.36.*",
+  "matplotlib==3.10.*",
+  "numpy==2.2.*",
+  "pandas==2.3.*",
+  "scikit-image==0.25.*",
+]
 ## Main modules ##
 converters = ["poulet_py[seq]"]
 hardware = ["poulet_py[camera, arduino, julabo, qst, triggers]"]
 tools = ["orjson"]
 utils = ["poulet_py[qst, osc]"]
+widefield = ["poulet_py[widefield]"]
 # Install all modules
-all = ["poulet_py[converters, hardware, tools, utils]"]
+all = ["poulet_py[converters, hardware, tools, utils, widefield]"]
 # Docs
 docs = [
   "sphinx==8.2.*",

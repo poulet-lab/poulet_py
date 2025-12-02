@@ -23,6 +23,7 @@ from .tools import (
     save_metadata_exp,
 )
 from .utils import Oscilloscope, TCSInterface
+from .widefield import WidefieldAnalysis
 
 __all__ = [
     "LOGGER",
@@ -49,4 +50,5 @@ __all__ = [
     "BaseTrigger",
     "GPIOTrigger",
     "KeyboardTrigger",
+    "WidefieldAnalysis",
 ]
