@@ -12,9 +12,10 @@ A trial folder contains:
 """
 
 try:
-    from pathlib import Path
-    from typing import Any, Callable, Dict, Optional, Tuple, Union
     import json
+    from collections.abc import Callable
+    from pathlib import Path
+    from typing import Any, Dict, Optional, Tuple, Union
 
     import h5py
     import imageio
@@ -34,6 +35,7 @@ Missing required modules. Install options:
 Also ensure: h5py, numpy, pandas, scikit-image, imageio, matplotlib are installed
 """
     raise ImportError(msg) from e
+
 
 class WidefieldAnalysis:
     """
@@ -62,19 +64,19 @@ class WidefieldAnalysis:
         """
         self.trial_path = Path(trial_path)
 
-        self.tiff_path: Optional[Path] = None
-        self.csv_path: Optional[Path] = None
-        self.h5_path: Optional[Path] = None
-        self.green_path: Optional[Path] = None
+        self.tiff_path: Path | None = None
+        self.csv_path: Path | None = None
+        self.h5_path: Path | None = None
+        self.green_path: Path | None = None
 
-        self.imaging_data: Optional[np.ndarray] = None
-        self.green_reference: Optional[np.ndarray] = None
-        self.timestamps: Optional[pd.DataFrame] = None
-        self.sensor_data: Dict[str, np.ndarray] = {}
-        self.sensor_attrs: Dict[str, Dict[str, Any]] = {}
-        self.file_attrs: Dict[str, Any] = {}
-        self.condition: Optional[Dict[str, Any]] = None
-        self.roi: Optional[Dict[str, Any]] = None
+        self.imaging_data: np.ndarray | None = None
+        self.green_reference: np.ndarray | None = None
+        self.timestamps: pd.DataFrame | None = None
+        self.sensor_data: dict[str, np.ndarray] = {}
+        self.sensor_attrs: dict[str, dict[str, Any]] = {}
+        self.file_attrs: dict[str, Any] = {}
+        self.condition: dict[str, Any] | None = None
+        self.roi: dict[str, Any] | None = None
 
         self._validate()
 
@@ -150,9 +152,9 @@ class WidefieldAnalysis:
             return
 
         try:
-            self.timestamps = pd.read_csv(self.csv_path, sep=';')
+            self.timestamps = pd.read_csv(self.csv_path, sep=";")
             self.timestamps = self.timestamps.loc[
-                :, ~self.timestamps.columns.str.contains('^Unnamed')
+                :, ~self.timestamps.columns.str.contains("^Unnamed")
             ]
             LOGGER.info(f"Loaded timestamps: {len(self.timestamps)} rows")
         except Exception:
@@ -165,7 +167,7 @@ class WidefieldAnalysis:
             return
 
         try:
-            with h5py.File(self.h5_path, 'r') as f:
+            with h5py.File(self.h5_path, "r") as f:
                 self.file_attrs = dict(f.attrs)
 
                 def _visit_datasets(name: str, obj: Any) -> None:
@@ -187,33 +189,32 @@ class WidefieldAnalysis:
 
         if self.imaging_data is not None:
             n_frames, height, width = self.imaging_data.shape
-            LOGGER.info(f"Imaging data:")
+            LOGGER.info("Imaging data:")
             LOGGER.info(f"  Shape: {self.imaging_data.shape}")
             LOGGER.info(f"  Frames: {n_frames}")
             LOGGER.info(f"  Resolution: {width} x {height}")
             LOGGER.info(f"  Dtype: {self.imaging_data.dtype}")
-            LOGGER.info(f"  Value range: [{self.imaging_data.min()}, "
-                        f"{self.imaging_data.max()}]")
+            LOGGER.info(f"  Value range: [{self.imaging_data.min()}, {self.imaging_data.max()}]")
             size_mb = self.imaging_data.nbytes / (1024 * 1024)
             LOGGER.info(f"  Memory: {size_mb:.1f} MB")
 
         if self.timestamps is not None:
-            LOGGER.info(f"Timestamps:")
+            LOGGER.info("Timestamps:")
             LOGGER.info(f"  Rows: {len(self.timestamps)}")
             LOGGER.info(f"  Columns: {list(self.timestamps.columns)}")
 
         if self.sensor_data:
-            LOGGER.info(f"Sensor data:")
+            LOGGER.info("Sensor data:")
             for name, data in self.sensor_data.items():
                 attrs = self.sensor_attrs.get(name, {})
-                sr = attrs.get('sr', 'unknown')
+                sr = attrs.get("sr", "unknown")
                 LOGGER.info(f"  {name}: shape={data.shape}, sr={sr} Hz")
 
         if self.file_attrs:
-            mouse_id = self.file_attrs.get('mouse_id', 'unknown')
-            protocol = self.file_attrs.get('protocol_name', 'unknown')
-            comment = self.file_attrs.get('comment', '')
-            LOGGER.info(f"Metadata:")
+            mouse_id = self.file_attrs.get("mouse_id", "unknown")
+            protocol = self.file_attrs.get("protocol_name", "unknown")
+            comment = self.file_attrs.get("comment", "")
+            LOGGER.info("Metadata:")
             LOGGER.info(f"  Mouse: {mouse_id}")
             LOGGER.info(f"  Protocol: {protocol}")
             if comment:
@@ -223,9 +224,9 @@ class WidefieldAnalysis:
 
     def downscale(
         self,
-        target_resolution: Optional[tuple[int, int]] = None,
-        factor: Optional[int] = None,
-    ) -> Optional[np.ndarray]:
+        target_resolution: tuple[int, int] | None = None,
+        factor: int | None = None,
+    ) -> np.ndarray | None:
         """
         Downscale the imaging data using block averaging.
 
@@ -275,10 +276,7 @@ class WidefieldAnalysis:
                     f"({factor_H_int}, {factor_W_int})."
                 )
                 mov = np.pad(
-                    mov,
-                    ((0, 0), (0, pad_H), (0, pad_W)),
-                    mode='constant',
-                    constant_values=0
+                    mov, ((0, 0), (0, pad_H), (0, pad_W)), mode="constant", constant_values=0
                 )
                 T, H, W = mov.shape
                 factor_H = factor_H_int
@@ -289,17 +287,11 @@ class WidefieldAnalysis:
 
             if factor_H == factor_W:
                 factor = factor_H
-                mov = mov.reshape(
-                    T, H // factor, factor, W // factor, factor
-                ).mean(4).mean(2)
+                mov = mov.reshape(T, H // factor, factor, W // factor, factor).mean(4).mean(2)
             else:
-                LOGGER.info(
-                    f"Using different factors: H={factor_H}, W={factor_W}"
-                )
+                LOGGER.info(f"Using different factors: H={factor_H}, W={factor_W}")
                 mov = mov.reshape(T, H // factor_H, factor_H, W, 1).mean(2)
-                mov = mov.reshape(
-                    T, H // factor_H, W // factor_W, factor_W
-                ).mean(3)
+                mov = mov.reshape(T, H // factor_H, W // factor_W, factor_W).mean(3)
 
         elif factor is not None:
             if H % factor != 0 or W % factor != 0:
@@ -310,21 +302,14 @@ class WidefieldAnalysis:
                     f"Padding ({pad_H}, {pad_W}) pixels."
                 )
                 mov = np.pad(
-                    mov,
-                    ((0, 0), (0, pad_H), (0, pad_W)),
-                    mode='constant',
-                    constant_values=0
+                    mov, ((0, 0), (0, pad_H), (0, pad_W)), mode="constant", constant_values=0
                 )
                 T, H, W = mov.shape
 
-            mov = mov.reshape(
-                T, H // factor, factor, W // factor, factor
-            ).mean(4).mean(2)
+            mov = mov.reshape(T, H // factor, factor, W // factor, factor).mean(4).mean(2)
 
         result = mov.astype(np.uint16)
-        LOGGER.info(
-            f"Downscaled from {self.imaging_data.shape} to {result.shape}"
-        )
+        LOGGER.info(f"Downscaled from {self.imaging_data.shape} to {result.shape}")
         return result
 
     def _view_frame(
@@ -345,7 +330,7 @@ class WidefieldAnalysis:
             _, ax = plt.subplots(figsize=(10, 10))
             ax.imshow(frame, cmap=cmap)
             ax.set_title(title, fontsize=14)
-            ax.axis('off')
+            ax.axis("off")
             plt.tight_layout()
             plt.show()
             LOGGER.info(f"Displayed frame: {title}, shape: {frame.shape}")
@@ -360,33 +345,27 @@ class WidefieldAnalysis:
             cmap: Colormap to use for visualization (default: "gray").
         """
         if self.green_reference is None:
-            LOGGER.warning(
-                "Green reference not loaded. Call load_data() first."
-            )
+            LOGGER.warning("Green reference not loaded. Call load_data() first.")
             return
 
-        self._view_frame(
-            self.green_reference,
-            title="Green Reference Image",
-            cmap=cmap
-        )
+        self._view_frame(self.green_reference, title="Green Reference Image", cmap=cmap)
 
-    def get_fps(self) -> Optional[float]:
+    def get_fps(self) -> float | None:
         """
         Extract frame rate from H5 file attributes.
 
         Returns:
             Frame rate in fps, or None if not found.
         """
-        if 'camera_fps' in self.file_attrs:
-            fps = float(self.file_attrs['camera_fps'])
+        if "camera_fps" in self.file_attrs:
+            fps = float(self.file_attrs["camera_fps"])
             LOGGER.info(f"Found camera_fps: {fps} Hz")
             return fps
 
         LOGGER.warning("camera_fps not found in file attributes")
         return None
 
-    def get_recording_duration(self) -> Optional[float]:
+    def get_recording_duration(self) -> float | None:
         """
         Calculate recording duration from frames and FPS.
 
@@ -407,7 +386,7 @@ class WidefieldAnalysis:
         LOGGER.info(f"Recording duration: {duration:.2f} seconds ({n_frames} frames @ {fps} fps)")
         return duration
 
-    def _get_session_processed_folder(self) -> Optional[Path]:
+    def _get_session_processed_folder(self) -> Path | None:
         """
         Get or create the processed data folder at session level.
 
@@ -437,9 +416,7 @@ class WidefieldAnalysis:
             for _ in range(len(parts) - raw_idx - 1):
                 data_folder = data_folder.parent
 
-            session_processed_folder = (
-                data_folder.parent / "processed" / session_folder
-            )
+            session_processed_folder = data_folder.parent / "processed" / session_folder
 
             session_processed_folder.mkdir(parents=True, exist_ok=True)
             return session_processed_folder
@@ -448,7 +425,7 @@ class WidefieldAnalysis:
             LOGGER.exception("Error creating session processed folder")
             return None
 
-    def _get_processed_folder(self) -> Optional[Path]:
+    def _get_processed_folder(self) -> Path | None:
         """
         Get or create the processed data folder for this trial.
 
@@ -481,8 +458,7 @@ class WidefieldAnalysis:
                 data_folder = data_folder.parent
 
             processed_folder = (
-                data_folder.parent / "processed" /
-                session_folder / "trials" / trial_folder
+                data_folder.parent / "processed" / session_folder / "trials" / trial_folder
             )
 
             processed_folder.mkdir(parents=True, exist_ok=True)
@@ -492,12 +468,7 @@ class WidefieldAnalysis:
             LOGGER.exception("Error creating processed folder")
             return None
 
-    def save_array(
-        self,
-        data: np.ndarray,
-        name: str,
-        file_format: str = "npy"
-    ) -> Optional[Path]:
+    def save_array(self, data: np.ndarray, name: str, file_format: str = "npy") -> Path | None:
         """
         Save numpy array to processed data folder.
 
@@ -532,10 +503,7 @@ class WidefieldAnalysis:
             LOGGER.exception("Error saving array")
             return None
 
-    def to_numpy(
-        self,
-        source: Optional[Union[str, Path, np.ndarray]] = None
-    ) -> Optional[np.ndarray]:
+    def to_numpy(self, source: str | Path | np.ndarray | None = None) -> np.ndarray | None:
         """
         Convert TIFF file or return numpy array as-is.
 
@@ -574,14 +542,14 @@ class WidefieldAnalysis:
 
     def create_movie(
         self,
-        data: Optional[Union[str, Path, np.ndarray]] = None,
-        output_path: Optional[Path] = None,
+        data: str | Path | np.ndarray | None = None,
+        output_path: Path | None = None,
         fps: int = 10,
         cmap: str = "gray",
-        vmin: Optional[float] = None,
-        vmax: Optional[float] = None,
-        frame_callback: Optional[Callable] = None,
-    ) -> Optional[Path]:
+        vmin: float | None = None,
+        vmax: float | None = None,
+        frame_callback: Callable | None = None,
+    ) -> Path | None:
         """
         Create an MP4 movie from TIFF file or numpy array.
 
@@ -617,9 +585,7 @@ class WidefieldAnalysis:
             return None
 
         if len(movie_data.shape) != 3:
-            LOGGER.error(
-                f"Expected 3D array (T, H, W), got: {movie_data.shape}"
-            )
+            LOGGER.error(f"Expected 3D array (T, H, W), got: {movie_data.shape}")
             return None
 
         T, H, W = movie_data.shape
@@ -645,7 +611,7 @@ class WidefieldAnalysis:
                 fig, ax = plt.subplots(figsize=(10, 10))
                 ax.imshow(frame, cmap=cmap, vmin=vmin, vmax=vmax)
                 ax.set_title(f"Frame {frame_idx + 1}/{T}", fontsize=14)
-                ax.axis('off')
+                ax.axis("off")
 
                 if frame_callback is not None:
                     frame_callback(fig, ax, frame_idx, frame, self)
@@ -654,10 +620,9 @@ class WidefieldAnalysis:
 
                 buf = BytesIO()
                 if frame_callback is not None:
-                    fig.savefig(buf, format='png', dpi=100, bbox_inches=None, 
-                               pad_inches=0.0)
+                    fig.savefig(buf, format="png", dpi=100, bbox_inches=None, pad_inches=0.0)
                 else:
-                    fig.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+                    fig.savefig(buf, format="png", dpi=100, bbox_inches="tight")
                 buf.seek(0)
                 frame_img = skio.imread(buf)
                 frames.append(frame_img)
@@ -665,12 +630,7 @@ class WidefieldAnalysis:
                 plt.close(fig)
 
             LOGGER.info(f"Saving movie to: {output_path}")
-            writer = imageio.get_writer(
-                str(output_path),
-                format='FFMPEG',
-                fps=fps,
-                codec='libx264'
-            )
+            writer = imageio.get_writer(str(output_path), format="FFMPEG", fps=fps, codec="libx264")
             for frame in frames:
                 if frame.shape[2] == 4:
                     frame = frame[:, :, :3]
@@ -684,7 +644,7 @@ class WidefieldAnalysis:
             LOGGER.exception("Error creating movie")
             return None
 
-    def _get_session_processed_folder(self) -> Optional[Path]:
+    def _get_session_processed_folder(self) -> Path | None:
         """
         Get or create the processed data folder at session level.
 
@@ -714,9 +674,7 @@ class WidefieldAnalysis:
             for _ in range(len(parts) - raw_idx - 1):
                 data_folder = data_folder.parent
 
-            session_processed_folder = (
-                data_folder.parent / "processed" / session_folder
-            )
+            session_processed_folder = data_folder.parent / "processed" / session_folder
 
             session_processed_folder.mkdir(parents=True, exist_ok=True)
             return session_processed_folder
@@ -725,10 +683,7 @@ class WidefieldAnalysis:
             LOGGER.exception("Error creating session processed folder")
             return None
 
-    def create_mask(
-        self,
-        initial_radius: float = 100.0
-    ) -> Optional[Dict[str, float]]:
+    def create_mask(self, initial_radius: float = 100.0) -> dict[str, float] | None:
         """
         Interactive mask creation tool.
 
@@ -752,12 +707,9 @@ class WidefieldAnalysis:
         radius = initial_radius
 
         fig, ax = plt.subplots(figsize=(10, 10))
-        ax.imshow(self.green_reference, cmap='gray')
-        ax.set_title(
-            "Click to set center | B=bigger, S=smaller | Enter=confirm",
-            fontsize=12
-        )
-        ax.axis('off')
+        ax.imshow(self.green_reference, cmap="gray")
+        ax.set_title("Click to set center | B=bigger, S=smaller | Enter=confirm", fontsize=12)
+        ax.axis("off")
 
         circle = None
 
@@ -767,11 +719,7 @@ class WidefieldAnalysis:
                 circle.remove()
             if center[0] is not None and center[1] is not None:
                 circle = plt.Circle(
-                    (center[1], center[0]),
-                    radius,
-                    fill=False,
-                    color='red',
-                    linewidth=2
+                    (center[1], center[0]), radius, fill=False, color="red", linewidth=2
                 )
                 ax.add_patch(circle)
                 fig.canvas.draw()
@@ -787,44 +735,42 @@ class WidefieldAnalysis:
 
         def on_key(event):
             nonlocal radius
-            if event.key == 'b' or event.key == 'B':
+            if event.key == "b" or event.key == "B":
                 radius += 10
                 LOGGER.info(f"Radius increased to: {radius:.1f}")
                 update_circle()
-            elif event.key == 's' or event.key == 'S':
+            elif event.key == "s" or event.key == "S":
                 radius = max(10, radius - 10)
                 LOGGER.info(f"Radius decreased to: {radius:.1f}")
                 update_circle()
-            elif event.key == 'enter':
+            elif event.key == "enter":
                 if center[0] is not None and center[1] is not None:
                     plt.close(fig)
                 else:
                     LOGGER.warning("Please click to set center first")
 
-        fig.canvas.mpl_connect('button_press_event', on_click)
-        fig.canvas.mpl_connect('key_press_event', on_key)
+        fig.canvas.mpl_connect("button_press_event", on_click)
+        fig.canvas.mpl_connect("key_press_event", on_key)
 
         plt.tight_layout()
         plt.show()
 
         if center[0] is not None and center[1] is not None:
             mask_data = {
-                'center_x': float(center[1]),
-                'center_y': float(center[0]),
-                'radius': float(radius)
+                "center_x": float(center[1]),
+                "center_y": float(center[0]),
+                "radius": float(radius),
             }
-            LOGGER.info(f"Mask created: center=({mask_data['center_x']}, "
-                       f"{mask_data['center_y']}), radius={mask_data['radius']}")
+            LOGGER.info(
+                f"Mask created: center=({mask_data['center_x']}, "
+                f"{mask_data['center_y']}), radius={mask_data['radius']}"
+            )
             return mask_data
 
         LOGGER.warning("No mask created")
         return None
 
-    def save_mask(
-        self,
-        mask_data: Dict[str, float],
-        name: str = "mask"
-    ) -> Optional[Path]:
+    def save_mask(self, mask_data: dict[str, float], name: str = "mask") -> Path | None:
         """
         Save mask data to session-level processed folder as JSON.
 
@@ -842,19 +788,21 @@ class WidefieldAnalysis:
         try:
             output_path = session_folder / f"{name}.json"
 
-            with open(output_path, 'w') as f:
+            with open(output_path, "w") as f:
                 json.dump(mask_data, f, indent=2)
 
             LOGGER.info(f"Saved mask to: {output_path}")
-            LOGGER.info(f"  Center: ({mask_data['center_x']}, "
-                       f"{mask_data['center_y']}), Radius: {mask_data['radius']}")
+            LOGGER.info(
+                f"  Center: ({mask_data['center_x']}, "
+                f"{mask_data['center_y']}), Radius: {mask_data['radius']}"
+            )
             return output_path
 
         except Exception:
             LOGGER.exception("Error saving mask")
             return None
 
-    def set_condition(self, condition_dict: Dict[str, Any]) -> None:
+    def set_condition(self, condition_dict: dict[str, Any]) -> None:
         """
         Set condition information from a dictionary.
 
@@ -872,7 +820,7 @@ class WidefieldAnalysis:
 
         LOGGER.info(f"Set condition: {list(condition_dict.keys())}")
 
-    def load_mask(self, name: str = "mask") -> Optional[Dict[str, float]]:
+    def load_mask(self, name: str = "mask") -> dict[str, float] | None:
         """
         Load mask data from session-level processed folder.
 
@@ -892,7 +840,7 @@ class WidefieldAnalysis:
             return None
 
         try:
-            with open(mask_path, 'r') as f:
+            with open(mask_path) as f:
                 mask_data = json.load(f)
             LOGGER.info(f"Loaded mask from: {mask_path}")
             return mask_data
@@ -902,10 +850,10 @@ class WidefieldAnalysis:
 
     def apply_mask(
         self,
-        data: Optional[np.ndarray] = None,
-        mask_data: Optional[Dict[str, float]] = None,
-        mask_name: str = "mask"
-    ) -> Optional[np.ndarray]:
+        data: np.ndarray | None = None,
+        mask_data: dict[str, float] | None = None,
+        mask_name: str = "mask",
+    ) -> np.ndarray | None:
         """
         Apply circular mask to imaging data.
 
@@ -933,11 +881,13 @@ class WidefieldAnalysis:
 
         try:
             T, H, W = data.shape
-            center_x = mask_data['center_x']
-            center_y = mask_data['center_y']
-            radius = mask_data['radius']
+            center_x = mask_data["center_x"]
+            center_y = mask_data["center_y"]
+            radius = mask_data["radius"]
 
-            LOGGER.info(f"Data shape: {data.shape}, Mask center: ({center_x}, {center_y}), radius: {radius}")
+            LOGGER.info(
+                f"Data shape: {data.shape}, Mask center: ({center_x}, {center_y}), radius: {radius}"
+            )
 
             if center_x >= W or center_y >= H:
                 LOGGER.warning(
@@ -951,16 +901,19 @@ class WidefieldAnalysis:
                     center_x = center_x * scale_x
                     center_y = center_y * scale_y
                     radius = radius * min(scale_x, scale_y)
-                    LOGGER.info(f"Scaled mask: center=({center_x:.1f}, {center_y:.1f}), radius={radius:.1f}")
+                    LOGGER.info(
+                        f"Scaled mask: center=({center_x:.1f}, {center_y:.1f}), radius={radius:.1f}"
+                    )
 
             y, x = np.ogrid[:H, :W]
-            mask = (x - center_x) ** 2 + (y - center_y) ** 2 <= radius ** 2
+            mask = (x - center_x) ** 2 + (y - center_y) ** 2 <= radius**2
 
             masked_data = data.copy()
             masked_data[:, ~mask] = 0
 
-            LOGGER.info(f"Applied mask: center=({center_x:.1f}, {center_y:.1f}), "
-                       f"radius={radius:.1f}")
+            LOGGER.info(
+                f"Applied mask: center=({center_x:.1f}, {center_y:.1f}), radius={radius:.1f}"
+            )
             LOGGER.info(f"Masked data shape: {masked_data.shape}")
 
             return masked_data
@@ -971,12 +924,12 @@ class WidefieldAnalysis:
 
     def calculate_percentile(
         self,
-        data: Optional[np.ndarray] = None,
+        data: np.ndarray | None = None,
         percentile: float = 15.0,
-        stimulus_start_frame: Optional[int] = None,
-        baseline_ms: Optional[float] = None,
-        fps: Optional[float] = None
-    ) -> Optional[np.ndarray]:
+        stimulus_start_frame: int | None = None,
+        baseline_ms: float | None = None,
+        fps: float | None = None,
+    ) -> np.ndarray | None:
         """
         Calculate percentile value for each pixel across frames.
 
@@ -1000,16 +953,12 @@ class WidefieldAnalysis:
         """
         if data is None:
             if self.imaging_data is None:
-                LOGGER.warning(
-                    "No data provided and imaging_data not loaded"
-                )
+                LOGGER.warning("No data provided and imaging_data not loaded")
                 return None
             data = self.imaging_data
 
         if len(data.shape) != 3:
-            LOGGER.error(
-                f"Expected 3D array (T, H, W), got: {data.shape}"
-            )
+            LOGGER.error(f"Expected 3D array (T, H, W), got: {data.shape}")
             return None
 
         try:
@@ -1022,10 +971,7 @@ class WidefieldAnalysis:
                 if fps is None:
                     fps = self.get_fps()
                     if fps is None:
-                        LOGGER.error(
-                            "FPS not available and not provided for window "
-                            "calculation"
-                        )
+                        LOGGER.error("FPS not available and not provided for window calculation")
                         return None
 
                 baseline_frames = int(baseline_ms / 1000.0 * fps)
@@ -1041,21 +987,16 @@ class WidefieldAnalysis:
 
                 if baseline_start >= baseline_end:
                     LOGGER.error(
-                        f"Invalid baseline window: start={baseline_start}, "
-                        f"end={baseline_end}"
+                        f"Invalid baseline window: start={baseline_start}, end={baseline_end}"
                     )
                     return None
 
                 window_data = data[baseline_start:baseline_end]
                 window_info = (
-                    f"frames [{baseline_start}:{baseline_end}] "
-                    f"({len(window_data)} frames)"
+                    f"frames [{baseline_start}:{baseline_end}] ({len(window_data)} frames)"
                 )
 
-            LOGGER.info(
-                f"Calculating {percentile}th percentile for {window_info} "
-                f"({H}x{W})"
-            )
+            LOGGER.info(f"Calculating {percentile}th percentile for {window_info} ({H}x{W})")
 
             f_base = np.zeros((H, W), dtype=data.dtype)
 
@@ -1078,10 +1019,8 @@ class WidefieldAnalysis:
             return None
 
     def calculate_deltaff(
-        self,
-        data: Optional[np.ndarray] = None,
-        baseline: Optional[np.ndarray] = None
-    ) -> Optional[np.ndarray]:
+        self, data: np.ndarray | None = None, baseline: np.ndarray | None = None
+    ) -> np.ndarray | None:
         """
         Calculate delta F over F (ΔF/F) for a movie.
 
@@ -1098,16 +1037,12 @@ class WidefieldAnalysis:
         """
         if data is None:
             if self.imaging_data is None:
-                LOGGER.warning(
-                    "No data provided and imaging_data not loaded"
-                )
+                LOGGER.warning("No data provided and imaging_data not loaded")
                 return None
             data = self.imaging_data
 
         if len(data.shape) != 3:
-            LOGGER.error(
-                f"Expected 3D array (T, H, W), got: {data.shape}"
-            )
+            LOGGER.error(f"Expected 3D array (T, H, W), got: {data.shape}")
             return None
 
         if baseline is None:
@@ -1115,9 +1050,7 @@ class WidefieldAnalysis:
             return None
 
         if len(baseline.shape) != 2:
-            LOGGER.error(
-                f"Expected 2D baseline array (H, W), got: {baseline.shape}"
-            )
+            LOGGER.error(f"Expected 2D baseline array (H, W), got: {baseline.shape}")
             return None
 
         T, H, W = data.shape
@@ -1146,11 +1079,11 @@ class WidefieldAnalysis:
 
     def calculate_baseline(
         self,
-        data: Optional[np.ndarray] = None,
+        data: np.ndarray | None = None,
         stimulus_start_frame: int = 0,
         baseline_ms: float = 500.0,
-        fps: Optional[float] = None
-    ) -> Optional[np.ndarray]:
+        fps: float | None = None,
+    ) -> np.ndarray | None:
         """
         Calculate baseline mean from pre-stimulus window.
 
@@ -1171,16 +1104,12 @@ class WidefieldAnalysis:
         """
         if data is None:
             if self.imaging_data is None:
-                LOGGER.warning(
-                    "No data provided and imaging_data not loaded"
-                )
+                LOGGER.warning("No data provided and imaging_data not loaded")
                 return None
             data = self.imaging_data
 
         if len(data.shape) != 3:
-            LOGGER.error(
-                f"Expected 3D array (T, H, W), got: {data.shape}"
-            )
+            LOGGER.error(f"Expected 3D array (T, H, W), got: {data.shape}")
             return None
 
         if fps is None:
@@ -1197,8 +1126,7 @@ class WidefieldAnalysis:
 
         if baseline_start < 0:
             LOGGER.warning(
-                f"Baseline start frame ({baseline_start}) is negative. "
-                f"Using frame 0 instead."
+                f"Baseline start frame ({baseline_start}) is negative. Using frame 0 instead."
             )
             baseline_start = 0
 
@@ -1210,10 +1138,7 @@ class WidefieldAnalysis:
             baseline_end = T
 
         if baseline_start >= baseline_end:
-            LOGGER.error(
-                f"Invalid baseline period: start={baseline_start}, "
-                f"end={baseline_end}"
-            )
+            LOGGER.error(f"Invalid baseline period: start={baseline_start}, end={baseline_end}")
             return None
 
         try:
@@ -1234,9 +1159,7 @@ class WidefieldAnalysis:
             LOGGER.exception("Error calculating baseline")
             return None
 
-    def set_roi(
-        self, roi: Union[Tuple[int, int], Dict[str, Any]]
-    ) -> None:
+    def set_roi(self, roi: tuple[int, int] | dict[str, Any]) -> None:
         """
         Set Region of Interest (ROI) center coordinates.
 
@@ -1255,24 +1178,21 @@ class WidefieldAnalysis:
                 raise ValueError("ROI dictionary must contain 'center' key")
             self.roi = roi.copy()
         else:
-            raise TypeError(
-                f"ROI must be tuple (x, y) or dict, got {type(roi)}"
-            )
+            raise TypeError(f"ROI must be tuple (x, y) or dict, got {type(roi)}")
 
         center = self.roi["center"]
         if self.imaging_data is not None:
             _, H, W = self.imaging_data.shape
             if center[0] < 0 or center[0] >= W or center[1] < 0 or center[1] >= H:
                 LOGGER.warning(
-                    f"ROI center ({center[0]}, {center[1]}) is outside "
-                    f"image bounds ({W}, {H})"
+                    f"ROI center ({center[0]}, {center[1]}) is outside image bounds ({W}, {H})"
                 )
 
         LOGGER.info(f"ROI set: center=({center[0]}, {center[1]})")
 
     def calculate_percentile_centroid_roi(
         self, data: np.ndarray, percentile: float = 95.0
-    ) -> Tuple[int, int]:
+    ) -> tuple[int, int]:
         """
         Calculate ROI centroid from percentile threshold.
 
@@ -1292,10 +1212,7 @@ class WidefieldAnalysis:
         points = np.where(data > thr)
 
         if len(points[0]) == 0:
-            LOGGER.warning(
-                f"No points above {percentile}th percentile threshold "
-                f"({thr:.2f})"
-            )
+            LOGGER.warning(f"No points above {percentile}th percentile threshold ({thr:.2f})")
             H, W = data.shape
             return (W // 2, H // 2)
 
@@ -1312,10 +1229,10 @@ class WidefieldAnalysis:
 
     def calculate_trace_within_roi(
         self,
-        data: Optional[np.ndarray] = None,
-        roi: Optional[Union[Tuple[int, int], Dict[str, Any]]] = None,
-        diameter: float = 50.0
-    ) -> Optional[np.ndarray]:
+        data: np.ndarray | None = None,
+        roi: tuple[int, int] | dict[str, Any] | None = None,
+        diameter: float = 50.0,
+    ) -> np.ndarray | None:
         """
         Calculate mean trace within circular ROI.
 
@@ -1331,16 +1248,12 @@ class WidefieldAnalysis:
         """
         if data is None:
             if self.imaging_data is None:
-                LOGGER.warning(
-                    "No data provided and imaging_data not loaded"
-                )
+                LOGGER.warning("No data provided and imaging_data not loaded")
                 return None
             data = self.imaging_data
 
         if len(data.shape) != 3:
-            LOGGER.error(
-                f"Expected 3D array (T, H, W), got: {data.shape}"
-            )
+            LOGGER.error(f"Expected 3D array (T, H, W), got: {data.shape}")
             return None
 
         if roi is None:
@@ -1357,9 +1270,7 @@ class WidefieldAnalysis:
         elif isinstance(roi, tuple):
             center = roi
         else:
-            LOGGER.error(
-                f"ROI must be tuple (x, y) or dict, got {type(roi)}"
-            )
+            LOGGER.error(f"ROI must be tuple (x, y) or dict, got {type(roi)}")
             return None
 
         T, H, W = data.shape
@@ -1369,12 +1280,11 @@ class WidefieldAnalysis:
 
         if center_x < 0 or center_x >= W or center_y < 0 or center_y >= H:
             LOGGER.warning(
-                f"ROI center ({center_x}, {center_y}) is outside "
-                f"image bounds ({W}, {H})"
+                f"ROI center ({center_x}, {center_y}) is outside image bounds ({W}, {H})"
             )
 
         y, x = np.ogrid[:H, :W]
-        mask = (x - center_x) ** 2 + (y - center_y) ** 2 <= radius ** 2
+        mask = (x - center_x) ** 2 + (y - center_y) ** 2 <= radius**2
 
         trace = np.zeros(T)
         for frame_idx in range(T):
