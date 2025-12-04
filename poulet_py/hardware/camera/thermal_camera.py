@@ -406,8 +406,8 @@ class ThermalCamera:
 
         fig = plt.figure()
         if platform.system() == "Windows":
-            fig.canvas.manager.window.wm_attributes('-topmost', 1)
-            fig.canvas.manager.window.wm_attributes('-topmost', 0)
+            fig.canvas.manager.window.wm_attributes("-topmost", 1)
+            fig.canvas.manager.window.wm_attributes("-topmost", 0)
         ax = plt.axes()
         div = make_axes_locatable(ax)
         cax = div.append_axes("right", "5%", "5%")
@@ -454,11 +454,11 @@ class ThermalCamera:
                     max_temp = np.max(data_celsius)
                     display_vmin = min(min_temp, self.vminT)
                     display_vmax = max(max_temp, self.vmaxT)
-                    
+
                     if display_vmin == display_vmax:
                         display_vmin = min_temp - 1
                         display_vmax = max_temp + 1
-                    
+
                     img.set_data(data_celsius)
                     img.set_clim(vmin=display_vmin, vmax=display_vmax)
                     fig.canvas.draw()
