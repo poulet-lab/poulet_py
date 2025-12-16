@@ -1,19 +1,19 @@
 try:
-    from typing import Any, Dict, Optional, Tuple, Callable
-
+    import msvcrt
     import os
+    import re
     import socket
     import struct
-    import time
     import threading
-    import pandas as pd
-    import re
-    import msvcrt
+    import time
+    from collections.abc import Callable
+    from typing import Any, Dict, Optional, Tuple
 
+    import pandas as pd
+    from pydantic import BaseModel, Field
     from rich.console import Console
     from rich.prompt import Confirm
 
-    from pydantic import BaseModel, Field
     from poulet_py import LOGGER
 
 except ImportError as e:
@@ -27,30 +27,32 @@ Missing 'soho' module. Install options:
 
 console = Console()
 
+
 class SohoConfig(BaseModel):
     host: str = Field(..., min_length=1)
     port: int = Field(..., ge=1, le=65535)
-    output_path: Optional[str] = None
-    error_log_path: Optional[str] = None
+    output_path: str | None = None
+    error_log_path: str | None = None
+
 
 class Soho:
     """Interface for collecting data from Ponemah."""
 
-    def __init__(self, host: str | SohoConfig, port: Optional[int] = None) -> None:
+    def __init__(self, host: str | SohoConfig, port: int | None = None) -> None:
         if isinstance(host, SohoConfig):
             self.config = host
         else:
             if port is None:
                 raise ValueError("port must be provided when host is a string")
             self.config = SohoConfig(host=host, port=port)
-        self.error_log_file: Optional[str] = None
-        self.output_file: Optional[str] = None
+        self.error_log_file: str | None = None
+        self.output_file: str | None = None
         self._stop = False
-        self.data: Optional[pd.DataFrame] = None
-        self.experiment_start_time: Optional[float] = None
-        self.on_data_callback: Optional[Callable[[], None]] = None
-        self._collection_thread: Optional[threading.Thread] = None
-        self._listener_thread: Optional[threading.Thread] = None
+        self.data: pd.DataFrame | None = None
+        self.experiment_start_time: float | None = None
+        self.on_data_callback: Callable[[], None] | None = None
+        self._collection_thread: threading.Thread | None = None
+        self._listener_thread: threading.Thread | None = None
         self._active = True
 
     def set_error_log_path(self, path: str, file_name: str) -> None:
@@ -72,8 +74,8 @@ class Soho:
 
     def collect(self) -> pd.DataFrame:
         """Collect data from the Ponemah server."""
-        metadata: Dict[str, Dict[str, Any]] = {}
-        rows: Dict[Tuple[str, str], Dict[Tuple[str, str], str]] = {}
+        metadata: dict[str, dict[str, Any]] = {}
+        rows: dict[tuple[str, str], dict[tuple[str, str], str]] = {}
         previous_data = self.data
 
         try:
@@ -104,7 +106,7 @@ class Soho:
                             meta = metadata.get(ref_id)
                             if meta:
                                 param_names = meta["param_names"]
-                                data = dict(zip(param_names, values))
+                                data = dict(zip(param_names, values, strict=False))
 
                                 elapsed = data.pop("ElapsedTime", "")
                                 real = data.pop("RealTime", "")
@@ -126,13 +128,15 @@ class Soho:
                                 channel = meta["channel_label"]
                                 for name, value in data.items():
                                     row[(channel, name)] = value
-                                
+
                                 if self.on_data_callback is not None:
                                     try:
                                         self.on_data_callback()
                                     except Exception as e:
-                                        Soho.log_error(f"Error in data callback: {e}", self.error_log_file)
-                    except socket.timeout:
+                                        Soho.log_error(
+                                            f"Error in data callback: {e}", self.error_log_file
+                                        )
+                    except TimeoutError:
                         continue
                     except (ConnectionError, OSError) as err:
                         Soho.log_error(str(err), self.error_log_file)
@@ -144,17 +148,15 @@ class Soho:
         df = pd.DataFrame(ordered_rows)
         if not df.empty and len(df.columns) > 0:
             df.columns = pd.MultiIndex.from_tuples(df.columns)
-        
+
         if previous_data is not None and not previous_data.empty:
             if not df.empty:
-                self.data = pd.concat(
-                    [previous_data, df], ignore_index=True
-                )
+                self.data = pd.concat([previous_data, df], ignore_index=True)
             else:
                 self.data = previous_data
         else:
             self.data = df
-        
+
         return self.data
 
     def save(self) -> None:
@@ -182,12 +184,10 @@ class Soho:
 
         self._collection_thread = threading.Thread(target=self.collect)
         self._collection_thread.start()
-        
-        self._listener_thread = threading.Thread(
-            target=self._keyboard_listener
-        )
+
+        self._listener_thread = threading.Thread(target=self._keyboard_listener)
         self._listener_thread.start()
-        
+
         console.print("[bold green]Soho recording started.[/bold green]")
 
     def stop(self) -> None:
@@ -206,25 +206,24 @@ class Soho:
         """Pause recording, test connection, and optionally resume."""
         console.print("[bold yellow]Pausing recording...[/bold yellow]")
         self._stop = True
-        
+
         if self._collection_thread:
             self._collection_thread.join()
-        
+
         console.print("[bold cyan]🔌 CONNECTION TEST[/bold cyan]")
         console.input(
             "Go to Ponemah 'Experiment Setup' and click 'Test' remote "
             "connection. Press Enter when ready to test."
         )
-        
+
         test_ponemah_connection(self.config.host, self.config.port)
-        
+
         console.input(
-            "Close the remote connection test window by pressing 'OK'. "
-            "Press Enter when done."
+            "Close the remote connection test window by pressing 'OK'. Press Enter when done."
         )
-        
+
         confirm_resume = Confirm.ask("[yellow]Resume recording? (y/n)[/yellow]", default=True)
-        
+
         if confirm_resume:
             console.input(
                 "[bold yellow]\nWARNING: Ensure that the continuous sampling is "
@@ -242,37 +241,33 @@ class Soho:
         """Monitor keyboard input for stopping or testing connection."""
         if msvcrt is None:
             input()
-            console.print(
-                "Recording finished, stopping Soho, "
-                "waiting for the last reading..."
-            )
+            console.print("Recording finished, stopping Soho, waiting for the last reading...")
             self.stop()
             return
-        
+
         while self._active:
             if msvcrt.kbhit():
                 key = msvcrt.getwch()
-                
+
                 if key.lower() == "e":
                     confirm = Confirm.ask(
-                        "Are you sure you want to stop recording? (y/n): "
-                    , default=True)
-                    
+                        "Are you sure you want to stop recording? (y/n): ", default=True
+                    )
+
                     if confirm:
                         console.print("[bold green]Stopping recording...[/bold green]")
                         self.stop()
                         break
-                
+
                 elif key.lower() == "t":
                     confirm = Confirm.ask(
-                        "Pause recording to test connection? (y/n): "
-                    , default=True)
-                    
+                        "Pause recording to test connection? (y/n): ", default=True
+                    )
+
                     if confirm:
                         self.pause_and_test_connection()
-            
-            time.sleep(0.1)
 
+            time.sleep(0.1)
 
     @staticmethod
     def _read_exact(sock: socket.socket, n: int) -> bytes:
@@ -301,7 +296,6 @@ def test_ponemah_connection(HOST: str, PORT: int) -> None:
                 console.print(f"[red]Unexpected response:[/red] {clean!r}")
         except OSError:
             console.print(
-                "[red]Connection refused, start test in setup remote "
-                "connection test[/red]"
+                "[red]Connection refused, start test in setup remote connection test[/red]"
             )
         time.sleep(1)
