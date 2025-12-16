@@ -273,16 +273,6 @@ class Soho:
             
             time.sleep(0.1)
 
-    @staticmethod
-    def log_error(error_message: str, error_log_file: Optional[str]) -> None:
-        if error_log_file:
-            try:
-                with open(error_log_file, "a", encoding="utf-8") as f:
-                    f.write(error_message + "\n")
-            except Exception:
-                LOGGER.error(error_message)
-                return
-        LOGGER.error(error_message)
 
     @staticmethod
     def _read_exact(sock: socket.socket, n: int) -> bytes:
