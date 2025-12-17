@@ -1303,7 +1303,9 @@ class WidefieldAnalysis:
 
         return trace
 
-    def extract_image_from_timeperiod(self, start_time: float, end_time: float) -> np.ndarray | None:
+    def extract_image_from_timeperiod(
+        self, start_time: float, end_time: float
+    ) -> np.ndarray | None:
         """
         Extract an image from the time period specified by start_time and end_time.
 
