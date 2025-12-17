@@ -38,11 +38,20 @@ class Soho(BaseModel):
 
     _stop: bool = PrivateAttr(False)
     _active: bool = PrivateAttr(True)
-    _collection_thread: Optional[threading.Thread] = PrivateAttr(None)
-    _listener_thread: Optional[threading.Thread] = PrivateAttr(None)
+    _collection_thread: threading.Thread | None = PrivateAttr(None)
+    _listener_thread: threading.Thread | None = PrivateAttr(None)
 
-    def __init__(self, host: str, port: int, output_path: str | None = None, error_log_path: str | None = None, **kwargs) -> None:
-        super().__init__(host=host, port=port, output_path=output_path, error_log_path=error_log_path, **kwargs)
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        output_path: str | None = None,
+        error_log_path: str | None = None,
+        **kwargs,
+    ) -> None:
+        super().__init__(
+            host=host, port=port, output_path=output_path, error_log_path=error_log_path, **kwargs
+        )
         self.error_log_file: str | None = None
         self.output_file: str | None = None
         self.data: pd.DataFrame | None = None
