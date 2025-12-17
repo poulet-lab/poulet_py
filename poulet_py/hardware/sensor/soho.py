@@ -13,7 +13,7 @@ try:
     from rich.console import Console
     from rich.prompt import Confirm
 
-    from pydantic import BaseModel, Field
+    from pydantic import BaseModel, Field, PrivateAttr
     from poulet_py import LOGGER
 
 except ImportError as e:
@@ -27,31 +27,26 @@ Missing 'soho' module. Install options:
 
 console = Console()
 
-class SohoConfig(BaseModel):
+class Soho(BaseModel):
+    """Interface for collecting data from Ponemah."""
+
     host: str = Field(..., min_length=1)
     port: int = Field(..., ge=1, le=65535)
     output_path: Optional[str] = None
     error_log_path: Optional[str] = None
 
-class Soho:
-    """Interface for collecting data from Ponemah."""
+    _stop: bool = PrivateAttr(False)
+    _active: bool = PrivateAttr(True)
+    _collection_thread: Optional[threading.Thread] = PrivateAttr(None)
+    _listener_thread: Optional[threading.Thread] = PrivateAttr(None)
 
-    def __init__(self, host: str | SohoConfig, port: Optional[int] = None) -> None:
-        if isinstance(host, SohoConfig):
-            self.config = host
-        else:
-            if port is None:
-                raise ValueError("port must be provided when host is a string")
-            self.config = SohoConfig(host=host, port=port)
+    def __init__(self, host: str, port: int, output_path: Optional[str] = None, error_log_path: Optional[str] = None, **kwargs) -> None:
+        super().__init__(host=host, port=port, output_path=output_path, error_log_path=error_log_path, **kwargs)
         self.error_log_file: Optional[str] = None
         self.output_file: Optional[str] = None
-        self._stop = False
         self.data: Optional[pd.DataFrame] = None
         self.experiment_start_time: Optional[float] = None
         self.on_data_callback: Optional[Callable[[], None]] = None
-        self._collection_thread: Optional[threading.Thread] = None
-        self._listener_thread: Optional[threading.Thread] = None
-        self._active = True
 
     def set_error_log_path(self, path: str, file_name: str) -> None:
         """Set the file used for error logging."""
@@ -78,7 +73,7 @@ class Soho:
 
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.connect((self.config.host, self.config.port))
+                sock.connect((self.host, self.port))
                 sock.settimeout(1.0)
                 while not self._stop:
                     try:
@@ -216,7 +211,7 @@ class Soho:
             "connection. Press Enter when ready to test."
         )
         
-        test_ponemah_connection(self.config.host, self.config.port)
+        test_ponemah_connection(self.host, self.port)
         
         console.input(
             "Close the remote connection test window by pressing 'OK'. "

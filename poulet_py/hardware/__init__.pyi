@@ -2,7 +2,7 @@
 from .camera import BaslerCamera, ThermalCamera
 from .stimulator import TCS, Arduino, JulaboChiller, TCSCommand, TCSStimulus
 from .triggers import BaseTrigger, GPIOTrigger, KeyboardTrigger
-from .sensor.soho import Soho, SohoConfig
+from .sensor.soho import Soho
 
 __all__ = [
     "TCS",
@@ -16,5 +16,4 @@ __all__ = [
     "GPIOTrigger",
     "KeyboardTrigger",
     "Soho",
-    "SohoConfig",
 ]
