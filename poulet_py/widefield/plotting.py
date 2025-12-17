@@ -75,9 +75,7 @@ def create_mask_interactive(
 
     fig, ax = plt.subplots(figsize=(10, 10))
     ax.imshow(green_reference, cmap="gray")
-    ax.set_title(
-        "Click to set center | B=bigger, S=smaller | Enter=confirm", fontsize=12
-    )
+    ax.set_title("Click to set center | B=bigger, S=smaller | Enter=confirm", fontsize=12)
     ax.axis("off")
 
     circle = None

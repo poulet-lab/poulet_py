@@ -98,9 +98,7 @@ def create_movie_from_array(
             plt.close(fig)
 
         LOGGER.info(f"Saving movie to: {output_path}")
-        writer = imageio.get_writer(
-            str(output_path), format="FFMPEG", fps=fps, codec="libx264"
-        )
+        writer = imageio.get_writer(str(output_path), format="FFMPEG", fps=fps, codec="libx264")
         for frame in frames:
             if frame.shape[2] == 4:
                 frame = frame[:, :, :3]

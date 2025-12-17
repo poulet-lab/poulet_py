@@ -41,9 +41,7 @@ def centroid_from_percentile(
     points = np.where(data > thr)
 
     if len(points[0]) == 0:
-        LOGGER.warning(
-            f"No points above {percentile}th percentile threshold ({thr:.2f})"
-        )
+        LOGGER.warning(f"No points above {percentile}th percentile threshold ({thr:.2f})")
         H, W = data.shape
         return (W // 2, H // 2)
 
@@ -91,9 +89,7 @@ def trace_within_circular_roi(
     radius = diameter / 2.0
 
     if center_x < 0 or center_x >= W or center_y < 0 or center_y >= H:
-        LOGGER.warning(
-            f"ROI center ({center_x}, {center_y}) is outside image bounds ({W}, {H})"
-        )
+        LOGGER.warning(f"ROI center ({center_x}, {center_y}) is outside image bounds ({W}, {H})")
 
     y, x = np.ogrid[:H, :W]
     mask = (x - center_x) ** 2 + (y - center_y) ** 2 <= radius**2

@@ -76,9 +76,7 @@ def apply_circular_mask(
         masked_data = data.copy()
         masked_data[:, ~mask] = 0
 
-        LOGGER.info(
-            f"Applied mask: center=({center_x:.1f}, {center_y:.1f}), radius={radius:.1f}"
-        )
+        LOGGER.info(f"Applied mask: center=({center_x:.1f}, {center_y:.1f}), radius={radius:.1f}")
         LOGGER.info(f"Masked data shape: {masked_data.shape}")
 
         return masked_data
