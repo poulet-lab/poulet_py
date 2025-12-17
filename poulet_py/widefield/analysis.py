@@ -1303,6 +1303,25 @@ class WidefieldAnalysis:
 
         return trace
 
+    def extract_image_from_timeperiod(self, start_time: float, end_time: float) -> np.ndarray | None:
+        """
+        Extract an image from the time period specified by start_time and end_time.
+
+        Args:
+            start_time: Start time in seconds.
+            end_time: End time in seconds.
+
+        Returns:
+            Image as numpy array, or None if error.
+        """
+        if self.imaging_data is None:
+            LOGGER.warning("No imaging data loaded")
+            return None
+
+        if self.timestamps is None:
+            LOGGER.warning("No timestamps loaded")
+            return None
+
     def close(self) -> None:
         """Clean up resources."""
         self.imaging_data = None
