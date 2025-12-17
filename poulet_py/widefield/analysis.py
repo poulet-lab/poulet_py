@@ -12,19 +12,22 @@ A trial folder contains:
 """
 
 try:
-    import json
     from collections.abc import Callable
     from pathlib import Path
-    from typing import Any, Dict, Optional, Tuple, Union
+    from typing import Any
 
-    import h5py
-    import imageio
-    import matplotlib.pyplot as plt
     import numpy as np
     import pandas as pd
-    from skimage import io as skio
 
     from poulet_py import LOGGER
+
+    from . import io as wf_io
+    from . import masks as wf_masks
+    from . import metrics as wf_metrics
+    from . import movie as wf_movie
+    from . import paths as wf_paths
+    from . import plotting as wf_plotting
+    from . import roi as wf_roi
 except ImportError as e:
     msg = """
 Missing required modules. Install options:
@@ -109,10 +112,11 @@ class WidefieldAnalysis:
 
     def load_data(self) -> None:
         """
-        Load all trial data: imaging stack, timestamps, and sensor data.
+        Load all data files from the trial folder.
 
-        Raises:
-            IOError: If files cannot be opened or read.
+        Loads the TIFF imaging stack, green reference image,
+        timestamps CSV, and sensor data from the H5 file.
+        After loading, prints a summary of the loaded data.
         """
         self._load_imaging()
         self._load_green_reference()
@@ -121,68 +125,62 @@ class WidefieldAnalysis:
         self._print_info()
 
     def _load_imaging(self) -> None:
-        """Load the TIFF imaging stack."""
+        """
+        Load the main imaging TIFF stack.
+
+        Raises:
+            Exception: If the TIFF file cannot be loaded.
+        """
         try:
-            LOGGER.info(f"Loading imaging data from: {self.tiff_path.name}")
-            self.imaging_data = skio.imread(str(self.tiff_path))
-            LOGGER.info(f"Loaded imaging stack: {self.imaging_data.shape}")
+            self.imaging_data = wf_io.load_imaging(self.tiff_path)
         except Exception:
             LOGGER.exception(f"Error loading TIFF: {self.tiff_path}")
             raise
 
     def _load_green_reference(self) -> None:
-        """Load the green reference image."""
-        if not self.green_path.exists():
-            LOGGER.warning(f"Green reference not found: {self.green_path}")
-            return
+        """
+        Load the green reference image.
 
+        Logs but does not raise exceptions on failure.
+        """
         try:
-            LOGGER.info(f"Loading green reference from: {self.green_path.name}")
-            self.green_reference = skio.imread(str(self.green_path))
-            if len(self.green_reference.shape) == 3:
-                self.green_reference = self.green_reference[0]
-            LOGGER.info(f"Loaded green reference: {self.green_reference.shape}")
+            self.green_reference = wf_io.load_green_reference(self.green_path)
         except Exception:
             LOGGER.exception(f"Error loading green reference: {self.green_path}")
 
     def _load_timestamps(self) -> None:
-        """Load the CSV timestamp file."""
-        if not self.csv_path.exists():
-            LOGGER.warning(f"CSV not found: {self.csv_path}")
-            return
+        """
+        Load frame timestamps from CSV.
 
+        Logs but does not raise exceptions on failure.
+        """
         try:
-            self.timestamps = pd.read_csv(self.csv_path, sep=";")
-            self.timestamps = self.timestamps.loc[
-                :, ~self.timestamps.columns.str.contains("^Unnamed")
-            ]
-            LOGGER.info(f"Loaded timestamps: {len(self.timestamps)} rows")
+            self.timestamps = wf_io.load_timestamps(self.csv_path)
         except Exception:
             LOGGER.exception(f"Error loading CSV: {self.csv_path}")
 
     def _load_sensors(self) -> None:
-        """Load the H5 sensor data."""
-        if not self.h5_path.exists():
-            LOGGER.warning(f"H5 not found: {self.h5_path}")
-            return
+        """
+        Load sensor data from HDF5 file.
 
+        Logs but does not raise exceptions on failure.
+        """
         try:
-            with h5py.File(self.h5_path, "r") as f:
-                self.file_attrs = dict(f.attrs)
-
-                def _visit_datasets(name: str, obj: Any) -> None:
-                    if isinstance(obj, h5py.Dataset):
-                        self.sensor_data[name] = np.array(obj)
-                        self.sensor_attrs[name] = dict(obj.attrs)
-
-                f.visititems(_visit_datasets)
-
-            LOGGER.info(f"Loaded {len(self.sensor_data)} sensor traces from H5")
+            (
+                self.sensor_data,
+                self.sensor_attrs,
+                self.file_attrs,
+            ) = wf_io.load_sensors(self.h5_path)
         except Exception:
             LOGGER.exception(f"Error loading H5: {self.h5_path}")
 
     def _print_info(self) -> None:
-        """Print information about the loaded data."""
+        """
+        Print a summary of loaded data to the logger.
+
+        Displays information about imaging data dimensions,
+        timestamps, sensor traces, and file metadata.
+        """
         LOGGER.info("=" * 60)
         LOGGER.info(f"Trial: {self.trial_path.name}")
         LOGGER.info("=" * 60)
@@ -228,20 +226,21 @@ class WidefieldAnalysis:
         factor: int | None = None,
     ) -> np.ndarray | None:
         """
-        Downscale the imaging data using block averaging.
+        Downscale the imaging data by averaging pixels.
 
-        Supports two modes:
-        1. Target resolution: Specify desired output (H, W)
-        2. Factor: Specify downscale factor (e.g., 2 means 1024→512)
+        Reduces the spatial resolution of the imaging stack by
+        averaging blocks of pixels. Useful for reducing memory
+        usage and speeding up processing.
 
         Args:
-            target_resolution: Target (height, width) in pixels.
-                              Calculates factor automatically.
-            factor: Downscale factor (e.g., 2 means 1024→512).
-                    If both specified, target_resolution takes precedence.
+            target_resolution: Target (height, width) dimensions.
+                The downscaling factor is computed automatically.
+            factor: Downscaling factor (e.g., 2 means 2x2 blocks).
+                Either target_resolution or factor must be provided.
 
         Returns:
-            Downscaled movie array, or None if imaging data not loaded.
+            Downscaled 3D numpy array with dtype uint16, or None
+            if imaging data is not loaded.
 
         Raises:
             ValueError: If neither target_resolution nor factor provided.
@@ -319,43 +318,34 @@ class WidefieldAnalysis:
         cmap: str = "gray",
     ) -> None:
         """
-        Internal function to visualize a single frame.
+        Display a single frame using matplotlib.
 
         Args:
-            frame: 2D numpy array representing the frame.
-            title: Title for the plot.
-            cmap: Colormap to use for visualization.
+            frame: 2D numpy array to display.
+            title: Title for the figure window.
+            cmap: Matplotlib colormap name.
         """
-        try:
-            _, ax = plt.subplots(figsize=(10, 10))
-            ax.imshow(frame, cmap=cmap)
-            ax.set_title(title, fontsize=14)
-            ax.axis("off")
-            plt.tight_layout()
-            plt.show()
-            LOGGER.info(f"Displayed frame: {title}, shape: {frame.shape}")
-        except Exception:
-            LOGGER.exception(f"Error displaying frame: {title}")
+        wf_plotting.show_frame(frame, title, cmap)
 
     def view_reference(self, cmap: str = "gray") -> None:
         """
-        Visualize the green reference image.
+        Display the green reference image.
 
         Args:
-            cmap: Colormap to use for visualization (default: "gray").
+            cmap: Matplotlib colormap name. Default is "gray".
         """
         if self.green_reference is None:
             LOGGER.warning("Green reference not loaded. Call load_data() first.")
             return
 
-        self._view_frame(self.green_reference, title="Green Reference Image", cmap=cmap)
+        wf_plotting.show_frame(self.green_reference, title="Green Reference Image", cmap=cmap)
 
     def get_fps(self) -> float | None:
         """
-        Extract frame rate from H5 file attributes.
+        Get the camera frame rate from file attributes.
 
         Returns:
-            Frame rate in fps, or None if not found.
+            Frame rate in Hz, or None if not available.
         """
         if "camera_fps" in self.file_attrs:
             fps = float(self.file_attrs["camera_fps"])
@@ -367,10 +357,11 @@ class WidefieldAnalysis:
 
     def get_recording_duration(self) -> float | None:
         """
-        Calculate recording duration from frames and FPS.
+        Calculate the total recording duration.
 
         Returns:
-            Duration in seconds, or None if cannot calculate.
+            Duration in seconds, or None if FPS or imaging
+            data is not available.
         """
         fps = self.get_fps()
         if fps is None:
@@ -388,97 +379,33 @@ class WidefieldAnalysis:
 
     def _get_session_processed_folder(self) -> Path | None:
         """
-        Get or create the processed data folder at session level.
-
-        Creates folder structure: data/processed/[session]/
-        where [session] is the folder name after "raw".
+        Get the session-level processed folder path.
 
         Returns:
-            Path to session processed folder, or None if error.
+            Path to session processed folder, or None on error.
         """
-        try:
-            trial_path = Path(self.trial_path)
-            parts = trial_path.parts
-
-            raw_idx = None
-            for i, part in enumerate(parts):
-                if part == "raw":
-                    raw_idx = i
-                    break
-
-            if raw_idx is None:
-                LOGGER.error("Could not find 'raw' in trial path structure")
-                return None
-
-            session_folder = parts[raw_idx + 1]
-
-            data_folder = trial_path
-            for _ in range(len(parts) - raw_idx - 1):
-                data_folder = data_folder.parent
-
-            session_processed_folder = data_folder.parent / "processed" / session_folder
-
-            session_processed_folder.mkdir(parents=True, exist_ok=True)
-            return session_processed_folder
-
-        except Exception:
-            LOGGER.exception("Error creating session processed folder")
-            return None
+        return wf_paths.get_session_processed_folder(self.trial_path)
 
     def _get_processed_folder(self) -> Path | None:
         """
-        Get or create the processed data folder for this trial.
-
-        Creates folder structure: data/processed/[session]/trials/[trial]/
-        where [session] is the folder name after "raw" and [trial] is the
-        trial folder name.
+        Get the trial-level processed folder path.
 
         Returns:
-            Path to processed folder, or None if error.
+            Path to trial processed folder, or None on error.
         """
-        try:
-            trial_path = Path(self.trial_path)
-            parts = trial_path.parts
-
-            raw_idx = None
-            for i, part in enumerate(parts):
-                if part == "raw":
-                    raw_idx = i
-                    break
-
-            if raw_idx is None:
-                LOGGER.error("Could not find 'raw' in trial path structure")
-                return None
-
-            session_folder = parts[raw_idx + 1]
-            trial_folder = parts[-1]
-
-            data_folder = trial_path
-            for _ in range(len(parts) - raw_idx - 1):
-                data_folder = data_folder.parent
-
-            processed_folder = (
-                data_folder.parent / "processed" / session_folder / "trials" / trial_folder
-            )
-
-            processed_folder.mkdir(parents=True, exist_ok=True)
-            return processed_folder
-
-        except Exception:
-            LOGGER.exception("Error creating processed folder")
-            return None
+        return wf_paths.get_trial_processed_folder(self.trial_path)
 
     def save_array(self, data: np.ndarray, name: str, file_format: str = "npy") -> Path | None:
         """
-        Save numpy array to processed data folder.
+        Save a numpy array to the processed folder.
 
         Args:
             data: Numpy array to save.
-            name: Name for the saved file (without extension).
-            file_format: File format to save ("npy" for .npy, "npz" for .npz).
+            name: Base filename (without extension).
+            file_format: Either "npy" or "npz" (compressed).
 
         Returns:
-            Path to saved file, or None if error.
+            Path to saved file, or None on error.
         """
         processed_folder = self._get_processed_folder()
         if processed_folder is None:
@@ -505,14 +432,14 @@ class WidefieldAnalysis:
 
     def to_numpy(self, source: str | Path | np.ndarray | None = None) -> np.ndarray | None:
         """
-        Convert TIFF file or return numpy array as-is.
+        Convert a source to a numpy array.
 
         Args:
-            source: Path to TIFF file, numpy array, or None to use
-                   loaded imaging_data.
+            source: Path to TIFF file, numpy array, or None.
+                If None, returns the loaded imaging_data.
 
         Returns:
-            Numpy array of the imaging data, or None if error.
+            Numpy array, or None if source is invalid.
         """
         if source is None:
             if self.imaging_data is not None:
@@ -520,25 +447,7 @@ class WidefieldAnalysis:
             LOGGER.warning("No imaging data loaded and no source provided")
             return None
 
-        if isinstance(source, np.ndarray):
-            return source
-
-        if isinstance(source, (str, Path)):
-            tiff_path = Path(source)
-            if not tiff_path.exists():
-                LOGGER.error(f"TIFF file not found: {tiff_path}")
-                return None
-            try:
-                LOGGER.info(f"Loading TIFF: {tiff_path.name}")
-                data = skio.imread(str(tiff_path))
-                LOGGER.info(f"Loaded: {data.shape}")
-                return data
-            except Exception:
-                LOGGER.exception(f"Error loading TIFF: {tiff_path}")
-                return None
-
-        LOGGER.error(f"Invalid source type: {type(source)}")
-        return None
+        return wf_io.tiff_to_numpy(source)
 
     def create_movie(
         self,
@@ -551,267 +460,93 @@ class WidefieldAnalysis:
         frame_callback: Callable | None = None,
     ) -> Path | None:
         """
-        Create an MP4 movie from TIFF file or numpy array.
+        Create an MP4 movie from imaging data.
 
         Args:
-            data: TIFF file path, numpy array, or None to use loaded
-                 imaging_data.
-            output_path: Path to save MP4 file. If None, saves in trial
-                        folder with default name.
-            fps: Frames per second for the movie (default: 10).
-            cmap: Colormap for visualization (default: "gray").
-            vmin: Minimum value for colormap scaling. If None, uses data min.
-            vmax: Maximum value for colormap scaling. If None, uses data max.
-            frame_callback: Optional function to customize each frame.
-                          Called with (fig, ax, frame_idx, frame_data, wf_analysis).
-                          Can be used to add subplots, traces, annotations, etc.
+            data: Source data (path, array, or None for imaging_data).
+            output_path: Output file path. Defaults to trial_path/movie.mp4.
+            fps: Frames per second for output video.
+            cmap: Matplotlib colormap name.
+            vmin: Minimum value for colormap scaling.
+            vmax: Maximum value for colormap scaling.
+            frame_callback: Optional function called for each frame
+                to add custom annotations.
 
         Returns:
-            Path to saved MP4 file, or None if error.
-
-        Callback function signature:
-            def frame_callback(
-                fig: matplotlib.figure.Figure,
-                ax: matplotlib.axes.Axes,
-                frame_idx: int,
-                frame_data: np.ndarray,
-                wf_analysis: WidefieldAnalysis
-            ) -> None:
-                # Customize frame: add subplots, plot traces, add annotations, etc.
-                pass
+            Path to created movie file, or None on error.
         """
         movie_data = self.to_numpy(data)
         if movie_data is None:
             return None
 
-        if len(movie_data.shape) != 3:
+        if movie_data.ndim != 3:
             LOGGER.error(f"Expected 3D array (T, H, W), got: {movie_data.shape}")
             return None
-
-        T, H, W = movie_data.shape
-        LOGGER.info(f"Creating movie from {T} frames ({H}x{W})")
 
         if output_path is None:
             output_path = self.trial_path / "movie.mp4"
         else:
             output_path = Path(output_path)
 
-        if vmin is None:
-            vmin = float(movie_data.min())
-        if vmax is None:
-            vmax = float(movie_data.max())
-
-        try:
-            from io import BytesIO
-
-            frames = []
-            for frame_idx in range(T):
-                frame = movie_data[frame_idx]
-
-                fig, ax = plt.subplots(figsize=(10, 10))
-                ax.imshow(frame, cmap=cmap, vmin=vmin, vmax=vmax)
-                ax.set_title(f"Frame {frame_idx + 1}/{T}", fontsize=14)
-                ax.axis("off")
-
-                if frame_callback is not None:
-                    frame_callback(fig, ax, frame_idx, frame, self)
-                else:
-                    plt.tight_layout()
-
-                buf = BytesIO()
-                if frame_callback is not None:
-                    fig.savefig(buf, format="png", dpi=100, bbox_inches=None, pad_inches=0.0)
-                else:
-                    fig.savefig(buf, format="png", dpi=100, bbox_inches="tight")
-                buf.seek(0)
-                frame_img = skio.imread(buf)
-                frames.append(frame_img)
-                buf.close()
-                plt.close(fig)
-
-            LOGGER.info(f"Saving movie to: {output_path}")
-            writer = imageio.get_writer(str(output_path), format="FFMPEG", fps=fps, codec="libx264")
-            for frame in frames:
-                if frame.shape[2] == 4:
-                    frame = frame[:, :, :3]
-                writer.append_data(frame)
-            writer.close()
-            LOGGER.info(f"Movie saved: {output_path}")
-
-            return output_path
-
-        except Exception:
-            LOGGER.exception("Error creating movie")
-            return None
-
-    def _get_session_processed_folder(self) -> Path | None:
-        """
-        Get or create the processed data folder at session level.
-
-        Creates folder structure: data/processed/[session]/
-        where [session] is the folder name after "raw".
-
-        Returns:
-            Path to session processed folder, or None if error.
-        """
-        try:
-            trial_path = Path(self.trial_path)
-            parts = trial_path.parts
-
-            raw_idx = None
-            for i, part in enumerate(parts):
-                if part == "raw":
-                    raw_idx = i
-                    break
-
-            if raw_idx is None:
-                LOGGER.error("Could not find 'raw' in trial path structure")
-                return None
-
-            session_folder = parts[raw_idx + 1]
-
-            data_folder = trial_path
-            for _ in range(len(parts) - raw_idx - 1):
-                data_folder = data_folder.parent
-
-            session_processed_folder = data_folder.parent / "processed" / session_folder
-
-            session_processed_folder.mkdir(parents=True, exist_ok=True)
-            return session_processed_folder
-
-        except Exception:
-            LOGGER.exception("Error creating session processed folder")
-            return None
+        return wf_movie.create_movie_from_array(
+            data=movie_data,
+            output_path=output_path,
+            fps=fps,
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax,
+            frame_callback=frame_callback,
+            wf_analysis=self,
+        )
 
     def create_mask(self, initial_radius: float = 100.0) -> dict[str, float] | None:
         """
-        Interactive mask creation tool.
+        Create a circular mask interactively.
 
-        Displays the green reference image and allows user to:
-        - Click to set circle center
-        - Press 'B' to increase radius
-        - Press 'S' to decrease radius
-        - Press 'Enter' to confirm and save
+        Opens an interactive window to define a circular region
+        of interest on the green reference image.
 
         Args:
-            initial_radius: Initial radius in pixels (default: 100.0).
+            initial_radius: Starting radius in pixels.
 
         Returns:
-            Dictionary with 'center_x', 'center_y', and 'radius', or None.
+            Dictionary with center_x, center_y, radius keys,
+            or None if cancelled or green reference not loaded.
         """
         if self.green_reference is None:
             LOGGER.warning("Green reference not loaded. Call load_data() first.")
             return None
 
-        center = [None, None]
-        radius = initial_radius
-
-        fig, ax = plt.subplots(figsize=(10, 10))
-        ax.imshow(self.green_reference, cmap="gray")
-        ax.set_title("Click to set center | B=bigger, S=smaller | Enter=confirm", fontsize=12)
-        ax.axis("off")
-
-        circle = None
-
-        def update_circle():
-            nonlocal circle
-            if circle:
-                circle.remove()
-            if center[0] is not None and center[1] is not None:
-                circle = plt.Circle(
-                    (center[1], center[0]), radius, fill=False, color="red", linewidth=2
-                )
-                ax.add_patch(circle)
-                fig.canvas.draw()
-
-        def on_click(event):
-            if event.inaxes != ax:
-                return
-            if event.button == 1:
-                center[0] = int(event.ydata)
-                center[1] = int(event.xdata)
-                LOGGER.info(f"Center set to: ({center[1]}, {center[0]})")
-                update_circle()
-
-        def on_key(event):
-            nonlocal radius
-            if event.key == "b" or event.key == "B":
-                radius += 10
-                LOGGER.info(f"Radius increased to: {radius:.1f}")
-                update_circle()
-            elif event.key == "s" or event.key == "S":
-                radius = max(10, radius - 10)
-                LOGGER.info(f"Radius decreased to: {radius:.1f}")
-                update_circle()
-            elif event.key == "enter":
-                if center[0] is not None and center[1] is not None:
-                    plt.close(fig)
-                else:
-                    LOGGER.warning("Please click to set center first")
-
-        fig.canvas.mpl_connect("button_press_event", on_click)
-        fig.canvas.mpl_connect("key_press_event", on_key)
-
-        plt.tight_layout()
-        plt.show()
-
-        if center[0] is not None and center[1] is not None:
-            mask_data = {
-                "center_x": float(center[1]),
-                "center_y": float(center[0]),
-                "radius": float(radius),
-            }
-            LOGGER.info(
-                f"Mask created: center=({mask_data['center_x']}, "
-                f"{mask_data['center_y']}), radius={mask_data['radius']}"
-            )
-            return mask_data
-
-        LOGGER.warning("No mask created")
-        return None
+        return wf_plotting.create_mask_interactive(self.green_reference, initial_radius)
 
     def save_mask(self, mask_data: dict[str, float], name: str = "mask") -> Path | None:
         """
-        Save mask data to session-level processed folder as JSON.
+        Save mask parameters to the session processed folder.
 
         Args:
-            mask_data: Dictionary with 'center_x', 'center_y', and 'radius'.
-            name: Name for the mask file (without extension).
+            mask_data: Dictionary with center_x, center_y, radius.
+            name: Base filename (without .json extension).
 
         Returns:
-            Path to saved JSON file, or None if error.
+            Path to saved JSON file, or None on error.
         """
         session_folder = self._get_session_processed_folder()
         if session_folder is None:
             return None
 
-        try:
-            output_path = session_folder / f"{name}.json"
-
-            with open(output_path, "w") as f:
-                json.dump(mask_data, f, indent=2)
-
-            LOGGER.info(f"Saved mask to: {output_path}")
-            LOGGER.info(
-                f"  Center: ({mask_data['center_x']}, "
-                f"{mask_data['center_y']}), Radius: {mask_data['radius']}"
-            )
-            return output_path
-
-        except Exception:
-            LOGGER.exception("Error saving mask")
-            return None
+        output_path = session_folder / f"{name}.json"
+        return wf_masks.save_mask_json(mask_data, output_path)
 
     def set_condition(self, condition_dict: dict[str, Any]) -> None:
         """
-        Set condition information from a dictionary.
+        Set experimental condition attributes on this instance.
 
-        Loops over the dictionary and sets each key-value pair as an attribute
-        on the class instance. Also stores the full dictionary in self.condition.
+        Stores the condition dictionary and also sets each key-value
+        pair as an attribute on this object for convenient access.
 
         Args:
-            condition_dict: Dictionary with condition information.
-                           Keys will be set as attributes on the instance.
+            condition_dict: Dictionary of condition parameters
+                (e.g., stimulus_start_frame, baseline_ms).
         """
         self.condition = condition_dict.copy()
 
@@ -822,31 +557,21 @@ class WidefieldAnalysis:
 
     def load_mask(self, name: str = "mask") -> dict[str, float] | None:
         """
-        Load mask data from session-level processed folder.
+        Load mask parameters from the session processed folder.
 
         Args:
-            name: Name of the mask file (without extension).
+            name: Base filename (without .json extension).
 
         Returns:
-            Dictionary with mask data, or None if not found.
+            Dictionary with center_x, center_y, radius keys,
+            or None if file not found.
         """
         session_folder = self._get_session_processed_folder()
         if session_folder is None:
             return None
 
         mask_path = session_folder / f"{name}.json"
-        if not mask_path.exists():
-            LOGGER.warning(f"Mask file not found: {mask_path}")
-            return None
-
-        try:
-            with open(mask_path) as f:
-                mask_data = json.load(f)
-            LOGGER.info(f"Loaded mask from: {mask_path}")
-            return mask_data
-        except Exception:
-            LOGGER.exception(f"Error loading mask: {mask_path}")
-            return None
+        return wf_masks.load_mask_json(mask_path)
 
     def apply_mask(
         self,
@@ -855,18 +580,18 @@ class WidefieldAnalysis:
         mask_name: str = "mask",
     ) -> np.ndarray | None:
         """
-        Apply circular mask to imaging data.
+        Apply a circular mask to imaging data.
 
-        Sets pixels outside the mask to 0 (black).
+        Sets pixels outside the circular region to zero.
 
         Args:
-            data: Numpy array to mask. If None, uses loaded imaging_data.
-            mask_data: Mask dictionary with 'center_x', 'center_y', 'radius'.
-                      If None, loads from saved mask file.
-            mask_name: Name of mask file to load if mask_data not provided.
+            data: 3D array to mask. Defaults to imaging_data.
+            mask_data: Mask parameters. If None, loads from file.
+            mask_name: Name of mask file to load if mask_data is None.
 
         Returns:
-            Masked numpy array, or None if error.
+            Masked 3D array with same shape as input,
+            or None on error.
         """
         if data is None:
             if self.imaging_data is None:
@@ -879,48 +604,11 @@ class WidefieldAnalysis:
             if mask_data is None:
                 return None
 
-        try:
-            T, H, W = data.shape
-            center_x = mask_data["center_x"]
-            center_y = mask_data["center_y"]
-            radius = mask_data["radius"]
+        reference_shape = None
+        if self.green_reference is not None:
+            reference_shape = self.green_reference.shape[:2]
 
-            LOGGER.info(
-                f"Data shape: {data.shape}, Mask center: ({center_x}, {center_y}), radius: {radius}"
-            )
-
-            if center_x >= W or center_y >= H:
-                LOGGER.warning(
-                    f"Mask center ({center_x}, {center_y}) is outside image bounds ({W}, {H}). "
-                    f"Scaling mask coordinates to match image size."
-                )
-                ref_shape = self.green_reference.shape if self.green_reference is not None else None
-                if ref_shape is not None and len(ref_shape) >= 2:
-                    scale_x = W / ref_shape[1]
-                    scale_y = H / ref_shape[0]
-                    center_x = center_x * scale_x
-                    center_y = center_y * scale_y
-                    radius = radius * min(scale_x, scale_y)
-                    LOGGER.info(
-                        f"Scaled mask: center=({center_x:.1f}, {center_y:.1f}), radius={radius:.1f}"
-                    )
-
-            y, x = np.ogrid[:H, :W]
-            mask = (x - center_x) ** 2 + (y - center_y) ** 2 <= radius**2
-
-            masked_data = data.copy()
-            masked_data[:, ~mask] = 0
-
-            LOGGER.info(
-                f"Applied mask: center=({center_x:.1f}, {center_y:.1f}), radius={radius:.1f}"
-            )
-            LOGGER.info(f"Masked data shape: {masked_data.shape}")
-
-            return masked_data
-
-        except Exception:
-            LOGGER.exception("Error applying mask")
-            return None
+        return wf_masks.apply_circular_mask(data, mask_data, reference_shape)
 
     def calculate_percentile(
         self,
@@ -931,25 +619,21 @@ class WidefieldAnalysis:
         fps: float | None = None,
     ) -> np.ndarray | None:
         """
-        Calculate percentile value for each pixel across frames.
+        Calculate percentile projection for baseline (F0).
 
-        Computes the percentile of F for each pixel across the time dimension.
-        Can be restricted to a pre-stimulus window if parameters are provided.
+        Computes the specified percentile for each pixel across time,
+        typically used as the baseline for delta F/F calculations.
 
         Args:
-            data: Numpy array with shape (T, H, W). If None, uses loaded
-                 imaging_data.
-            percentile: Percentile value to calculate (default: 15.0).
-            stimulus_start_frame: Optional frame index where stimulus starts.
-                                If provided with baseline_ms, restricts
-                                calculation to pre-stimulus window.
-            baseline_ms: Optional milliseconds before stimulus to use for
-                        window. Requires stimulus_start_frame.
-            fps: Optional frame rate in Hz for time conversion. If None and
-                window parameters provided, uses get_fps().
+            data: 3D array. Defaults to imaging_data.
+            percentile: Percentile value (0-100). Default 15.
+            stimulus_start_frame: If provided with baseline_ms,
+                only uses frames before this point.
+            baseline_ms: Duration of baseline period in ms.
+            fps: Frame rate. Auto-detected if not provided.
 
         Returns:
-            2D array with percentile values for each pixel, or None if error.
+            2D percentile image, or None on error.
         """
         if data is None:
             if self.imaging_data is None:
@@ -957,83 +641,31 @@ class WidefieldAnalysis:
                 return None
             data = self.imaging_data
 
-        if len(data.shape) != 3:
-            LOGGER.error(f"Expected 3D array (T, H, W), got: {data.shape}")
-            return None
+        if fps is None and stimulus_start_frame is not None and baseline_ms is not None:
+            fps = self.get_fps()
 
-        try:
-            T, H, W = data.shape
-
-            window_data = data
-            window_info = "all frames"
-
-            if stimulus_start_frame is not None and baseline_ms is not None:
-                if fps is None:
-                    fps = self.get_fps()
-                    if fps is None:
-                        LOGGER.error("FPS not available and not provided for window calculation")
-                        return None
-
-                baseline_frames = int(baseline_ms / 1000.0 * fps)
-                baseline_start = max(0, stimulus_start_frame - baseline_frames)
-                baseline_end = stimulus_start_frame
-
-                if baseline_end > T:
-                    LOGGER.warning(
-                        f"Stimulus start frame ({baseline_end}) exceeds data "
-                        f"length ({T}). Using data length instead."
-                    )
-                    baseline_end = T
-
-                if baseline_start >= baseline_end:
-                    LOGGER.error(
-                        f"Invalid baseline window: start={baseline_start}, end={baseline_end}"
-                    )
-                    return None
-
-                window_data = data[baseline_start:baseline_end]
-                window_info = (
-                    f"frames [{baseline_start}:{baseline_end}] ({len(window_data)} frames)"
-                )
-
-            LOGGER.info(f"Calculating {percentile}th percentile for {window_info} ({H}x{W})")
-
-            f_base = np.zeros((H, W), dtype=data.dtype)
-
-            for r in range(H):
-                for c in range(W):
-                    trace = window_data[:, r, c]
-                    trace_base = np.percentile(trace, percentile)
-                    if trace_base == 0:
-                        trace_base = 1
-                    f_base[r, c] = trace_base
-
-            LOGGER.info(
-                f"Percentile calculated: min={f_base.min():.2f}, "
-                f"max={f_base.max():.2f}, mean={f_base.mean():.2f}"
-            )
-            return f_base
-
-        except Exception:
-            LOGGER.exception("Error calculating movie percentile")
-            return None
+        return wf_metrics.calculate_percentile_movie(
+            data=data,
+            percentile=percentile,
+            stimulus_start_frame=stimulus_start_frame,
+            baseline_ms=baseline_ms,
+            fps=fps,
+        )
 
     def calculate_deltaff(
         self, data: np.ndarray | None = None, baseline: np.ndarray | None = None
     ) -> np.ndarray | None:
         """
-        Calculate delta F over F (ΔF/F) for a movie.
+        Calculate delta F/F (relative fluorescence change).
 
-        Uses provided baseline (F0). Formula: ΔF/F = (F - F0) / F0 = F/F0 - 1
+        Computes (F - F0) / F0 for each pixel and frame.
 
         Args:
-            data: Numpy array with shape (T, H, W). If None, uses loaded
-                 imaging_data.
-            baseline: 2D array with shape (H, W) to use as baseline (F0).
-                     Can be obtained from calculate_percentile().
+            data: 3D fluorescence data (F). Defaults to imaging_data.
+            baseline: 2D baseline image (F0). Required.
 
         Returns:
-            3D array with delta F over F values, or None if error.
+            3D delta F/F array, or None on error.
         """
         if data is None:
             if self.imaging_data is None:
@@ -1041,41 +673,11 @@ class WidefieldAnalysis:
                 return None
             data = self.imaging_data
 
-        if len(data.shape) != 3:
-            LOGGER.error(f"Expected 3D array (T, H, W), got: {data.shape}")
-            return None
-
         if baseline is None:
             LOGGER.error("baseline must be provided")
             return None
 
-        if len(baseline.shape) != 2:
-            LOGGER.error(f"Expected 2D baseline array (H, W), got: {baseline.shape}")
-            return None
-
-        T, H, W = data.shape
-        baseline_H, baseline_W = baseline.shape
-
-        if H != baseline_H or W != baseline_W:
-            LOGGER.error(
-                f"Baseline shape ({baseline_H}, {baseline_W}) does not match "
-                f"data spatial dimensions ({H}, {W})"
-            )
-            return None
-
-        try:
-            dff = data / baseline - 1
-
-            LOGGER.info(
-                f"Calculated ΔF/F: shape={dff.shape}, "
-                f"min={dff.min():.3f}, max={dff.max():.3f}, "
-                f"mean={dff.mean():.3f}"
-            )
-            return dff
-
-        except Exception:
-            LOGGER.exception("Error calculating delta F over F")
-            return None
+        return wf_metrics.calculate_deltaff_movie(data, baseline)
 
     def calculate_baseline(
         self,
@@ -1085,22 +687,18 @@ class WidefieldAnalysis:
         fps: float | None = None,
     ) -> np.ndarray | None:
         """
-        Calculate baseline mean from pre-stimulus window.
+        Calculate mean baseline image from pre-stimulus period.
 
-        Calculates mean of baseline period (before stimulus) for each pixel.
-        Returns 2D baseline array that can be used for ΔF/F calculation.
+        Averages frames within the baseline window before stimulus.
 
         Args:
-            data: Numpy array with shape (T, H, W). If None, uses loaded
-                 imaging_data.
-            stimulus_start_frame: Frame index where stimulus starts.
-            baseline_ms: Milliseconds before stimulus to use for baseline
-                        (default: 500.0).
-            fps: Frame rate in Hz. If None, uses get_fps().
+            data: 3D array. Defaults to imaging_data.
+            stimulus_start_frame: Frame index of stimulus onset.
+            baseline_ms: Duration of baseline period in ms.
+            fps: Frame rate. Auto-detected if not provided.
 
         Returns:
-            2D array (H, W) with baseline mean values for each pixel,
-            or None if error.
+            2D mean baseline image, or None on error.
         """
         if data is None:
             if self.imaging_data is None:
@@ -1108,66 +706,30 @@ class WidefieldAnalysis:
                 return None
             data = self.imaging_data
 
-        if len(data.shape) != 3:
-            LOGGER.error(f"Expected 3D array (T, H, W), got: {data.shape}")
-            return None
-
         if fps is None:
             fps = self.get_fps()
             if fps is None:
                 LOGGER.error("FPS not available and not provided")
                 return None
 
-        T, _, _ = data.shape
-
-        baseline_frames = int(baseline_ms / 1000.0 * fps)
-        baseline_start = stimulus_start_frame - baseline_frames
-        baseline_end = stimulus_start_frame
-
-        if baseline_start < 0:
-            LOGGER.warning(
-                f"Baseline start frame ({baseline_start}) is negative. Using frame 0 instead."
-            )
-            baseline_start = 0
-
-        if baseline_end > T:
-            LOGGER.warning(
-                f"Stimulus start frame ({baseline_end}) exceeds data length "
-                f"({T}). Using data length instead."
-            )
-            baseline_end = T
-
-        if baseline_start >= baseline_end:
-            LOGGER.error(f"Invalid baseline period: start={baseline_start}, end={baseline_end}")
-            return None
-
-        try:
-            baseline_period = data[baseline_start:baseline_end]
-            baseline_mean = np.mean(baseline_period, axis=0)
-
-            LOGGER.info(
-                f"Calculated baseline: period=[{baseline_start}:{baseline_end}], "
-                f"duration={baseline_ms}ms, "
-                f"baseline shape={baseline_mean.shape}, "
-                f"min={baseline_mean.min():.2f}, max={baseline_mean.max():.2f}, "
-                f"mean={baseline_mean.mean():.2f}"
-            )
-
-            return baseline_mean
-
-        except Exception:
-            LOGGER.exception("Error calculating baseline")
-            return None
+        return wf_metrics.calculate_baseline_movie(
+            data=data,
+            stimulus_start_frame=stimulus_start_frame,
+            baseline_ms=baseline_ms,
+            fps=fps,
+        )
 
     def set_roi(self, roi: tuple[int, int] | dict[str, Any]) -> None:
         """
-        Set Region of Interest (ROI) center coordinates.
-
-        Accepts ROI as tuple (x, y) or dictionary with 'center' key.
-        Stores ROI in self.roi as dictionary format.
+        Set the region of interest for trace extraction.
 
         Args:
-            roi: ROI center as tuple (x, y) or dictionary with 'center' key.
+            roi: Either a tuple (x, y) or a dict with 'center' key.
+
+        Raises:
+            ValueError: If tuple doesn't have 2 elements or dict
+                missing 'center' key.
+            TypeError: If roi is neither tuple nor dict.
         """
         if isinstance(roi, tuple):
             if len(roi) != 2:
@@ -1194,38 +756,19 @@ class WidefieldAnalysis:
         self, data: np.ndarray, percentile: float = 95.0
     ) -> tuple[int, int]:
         """
-        Calculate ROI centroid from percentile threshold.
+        Find ROI center from high-intensity pixels.
 
-        Finds pixels above percentile threshold and calculates their centroid.
+        Computes the centroid of pixels above the specified
+        percentile threshold.
 
         Args:
-            data: 2D array (map/data to analyze).
-            percentile: Percentile threshold (default: 95.0).
+            data: 2D image array.
+            percentile: Threshold percentile (0-100). Default 95.
 
         Returns:
-            Tuple (roi_x, roi_y) with centroid coordinates.
+            Tuple (x, y) of centroid coordinates.
         """
-        if len(data.shape) != 2:
-            raise ValueError(f"Expected 2D array, got shape {data.shape}")
-
-        thr = np.percentile(data.ravel(), percentile)
-        points = np.where(data > thr)
-
-        if len(points[0]) == 0:
-            LOGGER.warning(f"No points above {percentile}th percentile threshold ({thr:.2f})")
-            H, W = data.shape
-            return (W // 2, H // 2)
-
-        roi_x = int(np.mean(points[1]))
-        roi_y = int(np.mean(points[0]))
-
-        LOGGER.info(
-            f"Calculated ROI centroid: ({roi_x}, {roi_y}) from "
-            f"{len(points[0])} points above {percentile}th percentile "
-            f"({thr:.2f})"
-        )
-
-        return (roi_x, roi_y)
+        return wf_roi.centroid_from_percentile(data, percentile)
 
     def calculate_trace_within_roi(
         self,
@@ -1234,27 +777,25 @@ class WidefieldAnalysis:
         diameter: float = 50.0,
     ) -> np.ndarray | None:
         """
-        Calculate mean trace within circular ROI.
+        Extract mean fluorescence trace from circular ROI.
 
-        Extracts mean fluorescence from circular region for each frame.
+        Computes the mean pixel value within a circular region
+        for each frame.
 
         Args:
-            data: 3D imaging data (T, H, W). If None, uses self.imaging_data.
-            roi: ROI center as tuple (x, y) or dict. If None, uses self.roi.
-            diameter: Diameter of circular ROI in pixels (default: 50.0).
+            data: 3D array. Defaults to imaging_data.
+            roi: ROI center as tuple (x, y) or dict with 'center'.
+                Defaults to self.roi.
+            diameter: ROI diameter in pixels. Default 50.
 
         Returns:
-            1D trace array (length = number of frames), or None if error.
+            1D array of mean values per frame, or None on error.
         """
         if data is None:
             if self.imaging_data is None:
                 LOGGER.warning("No data provided and imaging_data not loaded")
                 return None
             data = self.imaging_data
-
-        if len(data.shape) != 3:
-            LOGGER.error(f"Expected 3D array (T, H, W), got: {data.shape}")
-            return None
 
         if roi is None:
             if self.roi is None:
@@ -1273,38 +814,15 @@ class WidefieldAnalysis:
             LOGGER.error(f"ROI must be tuple (x, y) or dict, got {type(roi)}")
             return None
 
-        T, H, W = data.shape
-        center_x = center[0]
-        center_y = center[1]
-        radius = diameter / 2.0
-
-        if center_x < 0 or center_x >= W or center_y < 0 or center_y >= H:
-            LOGGER.warning(
-                f"ROI center ({center_x}, {center_y}) is outside image bounds ({W}, {H})"
-            )
-
-        y, x = np.ogrid[:H, :W]
-        mask = (x - center_x) ** 2 + (y - center_y) ** 2 <= radius**2
-
-        trace = np.zeros(T)
-        for frame_idx in range(T):
-            frame = data[frame_idx]
-            masked_frame = frame[mask]
-            if len(masked_frame) > 0:
-                trace[frame_idx] = np.mean(masked_frame)
-            else:
-                trace[frame_idx] = 0.0
-
-        LOGGER.info(
-            f"Calculated trace from ROI: center=({center_x}, {center_y}), "
-            f"diameter={diameter}, trace length={T}, "
-            f"mean={trace.mean():.2f}, std={trace.std():.2f}"
-        )
-
-        return trace
+        return wf_roi.trace_within_circular_roi(data, center, diameter)
 
     def close(self) -> None:
-        """Clean up resources."""
+        """
+        Release resources and clear loaded data.
+
+        Sets imaging_data, green_reference, timestamps, and
+        sensor_data to None/empty to free memory.
+        """
         self.imaging_data = None
         self.green_reference = None
         self.timestamps = None
