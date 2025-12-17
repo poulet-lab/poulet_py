@@ -92,7 +92,6 @@ converters = ["poulet_py[seq]"]
 hardware = ["poulet_py[camera, arduino, julabo, qst, triggers]"]
 tools = ["orjson"]
 utils = ["poulet_py[qst, osc]"]
-widefield = ["poulet_py[widefield]"]
 # Install all modules
 all = ["poulet_py[converters, hardware, tools, utils, widefield]"]
 # Docs
