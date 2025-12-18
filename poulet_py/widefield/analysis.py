@@ -1307,8 +1307,8 @@ class WidefieldAnalysis:
     def process_dff_windows(
         self,
         windows: dict[str, tuple[int, int]],
-        fps: float = 20.0,
-        dff_filename: str = "dff.npy",
+        dff_filename: str,
+        average: bool = False,
         vmin: float | None = None,
         vmax: float | None = None,
         colors: list[str] | None = None,
@@ -1316,20 +1316,28 @@ class WidefieldAnalysis:
         """
         Process DFF movie for THIS trial over time windows and save average images.
 
-        Saves output inside the SAME processed folder for this trial:
-            data/processed/<dataset>/<session>/<protocol>/<trial>/avg_windows/
+        Modes
+        -----
+        average = False  → Single trial mode
+            Saves into:
+                data/processed/<dataset>/<session>/<protocol>/<trial>/avg_windows/
+
+        average = True   → Averaged output mode (no trial_end)
+            Saves into:
+                data/analyzed/<dataset>/<session>/<protocol>/avg_windows/
+
+            NOTE: You can later extend this to actually average across trials.
 
         Args:
-            windows: Dict mapping label -> (start_frame, end_frame).
-            fps: Frame rate in Hz (used only to define the windows upstream).
-            dff_filename: DFF filename (default: "dff.npy").
-            vmin: Colormap minimum. If None → computed from data.
-            vmax: Colormap maximum. If None → computed from data.
-            colors: Custom colormap colors. If None → use inferno.
+            windows: dict {label: (start_frame, end_frame)}
+            dff_filename: DFF filename to load (e.g. "dff.npy")
+            average: controls whether output goes to processed or analyzed folder
+            vmin, vmax: colormap limits
+            colors: custom colormap colors (otherwise inferno)
         """
 
         # -------------------------------------------------------------
-        # 1. Infer dataset/session/protocol/trial_name from trial_path
+        # 1. Parse identifiers from trial_path
         # -------------------------------------------------------------
         trial_path = Path(self.trial_path).resolve()
         parts = trial_path.parts
@@ -1341,49 +1349,45 @@ class WidefieldAnalysis:
             return
 
         if len(parts) < raw_idx + 5:
-            LOGGER.error(f"trial_path does not contain enough components: {trial_path}")
+            LOGGER.error("trial_path does not contain enough components")
             return
 
-        dataset_id = parts[raw_idx + 1]
-        session_id = parts[raw_idx + 2]
+        dataset_id    = parts[raw_idx + 1]
+        session_id    = parts[raw_idx + 2]
         protocol_name = parts[raw_idx + 3]
-        trial_name = parts[raw_idx + 4]
+        trial_name    = parts[raw_idx + 4]
 
-        data_root = Path(*parts[:raw_idx])  # root 'data' folder
+        data_root = Path(*parts[:raw_idx])  # e.g. "data"
 
         # -------------------------------------------------------------
-        # 2. Locate processed trial folder & DFF file
+        # 2. Locate processed DFF
         # -------------------------------------------------------------
         processed_trial_folder = (
             data_root / "processed" / dataset_id / session_id / protocol_name / trial_name
         )
-
-        if not processed_trial_folder.exists():
-            LOGGER.error(f"Processed trial folder not found: {processed_trial_folder}")
-            return
 
         dff_path = processed_trial_folder / dff_filename
         if not dff_path.exists():
             LOGGER.error(f"DFF file not found: {dff_path}")
             return
 
-        LOGGER.info(f"Loading DFF from {dff_path}")
+        LOGGER.info(f"Loading DFF from: {dff_path}")
 
         try:
             dff = np.load(dff_path)
         except Exception:
-            LOGGER.exception(f"Error loading DFF from: {dff_path}")
+            LOGGER.exception(f"Error loading DFF from {dff_path}")
             return
 
         if dff.ndim != 3:
-            LOGGER.error(f"DFF must be 3D (T,H,W); got {dff.shape}")
+            LOGGER.error("DFF must be 3D (T, H, W)")
             return
 
         T, H, W = dff.shape
-        LOGGER.info(f"Loaded DFF: T={T}, H={H}, W={W}")
+        LOGGER.info(f"Loaded DFF with shape: {dff.shape}")
 
         # -------------------------------------------------------------
-        # 3. Colormap
+        # 3. Choose colormap
         # -------------------------------------------------------------
         if colors is None:
             cmap = plt.get_cmap("inferno")
@@ -1391,38 +1395,42 @@ class WidefieldAnalysis:
             cmap = LinearSegmentedColormap.from_list("custom_cmap", colors)
 
         # -------------------------------------------------------------
-        # 4. Compute vmin/vmax if needed
+        # 4. Auto vmin/vmax
         # -------------------------------------------------------------
-        data_min = float(dff.min())
-        data_max = float(dff.max())
+        data_min, data_max = float(dff.min()), float(dff.max())
         vmin_eff = data_min if vmin is None else vmin
         vmax_eff = data_max if vmax is None else vmax
 
         LOGGER.info(
-            f"Color scaling: vmin={vmin_eff:.4f}, vmax={vmax_eff:.4f} "
-            f"(DFF range: {data_min:.4f}–{data_max:.4f})"
+            f"Color limits: vmin={vmin_eff}, vmax={vmax_eff} "
+            f"(data range {data_min}–{data_max})"
         )
 
         # -------------------------------------------------------------
-        # 5. Create output folder IN THE SAME PROCESSED TRIAL FOLDER
+        # 5. Determine output directory
         # -------------------------------------------------------------
-        output_dir = processed_trial_folder / "avg_windows"
+        if not average:
+            # Single trial → processed folder
+            output_dir = processed_trial_folder / "avg_windows"
+            LOGGER.info(f"Saving single-trial results to: {output_dir}")
+        else:
+            # Averaged output → analyzed folder (no trial name)
+            output_dir = (
+                data_root / "analyzed" / dataset_id / session_id / protocol_name / "avg_windows"
+            )
+            LOGGER.info(f"Saving averaged results to: {output_dir}")
+
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        LOGGER.info(f"Saving output in: {output_dir}")
-
         # -------------------------------------------------------------
-        # 6. Loop through windows
+        # 6. Process each window
         # -------------------------------------------------------------
         for label, (start, end) in windows.items():
+
             safe_label = label.replace("-", "_")
 
             if start >= end:
-                LOGGER.warning(f"Skipping '{label}': invalid window {start}–{end}")
-                continue
-
-            if start >= T:
-                LOGGER.warning(f"Skipping '{label}': start {start} >= total frames {T}")
+                LOGGER.warning(f"Skipping '{label}' – invalid range")
                 continue
 
             if end > T:
@@ -1430,31 +1438,33 @@ class WidefieldAnalysis:
                 end = T
 
             window_movie = dff[start:end]
-
             if window_movie.size == 0:
-                LOGGER.warning(f"Window '{label}' contains no frames after clipping")
+                LOGGER.warning(f"Skipping '{label}' – no frames")
                 continue
 
-            # Temporal average of rotated frames (matching your pipeline)
-            avg_img = np.mean(np.rot90(window_movie, k=-1, axes=(1, 2)), axis=0)
+            # Temporal average of rotated frames (matching your workflow)
+            avg_img = np.mean(
+                np.rot90(window_movie, k=-1, axes=(1, 2)),
+                axis=0,
+            )
 
-            # Save .npy
+            # Save numpy
             np.save(output_dir / f"{trial_name}_average_{safe_label}.npy", avg_img)
 
-            # Save .png/.svg
+            # Save figure
             fig, ax = plt.subplots()
             im = ax.imshow(avg_img, cmap=cmap, vmin=vmin_eff, vmax=vmax_eff)
-            plt.colorbar(im, ax=ax, label="dF/F")
             ax.set_title(f"{trial_name} | {label}")
             ax.axis("on")
+            plt.colorbar(im, ax=ax, label="dF/F")
 
-            fig.savefig(output_dir / f"{trial_name}_average_{safe_label}.svg")
             fig.savefig(output_dir / f"{trial_name}_average_{safe_label}.png")
+            fig.savefig(output_dir / f"{trial_name}_average_{safe_label}.svg")
             plt.close(fig)
 
-            LOGGER.info(f"Saved window '{label}' → {output_dir}")
+            LOGGER.info(f"Saved window '{label}' to {output_dir}")
 
-        LOGGER.info("Finished computing window averages for this trial.")
+        LOGGER.info("Finished DFF window processing.")
 
     def close(self) -> None:
         """Clean up resources."""
