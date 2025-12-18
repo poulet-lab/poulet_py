@@ -1402,15 +1402,11 @@ class WidefieldAnalysis:
         # --- Loop over windows ---
         for label, (start, end) in windows.items():
             if start >= end:
-                LOGGER.warning(
-                    f"Skipping window '{label}': invalid range ({start}, {end})"
-                )
+                LOGGER.warning(f"Skipping window '{label}': invalid range ({start}, {end})")
                 continue
 
             if start >= T:
-                LOGGER.warning(
-                    f"Skipping window '{label}': start {start} >= total frames {T}"
-                )
+                LOGGER.warning(f"Skipping window '{label}': start {start} >= total frames {T}")
                 continue
 
             if end > T:
@@ -1460,7 +1456,6 @@ class WidefieldAnalysis:
             )
 
         LOGGER.info("DFF window processing (single trial) completed.")
-
 
     def close(self) -> None:
         """Clean up resources."""
