@@ -1305,57 +1305,34 @@ class WidefieldAnalysis:
         return trace
 
     def process_dff_windows(
-<<<<<<< HEAD
         self,
-=======
->>>>>>> cf75083840ddca7f1f24f6ab8bbebeab066d5ed9
-        dataset_id: str,
-        session_id: str,
-        protocol_name: str,
-        trial_start: str,
         windows: dict[str, tuple[int, int]],
-        *,
-        trial_end: str | None = None,
         fps: float = 20.0,
-        base_processed: Path | str = Path("data/processed"),
-        base_analyzed: Path | str = Path("data/analyzed"),
-<<<<<<< HEAD
-=======
-        versions: list[tuple[str, str, str]] | None = None,
->>>>>>> cf75083840ddca7f1f24f6ab8bbebeab066d5ed9
+        dff_filename: str = "dff.npy",
         vmin: float | None = None,
         vmax: float | None = None,
         colors: list[str] | None = None,
     ) -> None:
         """
-        Process DFF movies over time windows and save average images.
+        Process DFF movie for THIS trial over time windows and save average images.
 
-        Behaviour:
-            - If trial_end is None:
-                  → Single-trial mode (process only `trial_start`)
-            - If trial_end is provided:
-                  → Multi-trial mode (average all trials in the range
-                     trial_start ... trial_end)
+        Single-trial only:
+            Uses the processed folder corresponding to this WidefieldAnalysis.trial_path
+            (via _get_processed_folder) and expects a DFF file named `dff_filename`
+            (default: "dff.npy") inside that folder.
 
-        The function expects DFF files named `dff.npy` inside:
-            base_processed / dataset_id / session_id / protocol_name / <trial> / dff.npy
-
-        Results are saved under:
-            base_analyzed / dataset_id / session_id / protocol_name / ...
+        Windows are defined in frame indices:
+            windows = {label: (start_frame, end_frame)}
 
         Args:
-            dataset_id: Dataset identifier (e.g. "JPCM-09100").
-            session_id: Session identifier (e.g. "251215_leica").
-            protocol_name: Protocol name (e.g. "repetition_tactile").
-            trial_start: Trial name or starting name of range.
-            windows: dict {label: (start_frame, end_frame)}.
-            trial_end: End of trial range. If None → single trial processing.
-            fps: Frame rate in Hz (used only to define windows upstream).
-            base_processed: Root folder for processed trials (DFF inputs).
-            base_analyzed: Root folder for analyzed outputs.
-            vmin: Colormap minimum. If None → computed from data.
-            vmax: Colormap maximum. If None → computed from data.
-            colors: Custom colormap colors. If None → use inferno.
+            windows: Dict mapping label -> (start_frame, end_frame) in frames.
+            fps: Frame rate in Hz (used only to define windows upstream; not needed here
+                 except for your own bookkeeping).
+            dff_filename: Name of the DFF file in the processed folder (default: "dff.npy").
+            vmin: Colormap minimum. If None, computed from this DFF.
+            vmax: Colormap maximum. If None, computed from this DFF.
+            colors: Optional list of color strings to build a custom colormap.
+                    If None, uses matplotlib's built-in "inferno".
 
         Example
         -------
@@ -1364,265 +1341,65 @@ class WidefieldAnalysis:
         ...     "5-6s": (5 * fps, 6 * fps),
         ...     "6-7s": (6 * fps, 7 * fps),
         ... }
-        >>> wf = WidefieldAnalysis(Path("data/raw/JPCM-09100/251215_leica/repetition_tactile/251215_161522"))
+        >>> wf = WidefieldAnalysis(
+        ...     Path("data/raw/JPCM-07991/250818_leica/22_42_interleaved/250818_160439")
+        ... )
         >>> wf.process_dff_windows(
-        ...     dataset_id="JPCM-09100",
-        ...     session_id="251215_leica",
-        ...     protocol_name="repetition_tactile",
-        ...     trial_start="251215_161522",
         ...     windows=windows,
         ...     fps=fps,
         ... )
         """
-        # Single DFF definition to stay aligned with your pipeline
-        version_name = "DFF"
-        dff_file = "dff.npy"
-        out_label = "avg_windows"
+        # --- Locate processed folder for this trial ---
+        processed_folder = self._get_processed_folder()
+        if processed_folder is None:
+            LOGGER.error("Could not determine processed folder for this trial")
+            return
+
+        dff_path = processed_folder / dff_filename
+        if not dff_path.exists():
+            LOGGER.error(f"DFF file not found: {dff_path}")
+            return
+
+        LOGGER.info(f"Loading DFF from: {dff_path}")
+        try:
+            dff = np.load(dff_path)
+        except Exception:
+            LOGGER.exception(f"Error loading DFF from: {dff_path}")
+            return
+
+        if dff.ndim != 3:
+            LOGGER.error(f"Expected 3D DFF array (T, H, W), got {dff.shape} in {dff_path}")
+            return
+
+        T, H, W = dff.shape
+        LOGGER.info(f"DFF shape: T={T}, H={H}, W={W}")
 
         # --- Colormap selection ---
         if colors is None:
-            cmap = plt.get_cmap("inferno")  # default
+            cmap = plt.get_cmap("inferno")
         else:
             cmap = LinearSegmentedColormap.from_list("custom_cmap", colors)
 
-        base_processed = Path(base_processed)
-        base_analyzed = Path(base_analyzed)
-        trial_base = base_processed / dataset_id / session_id / protocol_name
-
-        if not trial_base.exists():
-            LOGGER.error(f"Processed base path does not exist: {trial_base}")
-            return
-
-        # ------------------------------------------------------------------
-        # Determine single-trial vs multi-trial mode
-        # ------------------------------------------------------------------
-        if trial_end is None:
-            # Single trial
-            all_trials = [trial_base / trial_start]
-            LOGGER.info(f"Single-trial mode: '{trial_start}' under {trial_base}")
-        else:
-            # Trial range
-            all_trials = sorted(
-<<<<<<< HEAD
-                p
-                for p in trial_base.iterdir()
-                if p.is_dir() and trial_start <= p.name <= trial_end
-=======
-                p for p in trial_base.iterdir() if p.is_dir() and trial_start <= p.name <= trial_end
->>>>>>> cf75083840ddca7f1f24f6ab8bbebeab066d5ed9
-            )
-            LOGGER.info(
-                f"Multi-trial mode: trials in range [{trial_start}, {trial_end}] "
-                f"under {trial_base}"
-            )
-
-        if not all_trials:
-            LOGGER.warning(
-                "No trials found for given parameters: "
-                f"trial_start={trial_start}, trial_end={trial_end}"
-            )
-            return
-
-<<<<<<< HEAD
-        LOGGER.info(f"Processing DFF version: {version_name} ({dff_file})")
-
-        dff_arrays: list[np.ndarray] = []
-        valid_trial_paths: list[Path] = []
-=======
-        # ----------------------------------------------------------
-        # MAIN LOOP OVER VERSION DEFINITIONS
-        # ----------------------------------------------------------
-        for version_name, dff_file, out_label in versions:
-            dff_arrays = []
-            valid_trial_paths = []
->>>>>>> cf75083840ddca7f1f24f6ab8bbebeab066d5ed9
-
-        # --- Load DFF movies ---
-        for trial_path in all_trials:
-            if not trial_path.exists():
-                LOGGER.warning(f"Trial folder not found: {trial_path}")
-                continue
-
-            dff_path = trial_path / dff_file
-            if not dff_path.exists():
-                LOGGER.warning(f"Skipping {trial_path.name}: {dff_file} not found")
-                continue
-
-            try:
-                dff = np.load(dff_path)
-            except Exception:
-                LOGGER.exception(f"Error loading DFF from: {dff_path}")
-                continue
-
-            if dff.ndim != 3:
-                LOGGER.error(
-                    f"Expected 3D DFF array (T, H, W), got {dff.shape} in {dff_path}"
-                )
-                continue
-
-            dff_arrays.append(dff)
-            valid_trial_paths.append(trial_path)
-
-        if not dff_arrays:
-            LOGGER.warning(f"No valid DFF files found for version '{version_name}'")
-            return
-
-        LOGGER.info(f"Loaded {len(dff_arrays)} DFF movies for version '{version_name}'")
-
-        # ------------------------------------------------------------------
-        # SINGLE TRIAL MODE
-        # ------------------------------------------------------------------
-        if trial_end is None:
-            dff = dff_arrays[0]
-            trial_name = valid_trial_paths[0].name
-
-            output_dir = (
-                base_analyzed
-                / dataset_id
-                / session_id
-                / protocol_name
-                / out_label
-                / trial_name
-            )
-            output_dir.mkdir(parents=True, exist_ok=True)
-
-            LOGGER.info(
-                f"Single-trial processing: trial='{trial_name}', version='{version_name}'"
-            )
-
-            # Optional: save raw DFF for this trial
-            np.save(output_dir / "dff.npy", dff)
-
-            # Compute vmin/vmax from this DFF if not provided
-            data_min = float(dff.min())
-            data_max = float(dff.max())
-            vmin_eff = data_min if vmin is None else vmin
-            vmax_eff = data_max if vmax is None else vmax
-
-            LOGGER.info(
-                f"Color scaling for {version_name}, trial {trial_name}: "
-                f"vmin={vmin_eff:.4f}, vmax={vmax_eff:.4f} "
-                f"(data range: [{data_min:.4f}, {data_max:.4f}])"
-            )
-
-            for label, (start, end) in windows.items():
-                if start >= end:
-                    LOGGER.warning(
-                        f"Skipping window '{label}' in trial '{trial_name}': "
-                        f"invalid range ({start}, {end})"
-                    )
-                    continue
-
-                if end > dff.shape[0]:
-                    LOGGER.warning(
-                        f"Window '{label}' end frame {end} exceeds movie length "
-                        f"{dff.shape[0]} in trial '{trial_name}'. Clipping."
-                    )
-                    end = dff.shape[0]
-
-                window_movie = dff[start:end]
-                if window_movie.size == 0:
-                    LOGGER.warning(
-                        f"Window '{label}' has no frames after clipping "
-                        f"in trial '{trial_name}'"
-                    )
-                    continue
-
-<<<<<<< HEAD
-                avg_img = np.mean(
-                    np.rot90(window_movie, k=-1, axes=(1, 2)),
-                    axis=0,
-                )
-
-                win_label_safe = label.replace("-", "_")
-                np.save(output_dir / f"average_{win_label_safe}.npy", avg_img)
-
-                fig, ax = plt.subplots()
-                im = ax.imshow(avg_img, cmap=cmap, vmin=vmin_eff, vmax=vmax_eff)
-                ax.set_title(f"{trial_name} | {label}")
-                ax.axis("on")
-                plt.colorbar(im, ax=ax, label="dF/F")
-
-                fig.savefig(
-                    output_dir
-                    / f"{trial_name}_average_image_set_range_{win_label_safe}.svg",
-                    format="svg",
-=======
-            # ----------------------------------------------------------
-            # SINGLE TRIAL MODE
-            # ----------------------------------------------------------
-            if trial_end is None:
-                dff = dff_arrays[0]
-                trial_name = valid_trial_paths[0].name
-
-                output_dir = (
-                    base_analyzed / dataset_id / session_id / protocol_name / out_label / trial_name
->>>>>>> cf75083840ddca7f1f24f6ab8bbebeab066d5ed9
-                )
-                fig.savefig(
-                    output_dir
-                    / f"{trial_name}_average_image_set_range_{win_label_safe}.png",
-                    format="png",
-                )
-                plt.close(fig)
-
-                LOGGER.info(
-                    f"Saved single-trial average image for window '{label}' "
-                    f"in trial '{trial_name}' ({version_name}) to {output_dir}"
-                )
-
-<<<<<<< HEAD
-            LOGGER.info("DFF window processing (single trial) completed.")
-            return  # done in single-trial mode
-
-        # ------------------------------------------------------------------
-        # MULTI-TRIAL AVERAGING MODE
-        # ------------------------------------------------------------------
-        try:
-            dff_stack = np.stack(dff_arrays, axis=0)  # (N_trials, T, H, W)
-        except Exception:
-            LOGGER.exception("Error stacking DFF arrays")
-            return
-=======
-                # Window loop
-                for label, (start, end) in windows.items():
-                    end = min(end, dff.shape[0])
-                    window_movie = dff[start:end]
-                    avg_img = np.mean(np.rot90(window_movie, -1, (1, 2)), axis=0)
->>>>>>> cf75083840ddca7f1f24f6ab8bbebeab066d5ed9
-
-        # Use np.average for across-trial averaging
-        avg_dff = np.average(dff_stack, axis=0)  # (T, H, W)
-
-        # Compute vmin/vmax from averaged DFF if not provided
-        data_min = float(avg_dff.min())
-        data_max = float(avg_dff.max())
+        # --- Determine vmin / vmax if not provided ---
+        data_min = float(dff.min())
+        data_max = float(dff.max())
         vmin_eff = data_min if vmin is None else vmin
         vmax_eff = data_max if vmax is None else vmax
 
         LOGGER.info(
-            f"Color scaling for {version_name} (multi-trial average): "
-            f"vmin={vmin_eff:.4f}, vmax={vmax_eff:.4f} "
+            f"Color scaling: vmin={vmin_eff:.4f}, vmax={vmax_eff:.4f} "
             f"(data range: [{data_min:.4f}, {data_max:.4f}])"
         )
 
-        output_dir = (
-            base_analyzed
-            / dataset_id
-            / session_id
-            / protocol_name
-            / f"{out_label}_{trial_start}_to_{trial_end}"
-        )
+        # --- Output directory for window averages ---
+        # We keep output *next to* the DFF in a subfolder "avg_windows"
+        output_dir = processed_folder / "avg_windows"
         output_dir.mkdir(parents=True, exist_ok=True)
+        LOGGER.info(f"Saving window averages to: {output_dir}")
 
-        # Save full stack and across-trial average
-        np.save(output_dir / "average_trials.npy", avg_dff)
-        np.save(output_dir / "dff_trials.npy", dff_stack)
+        trial_name = processed_folder.name
 
-        LOGGER.info(
-            f"Saved stacked DFF and averaged movie for {version_name} to {output_dir}"
-        )
-
+        # --- Loop over windows ---
         for label, (start, end) in windows.items():
             if start >= end:
                 LOGGER.warning(
@@ -1630,63 +1407,61 @@ class WidefieldAnalysis:
                 )
                 continue
 
-            if end > avg_dff.shape[0]:
+            if start >= T:
                 LOGGER.warning(
-                    f"Window '{label}' end frame {end} exceeds movie length "
-                    f"{avg_dff.shape[0]}. Clipping."
+                    f"Skipping window '{label}': start {start} >= total frames {T}"
                 )
-                end = avg_dff.shape[0]
-
-            window_movie = avg_dff[start:end]
-            if window_movie.size == 0:
-                LOGGER.warning(f"Window '{label}' has no frames after clipping")
                 continue
 
-<<<<<<< HEAD
+            if end > T:
+                LOGGER.warning(
+                    f"Window '{label}' end frame {end} exceeds movie length {T}. Clipping."
+                )
+                end = T
+
+            window_movie = dff[start:end]
+            if window_movie.size == 0:
+                LOGGER.warning(
+                    f"Window '{label}' has no frames after clipping (start={start}, end={end})"
+                )
+                continue
+
+            # Average in time after rotating to match your original script
             avg_img = np.mean(
                 np.rot90(window_movie, k=-1, axes=(1, 2)),
                 axis=0,
-=======
-            output_dir = (
-                base_analyzed
-                / dataset_id
-                / session_id
-                / protocol_name
-                / f"{out_label}_{trial_start}_to_{trial_end}"
->>>>>>> cf75083840ddca7f1f24f6ab8bbebeab066d5ed9
             )
 
-            win_label_safe = label.replace("-", "_")
-            np.save(output_dir / f"average_{win_label_safe}.npy", avg_img)
+            safe_label = label.replace("-", "_")
 
+            # Save numpy average image
+            np.save(output_dir / f"{trial_name}_average_{safe_label}.npy", avg_img)
+
+            # Plot & save as images
             fig, ax = plt.subplots()
             im = ax.imshow(avg_img, cmap=cmap, vmin=vmin_eff, vmax=vmax_eff)
-            ax.set_title(f"Average: {label}")
+            ax.set_title(f"{trial_name} | {label}")
             ax.axis("on")
             plt.colorbar(im, ax=ax, label="dF/F")
 
             fig.savefig(
-                output_dir / f"average_image_set_range_{win_label_safe}.svg",
+                output_dir / f"{trial_name}_average_{safe_label}.svg",
                 format="svg",
             )
             fig.savefig(
-                output_dir / f"average_image_set_range_{win_label_safe}.png",
+                output_dir / f"{trial_name}_average_{safe_label}.png",
                 format="png",
             )
             plt.close(fig)
 
             LOGGER.info(
-                f"Saved across-trial average image for window '{label}' "
-                f"({version_name}) to {output_dir}"
+                f"Saved average image for window '{label}' "
+                f"to {output_dir} (files prefix: {trial_name}_average_{safe_label})"
             )
 
-<<<<<<< HEAD
-        LOGGER.info("DFF window processing (multi-trial) completed.")
-    
-=======
-        LOGGER.info("All DFF window processing completed.")
+        LOGGER.info("DFF window processing (single trial) completed.")
 
->>>>>>> cf75083840ddca7f1f24f6ab8bbebeab066d5ed9
+
     def close(self) -> None:
         """Clean up resources."""
         self.imaging_data = None
