@@ -22,8 +22,8 @@ try:
     import matplotlib.pyplot as plt
     import numpy as np
     import pandas as pd
-    from skimage import io as skio
     from matplotlib.colors import LinearSegmentedColormap
+    from skimage import io as skio
 
     from poulet_py import LOGGER
 except ImportError as e:
@@ -1305,7 +1305,10 @@ class WidefieldAnalysis:
         return trace
 
     def process_dff_windows(
+<<<<<<< HEAD
         self,
+=======
+>>>>>>> cf75083840ddca7f1f24f6ab8bbebeab066d5ed9
         dataset_id: str,
         session_id: str,
         protocol_name: str,
@@ -1316,6 +1319,10 @@ class WidefieldAnalysis:
         fps: float = 20.0,
         base_processed: Path | str = Path("data/processed"),
         base_analyzed: Path | str = Path("data/analyzed"),
+<<<<<<< HEAD
+=======
+        versions: list[tuple[str, str, str]] | None = None,
+>>>>>>> cf75083840ddca7f1f24f6ab8bbebeab066d5ed9
         vmin: float | None = None,
         vmax: float | None = None,
         colors: list[str] | None = None,
@@ -1396,9 +1403,13 @@ class WidefieldAnalysis:
         else:
             # Trial range
             all_trials = sorted(
+<<<<<<< HEAD
                 p
                 for p in trial_base.iterdir()
                 if p.is_dir() and trial_start <= p.name <= trial_end
+=======
+                p for p in trial_base.iterdir() if p.is_dir() and trial_start <= p.name <= trial_end
+>>>>>>> cf75083840ddca7f1f24f6ab8bbebeab066d5ed9
             )
             LOGGER.info(
                 f"Multi-trial mode: trials in range [{trial_start}, {trial_end}] "
@@ -1412,10 +1423,19 @@ class WidefieldAnalysis:
             )
             return
 
+<<<<<<< HEAD
         LOGGER.info(f"Processing DFF version: {version_name} ({dff_file})")
 
         dff_arrays: list[np.ndarray] = []
         valid_trial_paths: list[Path] = []
+=======
+        # ----------------------------------------------------------
+        # MAIN LOOP OVER VERSION DEFINITIONS
+        # ----------------------------------------------------------
+        for version_name, dff_file, out_label in versions:
+            dff_arrays = []
+            valid_trial_paths = []
+>>>>>>> cf75083840ddca7f1f24f6ab8bbebeab066d5ed9
 
         # --- Load DFF movies ---
         for trial_path in all_trials:
@@ -1508,6 +1528,7 @@ class WidefieldAnalysis:
                     )
                     continue
 
+<<<<<<< HEAD
                 avg_img = np.mean(
                     np.rot90(window_movie, k=-1, axes=(1, 2)),
                     axis=0,
@@ -1526,6 +1547,17 @@ class WidefieldAnalysis:
                     output_dir
                     / f"{trial_name}_average_image_set_range_{win_label_safe}.svg",
                     format="svg",
+=======
+            # ----------------------------------------------------------
+            # SINGLE TRIAL MODE
+            # ----------------------------------------------------------
+            if trial_end is None:
+                dff = dff_arrays[0]
+                trial_name = valid_trial_paths[0].name
+
+                output_dir = (
+                    base_analyzed / dataset_id / session_id / protocol_name / out_label / trial_name
+>>>>>>> cf75083840ddca7f1f24f6ab8bbebeab066d5ed9
                 )
                 fig.savefig(
                     output_dir
@@ -1539,6 +1571,7 @@ class WidefieldAnalysis:
                     f"in trial '{trial_name}' ({version_name}) to {output_dir}"
                 )
 
+<<<<<<< HEAD
             LOGGER.info("DFF window processing (single trial) completed.")
             return  # done in single-trial mode
 
@@ -1550,6 +1583,13 @@ class WidefieldAnalysis:
         except Exception:
             LOGGER.exception("Error stacking DFF arrays")
             return
+=======
+                # Window loop
+                for label, (start, end) in windows.items():
+                    end = min(end, dff.shape[0])
+                    window_movie = dff[start:end]
+                    avg_img = np.mean(np.rot90(window_movie, -1, (1, 2)), axis=0)
+>>>>>>> cf75083840ddca7f1f24f6ab8bbebeab066d5ed9
 
         # Use np.average for across-trial averaging
         avg_dff = np.average(dff_stack, axis=0)  # (T, H, W)
@@ -1602,9 +1642,18 @@ class WidefieldAnalysis:
                 LOGGER.warning(f"Window '{label}' has no frames after clipping")
                 continue
 
+<<<<<<< HEAD
             avg_img = np.mean(
                 np.rot90(window_movie, k=-1, axes=(1, 2)),
                 axis=0,
+=======
+            output_dir = (
+                base_analyzed
+                / dataset_id
+                / session_id
+                / protocol_name
+                / f"{out_label}_{trial_start}_to_{trial_end}"
+>>>>>>> cf75083840ddca7f1f24f6ab8bbebeab066d5ed9
             )
 
             win_label_safe = label.replace("-", "_")
@@ -1631,8 +1680,13 @@ class WidefieldAnalysis:
                 f"({version_name}) to {output_dir}"
             )
 
+<<<<<<< HEAD
         LOGGER.info("DFF window processing (multi-trial) completed.")
     
+=======
+        LOGGER.info("All DFF window processing completed.")
+
+>>>>>>> cf75083840ddca7f1f24f6ab8bbebeab066d5ed9
     def close(self) -> None:
         """Clean up resources."""
         self.imaging_data = None
