@@ -64,7 +64,7 @@ def _upsampled_dft(
     imaginary_2pi = 1j * 2 * np.pi
 
     dimension_properties = list(
-        zip(frequency_domain_data.shape, upsampled_region_size, axis_offsets)
+        zip(frequency_domain_data.shape, upsampled_region_size, axis_offsets, strict=False)
     )
 
     for n_items, ups_size, ax_offset in dimension_properties[::-1]:

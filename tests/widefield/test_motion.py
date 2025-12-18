@@ -108,9 +108,7 @@ class TestEstimateImageShift:
 
     def test_no_shift(self, simple_image: np.ndarray):
         """Test that identical images have zero shift."""
-        shifts, error, _phase = estimate_image_shift(
-            simple_image, simple_image, upsample_factor=1
-        )
+        shifts, error, _phase = estimate_image_shift(simple_image, simple_image, upsample_factor=1)
         assert np.allclose(shifts, [0, 0], atol=0.1)
         assert error < 0.01
 
@@ -119,9 +117,7 @@ class TestEstimateImageShift:
         shifted = np.roll(simple_image, 5, axis=0)
         shifted = np.roll(shifted, -3, axis=1)
 
-        shifts, _error, _phase = estimate_image_shift(
-            simple_image, shifted, upsample_factor=1
-        )
+        shifts, _error, _phase = estimate_image_shift(simple_image, shifted, upsample_factor=1)
         # Note: shifts indicate how to move target to match reference
         assert shifts[0] == pytest.approx(-5, abs=1)
         assert shifts[1] == pytest.approx(3, abs=1)
@@ -129,9 +125,7 @@ class TestEstimateImageShift:
     def test_subpixel_shift(self, simple_image: np.ndarray):
         """Test subpixel shift detection with upsampling."""
         shifted = shift(simple_image, [2.5, -1.5], mode="wrap")
-        shifts, _error, _phase = estimate_image_shift(
-            simple_image, shifted, upsample_factor=20
-        )
+        shifts, _error, _phase = estimate_image_shift(simple_image, shifted, upsample_factor=20)
         assert shifts[0] == pytest.approx(-2.5, abs=0.1)
         assert shifts[1] == pytest.approx(1.5, abs=0.1)
 
@@ -151,9 +145,7 @@ class TestEstimateImageShift:
         ref_freq = fftn(simple_image)
         target_freq = fftn(np.roll(simple_image, 3, axis=0))
 
-        shifts = estimate_image_shift(
-            ref_freq, target_freq, space="fourier", return_error=False
-        )
+        shifts = estimate_image_shift(ref_freq, target_freq, space="fourier", return_error=False)
         assert shifts[0] == pytest.approx(-3, abs=1)
 
 
@@ -297,4 +289,3 @@ class TestMotionCorrectionReducesVariance:
 
         # Allow some tolerance since synthetic data may not always show improvement
         assert mean_var_corrected <= mean_var_raw * 1.1  # At worst, slightly worse
-

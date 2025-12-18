@@ -904,7 +904,9 @@ class WidefieldAnalysis:
             n_parallel_workers=n_parallel_workers,
             reference_image=reference_image,
         )
-        LOGGER.info(f"Motion estimation complete. Max shift: {np.abs(self.motion_vectors).max():.2f} px")
+        LOGGER.info(
+            f"Motion estimation complete. Max shift: {np.abs(self.motion_vectors).max():.2f} px"
+        )
         return self.motion_vectors
 
     def apply_motion_correction(
@@ -995,7 +997,9 @@ class WidefieldAnalysis:
             ValueError: If no motion correction data is available.
         """
         if self.motion_corrected_data is None and save_corrected_movie:
-            LOGGER.warning("No motion-corrected data available. Run apply_motion_correction() first.")
+            LOGGER.warning(
+                "No motion-corrected data available. Run apply_motion_correction() first."
+            )
 
         if self.motion_vectors is None and save_vectors:
             LOGGER.warning("No motion vectors available. Run estimate_motion_vectors() first.")
