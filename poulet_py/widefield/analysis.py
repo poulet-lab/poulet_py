@@ -22,8 +22,8 @@ try:
     import matplotlib.pyplot as plt
     import numpy as np
     import pandas as pd
-    from skimage import io as skio
     from matplotlib.colors import LinearSegmentedColormap
+    from skimage import io as skio
 
     from poulet_py import LOGGER
 except ImportError as e:
@@ -1305,21 +1305,21 @@ class WidefieldAnalysis:
         return trace
 
     def process_dff_windows(
-    dataset_id: str,
-    session_id: str,
-    protocol_name: str,
-    trial_start: str,
-    windows: dict[str, tuple[int, int]],
-    *,
-    trial_end: str | None = None,
-    fps: float = 20.0,
-    base_processed: Path | str = Path("data/processed"),
-    base_analyzed: Path | str = Path("data/analyzed"),
-    versions: list[tuple[str, str, str]] | None = None,
-    vmin: float | None = None,
-    vmax: float | None = None,
-    colors: list[str] | None = None,
-) -> None:
+        dataset_id: str,
+        session_id: str,
+        protocol_name: str,
+        trial_start: str,
+        windows: dict[str, tuple[int, int]],
+        *,
+        trial_end: str | None = None,
+        fps: float = 20.0,
+        base_processed: Path | str = Path("data/processed"),
+        base_analyzed: Path | str = Path("data/analyzed"),
+        versions: list[tuple[str, str, str]] | None = None,
+        vmin: float | None = None,
+        vmax: float | None = None,
+        colors: list[str] | None = None,
+    ) -> None:
         """
         Process DFF movies over time windows and save average images.
 
@@ -1415,8 +1415,7 @@ class WidefieldAnalysis:
         else:
             # Trial range
             all_trials = sorted(
-                p for p in trial_base.iterdir()
-                if p.is_dir() and trial_start <= p.name <= trial_end
+                p for p in trial_base.iterdir() if p.is_dir() and trial_start <= p.name <= trial_end
             )
             LOGGER.info(f"Multi-trial mode: trials {trial_start} → {trial_end}")
 
@@ -1428,7 +1427,6 @@ class WidefieldAnalysis:
         # MAIN LOOP OVER VERSION DEFINITIONS
         # ----------------------------------------------------------
         for version_name, dff_file, out_label in versions:
-
             dff_arrays = []
             valid_trial_paths = []
 
@@ -1463,13 +1461,11 @@ class WidefieldAnalysis:
             # SINGLE TRIAL MODE
             # ----------------------------------------------------------
             if trial_end is None:
-
                 dff = dff_arrays[0]
                 trial_name = valid_trial_paths[0].name
 
                 output_dir = (
-                    base_analyzed / dataset_id / session_id / protocol_name /
-                    out_label / trial_name
+                    base_analyzed / dataset_id / session_id / protocol_name / out_label / trial_name
                 )
                 output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1479,7 +1475,6 @@ class WidefieldAnalysis:
 
                 # Window loop
                 for label, (start, end) in windows.items():
-
                     end = min(end, dff.shape[0])
                     window_movie = dff[start:end]
                     avg_img = np.mean(np.rot90(window_movie, -1, (1, 2)), axis=0)
@@ -1514,8 +1509,11 @@ class WidefieldAnalysis:
             vmax_eff = float(avg_dff.max()) if vmax is None else vmax
 
             output_dir = (
-                base_analyzed / dataset_id / session_id / protocol_name /
-                f"{out_label}_{trial_start}_to_{trial_end}"
+                base_analyzed
+                / dataset_id
+                / session_id
+                / protocol_name
+                / f"{out_label}_{trial_start}_to_{trial_end}"
             )
             output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1540,7 +1538,7 @@ class WidefieldAnalysis:
                 plt.close(fig)
 
         LOGGER.info("All DFF window processing completed.")
-    
+
     def close(self) -> None:
         """Clean up resources."""
         self.imaging_data = None
