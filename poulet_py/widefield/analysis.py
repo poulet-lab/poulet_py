@@ -1344,10 +1344,10 @@ class WidefieldAnalysis:
             LOGGER.error(f"trial_path does not contain enough components: {trial_path}")
             return
 
-        dataset_id    = parts[raw_idx + 1]
-        session_id    = parts[raw_idx + 2]
+        dataset_id = parts[raw_idx + 1]
+        session_id = parts[raw_idx + 2]
         protocol_name = parts[raw_idx + 3]
-        trial_name    = parts[raw_idx + 4]
+        trial_name = parts[raw_idx + 4]
 
         data_root = Path(*parts[:raw_idx])  # root 'data' folder
 
@@ -1355,12 +1355,7 @@ class WidefieldAnalysis:
         # 2. Locate processed trial folder & DFF file
         # -------------------------------------------------------------
         processed_trial_folder = (
-            data_root /
-            "processed" /
-            dataset_id /
-            session_id /
-            protocol_name /
-            trial_name
+            data_root / "processed" / dataset_id / session_id / protocol_name / trial_name
         )
 
         if not processed_trial_folder.exists():
@@ -1420,7 +1415,6 @@ class WidefieldAnalysis:
         # 6. Loop through windows
         # -------------------------------------------------------------
         for label, (start, end) in windows.items():
-
             safe_label = label.replace("-", "_")
 
             if start >= end:
@@ -1442,10 +1436,7 @@ class WidefieldAnalysis:
                 continue
 
             # Temporal average of rotated frames (matching your pipeline)
-            avg_img = np.mean(
-                np.rot90(window_movie, k=-1, axes=(1, 2)),
-                axis=0
-            )
+            avg_img = np.mean(np.rot90(window_movie, k=-1, axes=(1, 2)), axis=0)
 
             # Save .npy
             np.save(output_dir / f"{trial_name}_average_{safe_label}.npy", avg_img)
