@@ -1395,12 +1395,7 @@ class WidefieldAnalysis:
         # Locate processed DFF for this trial
         # ------------------------------------------------------------------
         processed_trial_folder = (
-            data_root
-            / "processed"
-            / dataset_id
-            / session_id
-            / protocol_name
-            / trial_name
+            data_root / "processed" / dataset_id / session_id / protocol_name / trial_name
         )
 
         if not processed_trial_folder.exists():
@@ -1470,9 +1465,7 @@ class WidefieldAnalysis:
                 continue
 
             if start >= T:
-                LOGGER.warning(
-                    f"Skipping window '{label}': start {start} >= total frames {T}"
-                )
+                LOGGER.warning(f"Skipping window '{label}': start {start} >= total frames {T}")
                 continue
 
             if end > T:
