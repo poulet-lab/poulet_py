@@ -1316,90 +1316,55 @@ class WidefieldAnalysis:
         """
         Process DFF movie for THIS trial over time windows and save average images.
 
-        Single-trial only:
-            Infers dataset/session/protocol/trial from self.trial_path, assuming
-            a raw path structure like:
-
-                data/raw/<dataset_id>/<session_id>/<protocol_name>/<trial_name>/
-
-            and looks for the corresponding DFF here:
-
-                data/processed/<dataset_id>/<session_id>/<protocol_name>/<trial_name>/<dff_filename>
-
-        Windows are defined in frame indices:
-            windows = {label: (start_frame, end_frame)}
+        Saves output inside the SAME processed folder for this trial:
+            data/processed/<dataset>/<session>/<protocol>/<trial>/avg_windows/
 
         Args:
-            windows: Dict mapping label -> (start_frame, end_frame) in frames.
-            fps: Frame rate in Hz (used only to define windows upstream; not used internally).
-            dff_filename: Name of the DFF file in the processed folder (default: "dff.npy").
-            vmin: Colormap minimum. If None, computed from this DFF.
-            vmax: Colormap maximum. If None, computed from this DFF.
-            colors: Optional list of color strings to build a custom colormap.
-                    If None, uses matplotlib's built-in "inferno".
-
-        Example
-        -------
-        >>> fps = 20
-        >>> windows = {
-        ...     "5-6s": (5 * fps, 6 * fps),
-        ...     "6-7s": (6 * fps, 7 * fps),
-        ... }
-        >>> wf = WidefieldAnalysis(
-        ...     Path("data/raw/JPCM-07991/250818_leica/22_42_interleaved/250818_160439")
-        ... )
-        >>> wf.process_dff_windows(
-        ...     windows=windows,
-        ...     fps=fps,
-        ... )
+            windows: Dict mapping label -> (start_frame, end_frame).
+            fps: Frame rate in Hz (used only to define the windows upstream).
+            dff_filename: DFF filename (default: "dff.npy").
+            vmin: Colormap minimum. If None → computed from data.
+            vmax: Colormap maximum. If None → computed from data.
+            colors: Custom colormap colors. If None → use inferno.
         """
-        # ------------------------------------------------------------------
-        # Infer dataset/session/protocol/trial from self.trial_path
-        # ------------------------------------------------------------------
+
+        # -------------------------------------------------------------
+        # 1. Infer dataset/session/protocol/trial_name from trial_path
+        # -------------------------------------------------------------
         trial_path = Path(self.trial_path).resolve()
         parts = trial_path.parts
 
-        # Expect something like: (..., "data", "raw", dataset_id, session_id, protocol_name, trial_name)
         try:
             raw_idx = parts.index("raw")
         except ValueError:
             LOGGER.error(f"'raw' not found in trial_path: {trial_path}")
             return
 
-        # We need at least: raw / dataset / session / protocol / trial
         if len(parts) < raw_idx + 5:
-            LOGGER.error(
-                "trial_path structure too short to infer dataset/session/protocol/trial: "
-                f"{trial_path}"
-            )
+            LOGGER.error(f"trial_path does not contain enough components: {trial_path}")
             return
 
-        dataset_id = parts[raw_idx + 1]
-        session_id = parts[raw_idx + 2]
+        dataset_id    = parts[raw_idx + 1]
+        session_id    = parts[raw_idx + 2]
         protocol_name = parts[raw_idx + 3]
-        trial_name = parts[raw_idx + 4]
+        trial_name    = parts[raw_idx + 4]
 
-        # data_root is the parent of 'raw'
-        data_root = Path(*parts[:raw_idx])  # e.g. 'data'
+        data_root = Path(*parts[:raw_idx])  # root 'data' folder
 
-        LOGGER.info(
-            f"Inferred dataset/session/protocol/trial from trial_path:\n"
-            f"  data_root     = {data_root}\n"
-            f"  dataset_id    = {dataset_id}\n"
-            f"  session_id    = {session_id}\n"
-            f"  protocol_name = {protocol_name}\n"
-            f"  trial_name    = {trial_name}"
-        )
-
-        # ------------------------------------------------------------------
-        # Locate processed DFF for this trial
-        # ------------------------------------------------------------------
+        # -------------------------------------------------------------
+        # 2. Locate processed trial folder & DFF file
+        # -------------------------------------------------------------
         processed_trial_folder = (
-            data_root / "processed" / dataset_id / session_id / protocol_name / trial_name
+            data_root /
+            "processed" /
+            dataset_id /
+            session_id /
+            protocol_name /
+            trial_name
         )
 
         if not processed_trial_folder.exists():
-            LOGGER.error(f"Processed trial folder does not exist: {processed_trial_folder}")
+            LOGGER.error(f"Processed trial folder not found: {processed_trial_folder}")
             return
 
         dff_path = processed_trial_folder / dff_filename
@@ -1407,7 +1372,8 @@ class WidefieldAnalysis:
             LOGGER.error(f"DFF file not found: {dff_path}")
             return
 
-        LOGGER.info(f"Loading DFF from: {dff_path}")
+        LOGGER.info(f"Loading DFF from {dff_path}")
+
         try:
             dff = np.load(dff_path)
         except Exception:
@@ -1415,23 +1381,23 @@ class WidefieldAnalysis:
             return
 
         if dff.ndim != 3:
-            LOGGER.error(f"Expected 3D DFF array (T, H, W), got {dff.shape} in {dff_path}")
+            LOGGER.error(f"DFF must be 3D (T,H,W); got {dff.shape}")
             return
 
         T, H, W = dff.shape
-        LOGGER.info(f"DFF shape: T={T}, H={H}, W={W}")
+        LOGGER.info(f"Loaded DFF: T={T}, H={H}, W={W}")
 
-        # ------------------------------------------------------------------
-        # Colormap selection
-        # ------------------------------------------------------------------
+        # -------------------------------------------------------------
+        # 3. Colormap
+        # -------------------------------------------------------------
         if colors is None:
             cmap = plt.get_cmap("inferno")
         else:
             cmap = LinearSegmentedColormap.from_list("custom_cmap", colors)
 
-        # ------------------------------------------------------------------
-        # Determine vmin / vmax if not provided
-        # ------------------------------------------------------------------
+        # -------------------------------------------------------------
+        # 4. Compute vmin/vmax if needed
+        # -------------------------------------------------------------
         data_min = float(dff.min())
         data_max = float(dff.max())
         vmin_eff = data_min if vmin is None else vmin
@@ -1439,86 +1405,65 @@ class WidefieldAnalysis:
 
         LOGGER.info(
             f"Color scaling: vmin={vmin_eff:.4f}, vmax={vmax_eff:.4f} "
-            f"(data range: [{data_min:.4f}, {data_max:.4f}])"
+            f"(DFF range: {data_min:.4f}–{data_max:.4f})"
         )
 
-        # ------------------------------------------------------------------
-        # Output directory for window averages (data/analyzed/...)
-        # ------------------------------------------------------------------
-        analyzed_trial_folder = (
-            data_root
-            / "analyzed"
-            / dataset_id
-            / session_id
-            / protocol_name
-            / f"avg_windows_{trial_name}"
-        )
-        analyzed_trial_folder.mkdir(parents=True, exist_ok=True)
-        LOGGER.info(f"Saving window averages to: {analyzed_trial_folder}")
+        # -------------------------------------------------------------
+        # 5. Create output folder IN THE SAME PROCESSED TRIAL FOLDER
+        # -------------------------------------------------------------
+        output_dir = processed_trial_folder / "avg_windows"
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-        # ------------------------------------------------------------------
-        # Loop over windows
-        # ------------------------------------------------------------------
+        LOGGER.info(f"Saving output in: {output_dir}")
+
+        # -------------------------------------------------------------
+        # 6. Loop through windows
+        # -------------------------------------------------------------
         for label, (start, end) in windows.items():
-            if start >= end:
-                LOGGER.warning(f"Skipping window '{label}': invalid range ({start}, {end})")
-                continue
-
-            if start >= T:
-                LOGGER.warning(f"Skipping window '{label}': start {start} >= total frames {T}")
-                continue
-
-            if end > T:
-                LOGGER.warning(
-                    f"Window '{label}' end frame {end} exceeds movie length {T}. Clipping."
-                )
-                end = T
-
-            window_movie = dff[start:end]
-            if window_movie.size == 0:
-                LOGGER.warning(
-                    f"Window '{label}' has no frames after clipping (start={start}, end={end})"
-                )
-                continue
-
-            # Average in time after rotating to match your original script
-            avg_img = np.mean(
-                np.rot90(window_movie, k=-1, axes=(1, 2)),
-                axis=0,
-            )
 
             safe_label = label.replace("-", "_")
 
-            # Save numpy average image
-            np.save(
-                analyzed_trial_folder / f"{trial_name}_average_{safe_label}.npy",
-                avg_img,
+            if start >= end:
+                LOGGER.warning(f"Skipping '{label}': invalid window {start}–{end}")
+                continue
+
+            if start >= T:
+                LOGGER.warning(f"Skipping '{label}': start {start} >= total frames {T}")
+                continue
+
+            if end > T:
+                LOGGER.warning(f"Clipping '{label}' end frame {end} → {T}")
+                end = T
+
+            window_movie = dff[start:end]
+
+            if window_movie.size == 0:
+                LOGGER.warning(f"Window '{label}' contains no frames after clipping")
+                continue
+
+            # Temporal average of rotated frames (matching your pipeline)
+            avg_img = np.mean(
+                np.rot90(window_movie, k=-1, axes=(1, 2)),
+                axis=0
             )
 
-            # Plot & save as images
+            # Save .npy
+            np.save(output_dir / f"{trial_name}_average_{safe_label}.npy", avg_img)
+
+            # Save .png/.svg
             fig, ax = plt.subplots()
             im = ax.imshow(avg_img, cmap=cmap, vmin=vmin_eff, vmax=vmax_eff)
+            plt.colorbar(im, ax=ax, label="dF/F")
             ax.set_title(f"{trial_name} | {label}")
             ax.axis("on")
-            plt.colorbar(im, ax=ax, label="dF/F")
 
-            fig.savefig(
-                analyzed_trial_folder / f"{trial_name}_average_{safe_label}.svg",
-                format="svg",
-            )
-            fig.savefig(
-                analyzed_trial_folder / f"{trial_name}_average_{safe_label}.png",
-                format="png",
-            )
+            fig.savefig(output_dir / f"{trial_name}_average_{safe_label}.svg")
+            fig.savefig(output_dir / f"{trial_name}_average_{safe_label}.png")
             plt.close(fig)
 
-            LOGGER.info(
-                f"Saved average image for window '{label}' "
-                f"to {analyzed_trial_folder} "
-                f"(files prefix: {trial_name}_average_{safe_label})"
-            )
+            LOGGER.info(f"Saved window '{label}' → {output_dir}")
 
-        LOGGER.info("DFF window processing (single trial) completed.")
+        LOGGER.info("Finished computing window averages for this trial.")
 
     def close(self) -> None:
         """Clean up resources."""
