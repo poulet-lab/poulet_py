@@ -24,6 +24,7 @@ try:
     from . import io as wf_io
     from . import masks as wf_masks
     from . import metrics as wf_metrics
+    from . import motion as wf_motion
     from . import movie as wf_movie
     from . import paths as wf_paths
     from . import plotting as wf_plotting
@@ -81,6 +82,10 @@ class WidefieldAnalysis:
         self.file_attrs: dict[str, Any] = {}
         self.condition: dict[str, Any] | None = None
         self.roi: dict[str, Any] | None = None
+
+        self.motion_vectors: np.ndarray | None = None
+        self.motion_reference_image: np.ndarray | None = None
+        self.motion_corrected_data: np.ndarray | None = None
 
         self._validate()
 
@@ -856,15 +861,293 @@ class WidefieldAnalysis:
             peak_threshold=peak_threshold,
         )
 
+    # -------------------------------------------------------------------------
+    # Motion Correction Methods
+    # -------------------------------------------------------------------------
+
+    def estimate_motion_vectors(
+        self,
+        motion_region: tuple | None = None,
+        n_parallel_workers: int | None = 4,
+        reference_image: np.ndarray | None = None,
+    ) -> np.ndarray | None:
+        """
+        Estimate motion vectors for each frame in the imaging data.
+
+        Calculates the shift required to align each frame to a reference image.
+        The reference image is created from the 30 most similar frames if not provided.
+
+        Args:
+            motion_region: Region of interest for motion calculation as
+                ((row_start, col_start), (row_end, col_end)).
+                If None, uses the entire image.
+            n_parallel_workers: Number of parallel workers for processing.
+                If None, runs sequentially.
+            reference_image: Reference image to align frames to.
+                If None, will be calculated from the 30 most similar frames.
+
+        Returns:
+            Motion vectors array of shape (n_frames, 2) with [row_shift, col_shift]
+            per frame, or None if imaging_data is not loaded.
+
+        Note:
+            Results are stored in self.motion_vectors and self.motion_reference_image.
+        """
+        if self.imaging_data is None:
+            LOGGER.error("No imaging data loaded. Call load_imaging_data() first.")
+            return None
+
+        LOGGER.info("Estimating motion vectors...")
+        self.motion_vectors, self.motion_reference_image = wf_motion.estimate_motion_vectors(
+            movie=self.imaging_data,
+            motion_region=motion_region,
+            n_parallel_workers=n_parallel_workers,
+            reference_image=reference_image,
+        )
+        LOGGER.info(f"Motion estimation complete. Max shift: {np.abs(self.motion_vectors).max():.2f} px")
+        return self.motion_vectors
+
+    def apply_motion_correction(
+        self,
+        motion_region: tuple | None = None,
+        motion_vectors: np.ndarray | None = None,
+        shift_method: str = "integer",
+        n_parallel_workers: int | None = 4,
+        reference_image: np.ndarray | None = None,
+    ) -> np.ndarray | None:
+        """
+        Apply motion correction to the imaging data.
+
+        Aligns each frame to a reference image using estimated motion vectors.
+        If motion vectors are not provided, they will be calculated first.
+
+        Args:
+            motion_region: Region of interest for motion calculation.
+                Only used if motion_vectors is None.
+            motion_vectors: Pre-computed motion vectors of shape (n_frames, 2).
+                If None, uses self.motion_vectors or calculates them.
+            shift_method: Method for applying shifts:
+                - "integer": Uses np.roll (faster, integer pixel shifts)
+                - "fourier": Uses fourier_shift (slower, subpixel precision)
+            n_parallel_workers: Number of parallel workers for motion estimation.
+                Only used if motion_vectors is None.
+            reference_image: Reference image to align frames to.
+                Only used if motion_vectors is None.
+
+        Returns:
+            Motion-corrected movie array, or None if imaging_data is not loaded.
+
+        Note:
+            Results are stored in self.motion_corrected_data, self.motion_vectors,
+            and self.motion_reference_image.
+        """
+        if self.imaging_data is None:
+            LOGGER.error("No imaging data loaded. Call load_imaging_data() first.")
+            return None
+
+        if motion_vectors is None and self.motion_vectors is not None:
+            motion_vectors = self.motion_vectors
+            LOGGER.info("Using previously estimated motion vectors")
+
+        if reference_image is None and self.motion_reference_image is not None:
+            reference_image = self.motion_reference_image
+
+        LOGGER.info(f"Applying motion correction (method: {shift_method})...")
+        (
+            self.motion_corrected_data,
+            self.motion_vectors,
+            self.motion_reference_image,
+        ) = wf_motion.apply_motion_correction(
+            movie=self.imaging_data,
+            motion_region=motion_region,
+            motion_vectors=motion_vectors,
+            shift_method=shift_method,
+            n_parallel_workers=n_parallel_workers,
+            reference_image=reference_image,
+        )
+        LOGGER.info("Motion correction complete")
+        return self.motion_corrected_data
+
+    def save_motion_correction(
+        self,
+        output_dir: Path | None = None,
+        save_corrected_movie: bool = True,
+        save_vectors: bool = True,
+        save_reference: bool = True,
+        save_metadata: bool = True,
+        shift_method: str = "integer",
+    ) -> dict[str, Path]:
+        """
+        Save motion correction results to disk.
+
+        Args:
+            output_dir: Directory to save files. If None, uses trial_path / "motion_correction".
+            save_corrected_movie: Whether to save the corrected movie (.npy).
+            save_vectors: Whether to save motion vectors (.npy).
+            save_reference: Whether to save reference image (.tiff).
+            save_metadata: Whether to save metadata (.txt).
+            shift_method: Shift method used (for metadata).
+
+        Returns:
+            Dictionary mapping file types to saved paths.
+
+        Raises:
+            ValueError: If no motion correction data is available.
+        """
+        if self.motion_corrected_data is None and save_corrected_movie:
+            LOGGER.warning("No motion-corrected data available. Run apply_motion_correction() first.")
+
+        if self.motion_vectors is None and save_vectors:
+            LOGGER.warning("No motion vectors available. Run estimate_motion_vectors() first.")
+
+        if output_dir is None:
+            output_dir = self.trial_path / "motion_correction"
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        saved_paths: dict[str, Path] = {}
+
+        if save_corrected_movie and self.motion_corrected_data is not None:
+            path = wf_motion.save_corrected_recording(
+                self.motion_corrected_data,
+                output_dir / "corrected_movie.npy",
+            )
+            saved_paths["corrected_movie"] = path
+            LOGGER.info(f"Saved corrected movie: {path}")
+
+        if save_vectors and self.motion_vectors is not None:
+            path = wf_motion.save_motion_vectors(
+                self.motion_vectors,
+                output_dir / "motion_vectors.npy",
+            )
+            saved_paths["motion_vectors"] = path
+            LOGGER.info(f"Saved motion vectors: {path}")
+
+            path = wf_motion.save_motion_analysis(
+                self.motion_vectors,
+                output_dir / "motion_analysis.npz",
+            )
+            saved_paths["motion_analysis"] = path
+            LOGGER.info(f"Saved motion analysis: {path}")
+
+        if save_reference and self.motion_reference_image is not None:
+            path = wf_motion.save_reference_image(
+                self.motion_reference_image,
+                output_dir / "reference_image.tiff",
+            )
+            saved_paths["reference_image"] = path
+            LOGGER.info(f"Saved reference image: {path}")
+
+        if save_metadata and self.imaging_data is not None:
+            n_frames, height, width = self.imaging_data.shape
+            path = wf_motion.save_motion_correction_metadata(
+                output_path=output_dir / "motion_correction_metadata.txt",
+                shift_method=shift_method,
+                n_frames=n_frames,
+                image_shape=(height, width),
+                raw_trial_path=self.trial_path,
+            )
+            saved_paths["metadata"] = path
+            LOGGER.info(f"Saved metadata: {path}")
+
+        return saved_paths
+
+    def load_motion_vectors(self, motion_vectors_path: Path | None = None) -> np.ndarray | None:
+        """
+        Load previously saved motion vectors.
+
+        Args:
+            motion_vectors_path: Path to motion_vectors.npy file.
+                If None, looks in trial_path / "motion_correction" / "motion_vectors.npy".
+
+        Returns:
+            Motion vectors array, or None if file not found.
+        """
+        if motion_vectors_path is None:
+            motion_vectors_path = self.trial_path / "motion_correction" / "motion_vectors.npy"
+
+        self.motion_vectors = wf_motion.load_motion_vectors(motion_vectors_path)
+        if self.motion_vectors is not None:
+            LOGGER.info(f"Loaded motion vectors from: {motion_vectors_path}")
+        else:
+            LOGGER.warning(f"Motion vectors file not found: {motion_vectors_path}")
+        return self.motion_vectors
+
+    def plot_motion_correction(
+        self,
+        output_dir: Path | None = None,
+        plot_motion_over_time: bool = True,
+        plot_stability_maps: bool = True,
+        create_comparison_movie: bool = False,
+        movie_fps: float = 10.0,
+    ) -> None:
+        """
+        Generate motion correction diagnostic plots.
+
+        Args:
+            output_dir: Directory to save plots. If None, uses trial_path / "motion_correction".
+            plot_motion_over_time: Plot motion trajectory over time.
+            plot_stability_maps: Plot mean/std maps before and after correction.
+            create_comparison_movie: Create side-by-side comparison video.
+            movie_fps: Frame rate for comparison movie.
+
+        Note:
+            Requires both raw imaging_data and motion_corrected_data to be available.
+        """
+        if self.imaging_data is None:
+            LOGGER.error("No imaging data loaded")
+            return
+
+        if self.motion_corrected_data is None:
+            LOGGER.error("No motion-corrected data. Run apply_motion_correction() first.")
+            return
+
+        if output_dir is None:
+            output_dir = self.trial_path / "motion_correction"
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        if plot_motion_over_time:
+            if self.motion_vectors is None or self.motion_reference_image is None:
+                LOGGER.warning("Missing motion_vectors or reference_image for motion plot")
+            else:
+                LOGGER.info("Plotting motion over time...")
+                wf_motion.plot_motion_over_time(
+                    motion_vectors_raw=self.motion_vectors,
+                    movie_corrected=self.motion_corrected_data,
+                    reference_image=self.motion_reference_image,
+                    output_path=output_dir,
+                )
+
+        if plot_stability_maps:
+            LOGGER.info("Plotting stability maps...")
+            wf_motion.plot_stability_maps(
+                movie_raw=self.imaging_data,
+                movie_corrected=self.motion_corrected_data,
+                output_path=output_dir,
+            )
+
+        if create_comparison_movie:
+            LOGGER.info("Creating comparison movie...")
+            wf_motion.create_comparison_movie(
+                movie_raw=self.imaging_data,
+                movie_corrected=self.motion_corrected_data,
+                output_file=output_dir / "comparison_movie.mp4",
+                frames_per_second=movie_fps,
+            )
+
     def close(self) -> None:
         """
         Release resources and clear loaded data.
 
-        Sets imaging_data, green_reference, timestamps, and
-        sensor_data to None/empty to free memory.
+        Sets imaging_data, green_reference, timestamps, sensor_data,
+        and motion correction data to None/empty to free memory.
         """
         self.imaging_data = None
         self.green_reference = None
         self.timestamps = None
         self.sensor_data = {}
+        self.motion_vectors = None
+        self.motion_reference_image = None
+        self.motion_corrected_data = None
         LOGGER.debug("Resources cleaned up")
