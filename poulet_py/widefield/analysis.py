@@ -1317,17 +1317,21 @@ class WidefieldAnalysis:
         Process DFF movie for THIS trial over time windows and save average images.
 
         Single-trial only:
-            Uses the processed folder corresponding to this WidefieldAnalysis.trial_path
-            (via _get_processed_folder) and expects a DFF file named `dff_filename`
-            (default: "dff.npy") inside that folder.
+            Infers dataset/session/protocol/trial from self.trial_path, assuming
+            a raw path structure like:
+
+                data/raw/<dataset_id>/<session_id>/<protocol_name>/<trial_name>/
+
+            and looks for the corresponding DFF here:
+
+                data/processed/<dataset_id>/<session_id>/<protocol_name>/<trial_name>/<dff_filename>
 
         Windows are defined in frame indices:
             windows = {label: (start_frame, end_frame)}
 
         Args:
             windows: Dict mapping label -> (start_frame, end_frame) in frames.
-            fps: Frame rate in Hz (used only to define windows upstream; not needed here
-                 except for your own bookkeeping).
+            fps: Frame rate in Hz (used only to define windows upstream; not used internally).
             dff_filename: Name of the DFF file in the processed folder (default: "dff.npy").
             vmin: Colormap minimum. If None, computed from this DFF.
             vmax: Colormap maximum. If None, computed from this DFF.
@@ -1349,13 +1353,61 @@ class WidefieldAnalysis:
         ...     fps=fps,
         ... )
         """
-        # --- Locate processed folder for this trial ---
-        processed_folder = self._get_processed_folder()
-        if processed_folder is None:
-            LOGGER.error("Could not determine processed folder for this trial")
+        # ------------------------------------------------------------------
+        # Infer dataset/session/protocol/trial from self.trial_path
+        # ------------------------------------------------------------------
+        trial_path = Path(self.trial_path).resolve()
+        parts = trial_path.parts
+
+        # Expect something like: (..., "data", "raw", dataset_id, session_id, protocol_name, trial_name)
+        try:
+            raw_idx = parts.index("raw")
+        except ValueError:
+            LOGGER.error(f"'raw' not found in trial_path: {trial_path}")
             return
 
-        dff_path = processed_folder / dff_filename
+        # We need at least: raw / dataset / session / protocol / trial
+        if len(parts) < raw_idx + 5:
+            LOGGER.error(
+                "trial_path structure too short to infer dataset/session/protocol/trial: "
+                f"{trial_path}"
+            )
+            return
+
+        dataset_id = parts[raw_idx + 1]
+        session_id = parts[raw_idx + 2]
+        protocol_name = parts[raw_idx + 3]
+        trial_name = parts[raw_idx + 4]
+
+        # data_root is the parent of 'raw'
+        data_root = Path(*parts[:raw_idx])  # e.g. 'data'
+
+        LOGGER.info(
+            f"Inferred dataset/session/protocol/trial from trial_path:\n"
+            f"  data_root     = {data_root}\n"
+            f"  dataset_id    = {dataset_id}\n"
+            f"  session_id    = {session_id}\n"
+            f"  protocol_name = {protocol_name}\n"
+            f"  trial_name    = {trial_name}"
+        )
+
+        # ------------------------------------------------------------------
+        # Locate processed DFF for this trial
+        # ------------------------------------------------------------------
+        processed_trial_folder = (
+            data_root
+            / "processed"
+            / dataset_id
+            / session_id
+            / protocol_name
+            / trial_name
+        )
+
+        if not processed_trial_folder.exists():
+            LOGGER.error(f"Processed trial folder does not exist: {processed_trial_folder}")
+            return
+
+        dff_path = processed_trial_folder / dff_filename
         if not dff_path.exists():
             LOGGER.error(f"DFF file not found: {dff_path}")
             return
@@ -1374,13 +1426,17 @@ class WidefieldAnalysis:
         T, H, W = dff.shape
         LOGGER.info(f"DFF shape: T={T}, H={H}, W={W}")
 
-        # --- Colormap selection ---
+        # ------------------------------------------------------------------
+        # Colormap selection
+        # ------------------------------------------------------------------
         if colors is None:
             cmap = plt.get_cmap("inferno")
         else:
             cmap = LinearSegmentedColormap.from_list("custom_cmap", colors)
 
-        # --- Determine vmin / vmax if not provided ---
+        # ------------------------------------------------------------------
+        # Determine vmin / vmax if not provided
+        # ------------------------------------------------------------------
         data_min = float(dff.min())
         data_max = float(dff.max())
         vmin_eff = data_min if vmin is None else vmin
@@ -1391,22 +1447,32 @@ class WidefieldAnalysis:
             f"(data range: [{data_min:.4f}, {data_max:.4f}])"
         )
 
-        # --- Output directory for window averages ---
-        # We keep output *next to* the DFF in a subfolder "avg_windows"
-        output_dir = processed_folder / "avg_windows"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        LOGGER.info(f"Saving window averages to: {output_dir}")
+        # ------------------------------------------------------------------
+        # Output directory for window averages (data/analyzed/...)
+        # ------------------------------------------------------------------
+        analyzed_trial_folder = (
+            data_root
+            / "analyzed"
+            / dataset_id
+            / session_id
+            / protocol_name
+            / f"avg_windows_{trial_name}"
+        )
+        analyzed_trial_folder.mkdir(parents=True, exist_ok=True)
+        LOGGER.info(f"Saving window averages to: {analyzed_trial_folder}")
 
-        trial_name = processed_folder.name
-
-        # --- Loop over windows ---
+        # ------------------------------------------------------------------
+        # Loop over windows
+        # ------------------------------------------------------------------
         for label, (start, end) in windows.items():
             if start >= end:
                 LOGGER.warning(f"Skipping window '{label}': invalid range ({start}, {end})")
                 continue
 
             if start >= T:
-                LOGGER.warning(f"Skipping window '{label}': start {start} >= total frames {T}")
+                LOGGER.warning(
+                    f"Skipping window '{label}': start {start} >= total frames {T}"
+                )
                 continue
 
             if end > T:
@@ -1431,7 +1497,10 @@ class WidefieldAnalysis:
             safe_label = label.replace("-", "_")
 
             # Save numpy average image
-            np.save(output_dir / f"{trial_name}_average_{safe_label}.npy", avg_img)
+            np.save(
+                analyzed_trial_folder / f"{trial_name}_average_{safe_label}.npy",
+                avg_img,
+            )
 
             # Plot & save as images
             fig, ax = plt.subplots()
@@ -1441,18 +1510,19 @@ class WidefieldAnalysis:
             plt.colorbar(im, ax=ax, label="dF/F")
 
             fig.savefig(
-                output_dir / f"{trial_name}_average_{safe_label}.svg",
+                analyzed_trial_folder / f"{trial_name}_average_{safe_label}.svg",
                 format="svg",
             )
             fig.savefig(
-                output_dir / f"{trial_name}_average_{safe_label}.png",
+                analyzed_trial_folder / f"{trial_name}_average_{safe_label}.png",
                 format="png",
             )
             plt.close(fig)
 
             LOGGER.info(
                 f"Saved average image for window '{label}' "
-                f"to {output_dir} (files prefix: {trial_name}_average_{safe_label})"
+                f"to {analyzed_trial_folder} "
+                f"(files prefix: {trial_name}_average_{safe_label})"
             )
 
         LOGGER.info("DFF window processing (single trial) completed.")
