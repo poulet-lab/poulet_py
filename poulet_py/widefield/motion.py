@@ -860,9 +860,9 @@ def plot_motion_over_time(
     plt.colorbar(axes[1].collections[0], ax=axes[1], label="Frame")
 
     fig.tight_layout()
-    fig.savefig(output_path / "02_motion_trajectory.png", dpi=150, bbox_inches="tight")
+    fig.savefig(output_path / "motion_trajectory.png", dpi=150, bbox_inches="tight")
     plt.close(fig)
-    LOGGER.info(f"Saved: {output_path / '02_motion_trajectory.png'}")
+    LOGGER.info(f"Saved: {output_path / 'motion_trajectory.png'}")
 
 
 def plot_stability_maps(movie_raw: np.ndarray, movie_corrected: np.ndarray, output_path: Path):
@@ -910,9 +910,9 @@ def plot_stability_maps(movie_raw: np.ndarray, movie_corrected: np.ndarray, outp
 
     fig.tight_layout()
     output_path = Path(output_path)
-    fig.savefig(output_path / "03_stability_maps.png", dpi=150, bbox_inches="tight")
+    fig.savefig(output_path / "stability_maps.png", dpi=150, bbox_inches="tight")
     plt.close(fig)
-    LOGGER.info(f"Saved: {output_path / '03_stability_maps.png'}")
+    LOGGER.info(f"Saved: {output_path / 'stability_maps.png'}")
 
 
 def create_comparison_movie(
