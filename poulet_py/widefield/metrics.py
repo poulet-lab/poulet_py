@@ -3,10 +3,14 @@ Metric calculation functions for widefield imaging analysis.
 
 This module provides functions for computing common metrics
 on widefield imaging data, including percentile projections,
-baseline calculations, and delta F/F normalization.
+baseline calculations, delta F/F normalization, and spatial
+threshold metrics for activity quantification.
 """
 
+from typing import Any
+
 import numpy as np
+from scipy.ndimage import gaussian_filter
 
 from poulet_py import LOGGER
 
@@ -199,3 +203,104 @@ def calculate_baseline_movie(
     )
 
     return baseline_mean
+
+
+def calculate_spatial_threshold_metrics(
+    image: np.ndarray,
+    threshold_percent: float = 85.0,
+    smoothing_sigma: float | None = 20.0,
+) -> dict[str, Any] | None:
+    """
+    Calculate spatial threshold metrics for a 2D activity image.
+
+    Applies optional Gaussian smoothing, computes a threshold as a percentage
+    of maximum activity, creates a threshold mask, and calculates various
+    metrics including area under curve (AUC) above threshold.
+
+    Args:
+        image: 2D numpy array representing activity (e.g., peak dF/F frame).
+        threshold_percent: Percentage of maximum activity to use as threshold.
+            Default is 85.0 (85% of max).
+        smoothing_sigma: Sigma for Gaussian smoothing in pixels. If None,
+            no smoothing is applied. Default is 20.0.
+
+    Returns:
+        Dictionary containing:
+            - threshold: The computed threshold value
+            - threshold_mask: Boolean 2D mask (pixels above threshold)
+            - n_pixels_above: Count of pixels above threshold
+            - total_pixels: Total pixel count in image
+            - percent_above: Percentage of pixels above threshold
+            - auc_above_threshold: Sum of pixel values above threshold
+            - smoothed_image: The smoothed 2D image (or original if no smoothing)
+            - max_activity: Maximum value in smoothed image
+            - min_activity: Minimum value in smoothed image
+            - mean_activity: Mean value in smoothed image
+            - std_activity: Standard deviation in smoothed image
+        Returns None if input is invalid.
+
+    Example:
+        >>> peak_image = dff_data[peak_frame]
+        >>> metrics = calculate_spatial_threshold_metrics(
+        ...     image=peak_image,
+        ...     threshold_percent=85.0,
+        ...     smoothing_sigma=20.0
+        ... )
+        >>> print(f"AUC above threshold: {metrics['auc_above_threshold']:.3f}")
+        >>> print(f"Pixels above: {metrics['percent_above']:.1f}%")
+    """
+    if image.ndim != 2:
+        LOGGER.error(f"Expected 2D array (H, W), got shape: {image.shape}")
+        return None
+
+    if image.size == 0:
+        LOGGER.error("Empty image provided")
+        return None
+
+    if smoothing_sigma is not None and smoothing_sigma > 0:
+        smoothed_image = gaussian_filter(image, sigma=smoothing_sigma)
+        LOGGER.debug(f"Applied Gaussian smoothing with sigma={smoothing_sigma}")
+    else:
+        smoothed_image = image.copy()
+
+    max_activity = float(np.max(smoothed_image))
+    min_activity = float(np.min(smoothed_image))
+    mean_activity = float(np.mean(smoothed_image))
+    std_activity = float(np.std(smoothed_image))
+
+    if max_activity <= 0:
+        LOGGER.warning(
+            f"Max activity ({max_activity}) is not positive. "
+            "Threshold metrics may not be meaningful."
+        )
+
+    threshold = threshold_percent / 100.0 * max_activity
+
+    threshold_mask = smoothed_image >= threshold
+    n_pixels_above = int(np.sum(threshold_mask))
+    total_pixels = int(image.size)
+    percent_above = 100.0 * n_pixels_above / total_pixels
+
+    pixels_above_values = smoothed_image[threshold_mask]
+    auc_above_threshold = float(np.sum(pixels_above_values))
+
+    LOGGER.info(
+        f"Spatial threshold metrics: threshold={threshold:.4f} "
+        f"({threshold_percent:.0f}% of max), "
+        f"pixels_above={n_pixels_above}/{total_pixels} ({percent_above:.1f}%), "
+        f"AUC={auc_above_threshold:.4f}"
+    )
+
+    return {
+        "threshold": threshold,
+        "threshold_mask": threshold_mask,
+        "n_pixels_above": n_pixels_above,
+        "total_pixels": total_pixels,
+        "percent_above": percent_above,
+        "auc_above_threshold": auc_above_threshold,
+        "smoothed_image": smoothed_image,
+        "max_activity": max_activity,
+        "min_activity": min_activity,
+        "mean_activity": mean_activity,
+        "std_activity": std_activity,
+    }

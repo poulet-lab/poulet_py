@@ -8,6 +8,7 @@ from .metrics import (
     calculate_baseline_movie,
     calculate_deltaff_movie,
     calculate_percentile_movie,
+    calculate_spatial_threshold_metrics,
 )
 from .motion import (
     apply_motion_correction,
@@ -26,6 +27,7 @@ __all__ = [
     "calculate_baseline_movie",
     "calculate_deltaff_movie",
     "calculate_percentile_movie",
+    "calculate_spatial_threshold_metrics",
     "detect_stimulus_frames",
     "estimate_image_shift",
     "estimate_motion_vectors",
