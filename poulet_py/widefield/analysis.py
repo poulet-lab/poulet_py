@@ -28,6 +28,7 @@ try:
     from . import paths as wf_paths
     from . import plotting as wf_plotting
     from . import roi as wf_roi
+    from .trace_metrics import TraceMetrics
 except ImportError as e:
     msg = """
 Missing required modules. Install options:
@@ -815,6 +816,45 @@ class WidefieldAnalysis:
             return None
 
         return wf_roi.trace_within_circular_roi(data, center, diameter)
+
+    def get_trace_metrics(
+        self,
+        trace: np.ndarray,
+        onset_frame: int,
+        offset_frame: int,
+        fps: float | None = None,
+        peak_threshold: float | None = None,
+    ) -> TraceMetrics:
+        """
+        Create a TraceMetrics analyzer for a 1D trace.
+
+        Args:
+            trace: 1D numpy array of dF/F values.
+            onset_frame: Stimulus onset frame index.
+            offset_frame: Stimulus offset frame index.
+            fps: Frames per second. If None, uses value from get_fps().
+            peak_threshold: Minimum peak value for metric calculation.
+                           If None, uses TraceMetrics default (0.05).
+
+        Returns:
+            TraceMetrics instance for analyzing the trace.
+
+        Raises:
+            ValueError: If trace is not 1D or fps cannot be determined.
+        """
+        if fps is None:
+            fps = self.get_fps()
+            if fps is None:
+                msg = "fps not provided and could not be determined from timestamps"
+                raise ValueError(msg)
+
+        return TraceMetrics(
+            trace=trace,
+            fps=fps,
+            onset_frame=onset_frame,
+            offset_frame=offset_frame,
+            peak_threshold=peak_threshold,
+        )
 
     def close(self) -> None:
         """
