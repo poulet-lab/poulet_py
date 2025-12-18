@@ -1352,10 +1352,10 @@ class WidefieldAnalysis:
             LOGGER.error("trial_path does not contain enough components")
             return
 
-        dataset_id    = parts[raw_idx + 1]
-        session_id    = parts[raw_idx + 2]
+        dataset_id = parts[raw_idx + 1]
+        session_id = parts[raw_idx + 2]
         protocol_name = parts[raw_idx + 3]
-        trial_name    = parts[raw_idx + 4]
+        trial_name = parts[raw_idx + 4]
 
         data_root = Path(*parts[:raw_idx])  # e.g. "data"
 
@@ -1402,8 +1402,7 @@ class WidefieldAnalysis:
         vmax_eff = data_max if vmax is None else vmax
 
         LOGGER.info(
-            f"Color limits: vmin={vmin_eff}, vmax={vmax_eff} "
-            f"(data range {data_min}–{data_max})"
+            f"Color limits: vmin={vmin_eff}, vmax={vmax_eff} (data range {data_min}–{data_max})"
         )
 
         # -------------------------------------------------------------
@@ -1426,7 +1425,6 @@ class WidefieldAnalysis:
         # 6. Process each window
         # -------------------------------------------------------------
         for label, (start, end) in windows.items():
-
             safe_label = label.replace("-", "_")
 
             if start >= end:
