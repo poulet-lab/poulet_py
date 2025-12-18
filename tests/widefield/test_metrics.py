@@ -57,17 +57,13 @@ class TestCalculateSpatialThresholdMetrics:
 
     def test_no_smoothing(self, simple_image: np.ndarray):
         """Test that smoothing_sigma=None preserves original image."""
-        result = calculate_spatial_threshold_metrics(
-            simple_image, smoothing_sigma=None
-        )
+        result = calculate_spatial_threshold_metrics(simple_image, smoothing_sigma=None)
 
         assert np.array_equal(result["smoothed_image"], simple_image)
 
     def test_with_smoothing(self, simple_image: np.ndarray):
         """Test that smoothing changes the image."""
-        result = calculate_spatial_threshold_metrics(
-            simple_image, smoothing_sigma=5.0
-        )
+        result = calculate_spatial_threshold_metrics(simple_image, smoothing_sigma=5.0)
 
         assert not np.array_equal(result["smoothed_image"], simple_image)
         assert result["max_activity"] < 1.0
@@ -145,9 +141,7 @@ class TestCalculateSpatialThresholdMetrics:
         """Test handling of all-zero image."""
         image = np.zeros((50, 50))
 
-        result = calculate_spatial_threshold_metrics(
-            image, smoothing_sigma=None
-        )
+        result = calculate_spatial_threshold_metrics(image, smoothing_sigma=None)
 
         assert result is not None
         assert result["max_activity"] == 0.0
@@ -167,9 +161,7 @@ class TestCalculateSpatialThresholdMetrics:
 
     def test_statistics_correctness(self, simple_image: np.ndarray):
         """Test that statistics are calculated correctly."""
-        result = calculate_spatial_threshold_metrics(
-            simple_image, smoothing_sigma=None
-        )
+        result = calculate_spatial_threshold_metrics(simple_image, smoothing_sigma=None)
 
         expected_min = float(np.min(simple_image))
         expected_max = float(np.max(simple_image))
@@ -220,9 +212,7 @@ class TestCalculateDeltaffMovie:
 
     def test_invalid_baseline(self):
         """Test that 3D baseline returns None."""
-        result = calculate_deltaff_movie(
-            np.zeros((100, 50, 50)), np.zeros((100, 50, 50))
-        )
+        result = calculate_deltaff_movie(np.zeros((100, 50, 50)), np.zeros((100, 50, 50)))
         assert result is None
 
 
@@ -245,4 +235,3 @@ class TestCalculateBaselineMovie:
             np.zeros((50, 50)), stimulus_start_frame=10, baseline_ms=500.0, fps=20.0
         )
         assert result is None
-

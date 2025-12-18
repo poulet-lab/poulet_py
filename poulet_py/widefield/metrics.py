@@ -242,9 +242,7 @@ def calculate_spatial_threshold_metrics(
     Example:
         >>> peak_image = dff_data[peak_frame]
         >>> metrics = calculate_spatial_threshold_metrics(
-        ...     image=peak_image,
-        ...     threshold_percent=85.0,
-        ...     smoothing_sigma=20.0
+        ...     image=peak_image, threshold_percent=85.0, smoothing_sigma=20.0
         ... )
         >>> print(f"AUC above threshold: {metrics['auc_above_threshold']:.3f}")
         >>> print(f"Pixels above: {metrics['percent_above']:.1f}%")
