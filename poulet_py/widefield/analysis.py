@@ -23,6 +23,7 @@ try:
     import numpy as np
     import pandas as pd
     from skimage import io as skio
+    from matplotlib.colors import LinearSegmentedColormap
 
     from poulet_py import LOGGER
 except ImportError as e:
@@ -1303,27 +1304,243 @@ class WidefieldAnalysis:
 
         return trace
 
-    def extract_image_from_timeperiod(
-        self, start_time: float, end_time: float
-    ) -> np.ndarray | None:
+    def process_dff_windows(
+    dataset_id: str,
+    session_id: str,
+    protocol_name: str,
+    trial_start: str,
+    windows: dict[str, tuple[int, int]],
+    *,
+    trial_end: str | None = None,
+    fps: float = 20.0,
+    base_processed: Path | str = Path("data/processed"),
+    base_analyzed: Path | str = Path("data/analyzed"),
+    versions: list[tuple[str, str, str]] | None = None,
+    vmin: float | None = None,
+    vmax: float | None = None,
+    colors: list[str] | None = None,
+) -> None:
         """
-        Extract an image from the time period specified by start_time and end_time.
+        Process DFF movies over time windows and save average images.
+
+        Behaviour:
+            - If trial_end is None:
+                → Single-trial mode (process only trial_start)
+            - If trial_end is provided:
+                → Multi-trial mode (average all trials in the range
+                    trial_start ... trial_end)
 
         Args:
-            start_time: Start time in seconds.
-            end_time: End time in seconds.
+            dataset_id: Dataset identifier (e.g. "JPCM-09100").
+            session_id: Session identifier (e.g. "251215_leica").
+            protocol_name: Protocol name (e.g. "repetition_tactile").
+            trial_start: Trial name or starting name of range.
+            windows: dict {label: (start_frame, end_frame)}
+            trial_end: End of trial range. If None → single trial processing.
+            fps: Frame rate in Hz.
+            base_processed: Folder containing processed DFF files.
+            base_analyzed: Folder where results should be saved.
+            versions: List of (version_name, dff_file, out_label).
+                    DEFAULT = [("DFF", "dff.npy", "avg_windows")]
+            vmin: Colormap minimum. If None → computed from data.
+            vmax: Colormap maximum. If None → computed from data.
+            colors: Custom colormap colors.
+                    If None → use inferno.
 
-        Returns:
-            Image as numpy array, or None if error.
+        ----------------------------------------------------------------------
+        EXAMPLE USAGE
+        ----------------------------------------------------------------------
+
+        # --- Define time windows (example) ---
+        fps = 20
+        windows = {
+            "5-6s": (5 * fps, 6 * fps),
+            "6-7s": (6 * fps, 7 * fps),
+        }
+
+        # --- Single trial ---
+        process_dff_windows(
+            dataset_id="JPCM-09100",
+            session_id="251215_leica",
+            protocol_name="repetition_tactile",
+            trial_start="251215_161522",
+            windows=windows,
+            fps=fps,
+        )
+
+        # --- Multi-trial averaging ---
+        process_dff_windows(
+            dataset_id="JPCM-09100",
+            session_id="251215_leica",
+            protocol_name="repetition_tactile",
+            trial_start="251215_161522",
+            trial_end="251215_161853",
+            windows=windows,
+            fps=fps,
+            vmin=0.0,
+            vmax=0.07,
+            colors=["black", "green", "yellow"],  # optional custom colormap
+        )
+
+        ----------------------------------------------------------------------
+
         """
-        if self.imaging_data is None:
-            LOGGER.warning("No imaging data loaded")
-            return None
+        # Default version configuration: only standard DFF
+        if versions is None:
+            versions = [
+                ("DFF", "dff.npy", "avg_windows"),
+            ]
 
-        if self.timestamps is None:
-            LOGGER.warning("No timestamps loaded")
-            return None
+        # --- Colormap selection ---
+        if colors is None:
+            cmap = plt.get_cmap("inferno")  # default
+        else:
+            cmap = LinearSegmentedColormap.from_list("custom_cmap", colors)
 
+        base_processed = Path(base_processed)
+        base_analyzed = Path(base_analyzed)
+        trial_base = base_processed / dataset_id / session_id / protocol_name
+
+        if not trial_base.exists():
+            LOGGER.error(f"Processed base path does not exist: {trial_base}")
+            return
+
+        # ----------------------------------------------------------
+        # Determine single-trial vs multi-trial mode
+        # ----------------------------------------------------------
+        if trial_end is None:
+            # Single trial
+            all_trials = [trial_base / trial_start]
+            LOGGER.info(f"Single-trial mode → '{trial_start}'")
+        else:
+            # Trial range
+            all_trials = sorted(
+                p for p in trial_base.iterdir()
+                if p.is_dir() and trial_start <= p.name <= trial_end
+            )
+            LOGGER.info(f"Multi-trial mode: trials {trial_start} → {trial_end}")
+
+        if not all_trials:
+            LOGGER.warning("No valid trials found.")
+            return
+
+        # ----------------------------------------------------------
+        # MAIN LOOP OVER VERSION DEFINITIONS
+        # ----------------------------------------------------------
+        for version_name, dff_file, out_label in versions:
+
+            dff_arrays = []
+            valid_trial_paths = []
+
+            LOGGER.info(f"Processing version: {version_name} ({dff_file})")
+
+            # Load DFF for each trial
+            for trial_path in all_trials:
+                dff_path = trial_path / dff_file
+
+                if not dff_path.exists():
+                    LOGGER.warning(f"Missing DFF file: {dff_path}")
+                    continue
+
+                try:
+                    dff = np.load(dff_path)
+                except Exception:
+                    LOGGER.exception(f"Failed loading {dff_path}")
+                    continue
+
+                if dff.ndim != 3:
+                    LOGGER.error(f"Invalid DFF shape: {dff.shape}")
+                    continue
+
+                dff_arrays.append(dff)
+                valid_trial_paths.append(trial_path)
+
+            if not dff_arrays:
+                LOGGER.warning("No valid DFF data. Skipping version.")
+                continue
+
+            # ----------------------------------------------------------
+            # SINGLE TRIAL MODE
+            # ----------------------------------------------------------
+            if trial_end is None:
+
+                dff = dff_arrays[0]
+                trial_name = valid_trial_paths[0].name
+
+                output_dir = (
+                    base_analyzed / dataset_id / session_id / protocol_name /
+                    out_label / trial_name
+                )
+                output_dir.mkdir(parents=True, exist_ok=True)
+
+                # Compute vmin/vmax
+                vmin_eff = float(dff.min()) if vmin is None else vmin
+                vmax_eff = float(dff.max()) if vmax is None else vmax
+
+                # Window loop
+                for label, (start, end) in windows.items():
+
+                    end = min(end, dff.shape[0])
+                    window_movie = dff[start:end]
+                    avg_img = np.mean(np.rot90(window_movie, -1, (1, 2)), axis=0)
+
+                    safe_label = label.replace("-", "_")
+                    np.save(output_dir / f"average_{safe_label}.npy", avg_img)
+
+                    fig, ax = plt.subplots()
+                    im = ax.imshow(avg_img, cmap=cmap, vmin=vmin_eff, vmax=vmax_eff)
+                    plt.colorbar(im, ax=ax)
+                    ax.set_title(f"{trial_name} | {label}")
+                    fig.savefig(output_dir / f"{trial_name}_{safe_label}.png")
+                    fig.savefig(output_dir / f"{trial_name}_{safe_label}.svg")
+                    plt.close(fig)
+
+                continue  # skip multi-trial section
+
+            # ----------------------------------------------------------
+            # MULTI-TRIAL AVERAGING
+            # ----------------------------------------------------------
+            try:
+                dff_stack = np.stack(dff_arrays, axis=0)  # (N, T, H, W)
+            except Exception:
+                LOGGER.exception("Stacking error.")
+                continue
+
+            # Use np.average as requested
+            avg_dff = np.average(dff_stack, axis=0)
+
+            # Compute vmin/vmax
+            vmin_eff = float(avg_dff.min()) if vmin is None else vmin
+            vmax_eff = float(avg_dff.max()) if vmax is None else vmax
+
+            output_dir = (
+                base_analyzed / dataset_id / session_id / protocol_name /
+                f"{out_label}_{trial_start}_to_{trial_end}"
+            )
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            np.save(output_dir / "average_trials.npy", avg_dff)
+            np.save(output_dir / "dff_trials.npy", dff_stack)
+
+            for label, (start, end) in windows.items():
+                end = min(end, avg_dff.shape[0])
+                window_movie = avg_dff[start:end]
+
+                avg_img = np.mean(np.rot90(window_movie, -1, (1, 2)), axis=0)
+
+                safe_label = label.replace("-", "_")
+                np.save(output_dir / f"average_{safe_label}.npy", avg_img)
+
+                fig, ax = plt.subplots()
+                im = ax.imshow(avg_img, cmap=cmap, vmin=vmin_eff, vmax=vmax_eff)
+                plt.colorbar(im, ax=ax)
+                ax.set_title(f"Averaged | {label}")
+                fig.savefig(output_dir / f"avg_{safe_label}.png")
+                fig.savefig(output_dir / f"avg_{safe_label}.svg")
+                plt.close(fig)
+
+        LOGGER.info("All DFF window processing completed.")
+    
     def close(self) -> None:
         """Clean up resources."""
         self.imaging_data = None
