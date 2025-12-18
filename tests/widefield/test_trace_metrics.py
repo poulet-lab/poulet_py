@@ -96,9 +96,7 @@ class TestCalculatePeak:
         assert peak_value == pytest.approx(0.15, abs=0.01)
         assert peak_frame == 80
 
-    def test_calculate_peak_with_post_stimulus(
-        self, simple_trace: np.ndarray, trace_params: dict
-    ):
+    def test_calculate_peak_with_post_stimulus(self, simple_trace: np.ndarray, trace_params: dict):
         tm = TraceMetrics(
             trace=simple_trace,
             fps=trace_params["fps"],
@@ -146,9 +144,7 @@ class TestCalculateAllMetrics:
         assert "rise_slope" in metrics
         assert "decay_slope" in metrics
 
-    def test_calculate_all_metrics_weak_signal(
-        self, weak_trace: np.ndarray, trace_params: dict
-    ):
+    def test_calculate_all_metrics_weak_signal(self, weak_trace: np.ndarray, trace_params: dict):
         tm = TraceMetrics(
             trace=weak_trace,
             fps=trace_params["fps"],
@@ -255,9 +251,7 @@ class TestSlopes:
 
 
 class TestThresholdCrossing:
-    def test_find_threshold_crossing_rising(
-        self, simple_trace: np.ndarray, trace_params: dict
-    ):
+    def test_find_threshold_crossing_rising(self, simple_trace: np.ndarray, trace_params: dict):
         tm = TraceMetrics(
             trace=simple_trace,
             fps=trace_params["fps"],
@@ -276,9 +270,7 @@ class TestThresholdCrossing:
         assert frame > trace_params["onset_frame"]
         assert frame < 80
 
-    def test_find_threshold_crossing_falling(
-        self, simple_trace: np.ndarray, trace_params: dict
-    ):
+    def test_find_threshold_crossing_falling(self, simple_trace: np.ndarray, trace_params: dict):
         tm = TraceMetrics(
             trace=simple_trace,
             fps=trace_params["fps"],
@@ -356,4 +348,3 @@ class TestEdgeCases:
 
         assert metrics["peak_value"] == 0.0
         assert metrics["above_threshold"] is False
-

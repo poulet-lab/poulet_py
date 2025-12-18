@@ -377,11 +377,7 @@ class TraceMetrics:
             value_80_decay, value_20_decay, threshold_80, threshold_20)
             or all None if invalid.
         """
-        if (
-            self._peak_frame is None
-            or self._peak_value is None
-            or self.onset_frame is None
-        ):
+        if self._peak_frame is None or self._peak_value is None or self.onset_frame is None:
             return None, None, None, None, None, None, None, None, None
 
         if self._peak_frame >= len(self.trace) - 1 or self._peak_frame <= self.onset_frame:
@@ -419,9 +415,7 @@ class TraceMetrics:
                         if abs(value_after - value_before) < 1e-10:
                             time_80 = frame_after / self.fps
                         else:
-                            fraction = (threshold_80 - value_before) / (
-                                value_after - value_before
-                            )
+                            fraction = (threshold_80 - value_before) / (value_after - value_before)
                             time_80 = (frame_before + fraction) / self.fps
                         value_80_decay = threshold_80
                         frame_80 = frame_after
@@ -436,9 +430,7 @@ class TraceMetrics:
                         if abs(value_after - value_before) < 1e-10:
                             time_20 = frame_after / self.fps
                         else:
-                            fraction = (threshold_20 - value_before) / (
-                                value_after - value_before
-                            )
+                            fraction = (threshold_20 - value_before) / (value_after - value_before)
                             time_20 = (frame_before + fraction) / self.fps
                         value_20_decay = threshold_20
                         frame_20 = frame_after
@@ -455,9 +447,7 @@ class TraceMetrics:
                         if abs(value_after - value_before) < 1e-10:
                             time_80 = frame_after / self.fps
                         else:
-                            fraction = (threshold_80 - value_before) / (
-                                value_after - value_before
-                            )
+                            fraction = (threshold_80 - value_before) / (value_after - value_before)
                             time_80 = (frame_before + fraction) / self.fps
                         value_80_decay = threshold_80
                         frame_80 = frame_after
@@ -472,9 +462,7 @@ class TraceMetrics:
                         if abs(value_after - value_before) < 1e-10:
                             time_20 = frame_after / self.fps
                         else:
-                            fraction = (threshold_20 - value_before) / (
-                                value_after - value_before
-                            )
+                            fraction = (threshold_20 - value_before) / (value_after - value_before)
                             time_20 = (frame_before + fraction) / self.fps
                         value_20_decay = threshold_20
                         frame_20 = frame_after
@@ -1180,9 +1168,7 @@ class TraceMetrics:
         second_deriv = np.diff(first_deriv)
 
         first_deriv_time = np.arange(len(first_deriv)) / self.fps + stim_start / self.fps
-        second_deriv_time = (
-            np.arange(len(second_deriv)) / self.fps + (stim_start + 1) / self.fps
-        )
+        second_deriv_time = np.arange(len(second_deriv)) / self.fps + (stim_start + 1) / self.fps
 
         peak_first_deriv_idx = None
         window_start = None
