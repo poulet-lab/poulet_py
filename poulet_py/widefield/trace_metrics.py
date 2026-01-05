@@ -1174,7 +1174,8 @@ class TraceMetrics:
             peak_first_derivative_idx = int(np.argmax(first_derivative))
 
             negative_indices = np.where(
-                (first_derivative < 0) & (np.arange(len(first_derivative)) < peak_first_derivative_idx)
+                (first_derivative < 0)
+                & (np.arange(len(first_derivative)) < peak_first_derivative_idx)
             )[0]
             if len(negative_indices) > 0:
                 window_start = int(negative_indices[-1])
@@ -1219,7 +1220,11 @@ class TraceMetrics:
         ax_trace.grid(True, alpha=0.3)
 
         ax_first.plot(
-            first_derivative_time, first_derivative, color="blue", linewidth=2, label="First derivative"
+            first_derivative_time,
+            first_derivative,
+            color="blue",
+            linewidth=2,
+            label="First derivative",
         )
 
         if peak_first_derivative_idx is not None:
