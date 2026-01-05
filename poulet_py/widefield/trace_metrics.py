@@ -164,37 +164,32 @@ class TraceMetrics:
         if len(trace_segment) < 3:
             return None, None
 
-        first_deriv = np.diff(trace_segment)
-        second_deriv = np.diff(first_deriv)
+        dt = 1.0 / self.fps
+        first_derivative = np.gradient(trace_segment, dt)
+        second_derivative = np.gradient(first_derivative, dt)
 
-        if len(second_deriv) == 0:
-            return None, None
-
-        peak_first_deriv_idx = int(np.argmax(first_deriv))
+        peak_first_derivative_idx = int(np.argmax(first_derivative))
 
         negative_indices = np.where(
-            (first_deriv < 0) & (np.arange(len(first_deriv)) < peak_first_deriv_idx)
+            (first_derivative < 0) & (np.arange(len(first_derivative)) < peak_first_derivative_idx)
         )[0]
         if len(negative_indices) > 0:
             window_start = max(0, int(negative_indices[-1]))
         else:
             window_start = 0
 
-        if peak_first_deriv_idx == 0:
-            window_end = min(1, len(second_deriv))
-        else:
-            window_end = min(peak_first_deriv_idx, len(second_deriv))
+        window_end = peak_first_derivative_idx
 
         if window_end <= window_start:
             return None, None
 
-        window_second_deriv = second_deriv[window_start:window_end]
-        if len(window_second_deriv) == 0:
+        window_second_derivative = second_derivative[window_start:window_end]
+        if len(window_second_derivative) == 0:
             return None, None
 
-        peak_second_deriv_idx = int(np.argmax(window_second_deriv))
-        absolute_second_deriv_idx = window_start + peak_second_deriv_idx
-        response_onset_frame = stim_start + absolute_second_deriv_idx + 1
+        peak_second_derivative_idx = int(np.argmax(window_second_derivative))
+        absolute_second_derivative_idx = window_start + peak_second_derivative_idx
+        response_onset_frame = stim_start + absolute_second_derivative_idx
 
         latency = (response_onset_frame - self.onset_frame) / self.fps
 
@@ -1164,31 +1159,29 @@ class TraceMetrics:
             LOGGER.warning("Trace segment too short for derivatives")
             return
 
-        first_deriv = np.diff(trace_segment)
-        second_deriv = np.diff(first_deriv)
+        dt = 1.0 / self.fps
+        first_derivative = np.gradient(trace_segment, dt)
+        second_derivative = np.gradient(first_derivative, dt)
 
-        first_deriv_time = np.arange(len(first_deriv)) / self.fps + stim_start / self.fps
-        second_deriv_time = np.arange(len(second_deriv)) / self.fps + (stim_start + 1) / self.fps
+        first_derivative_time = np.arange(len(first_derivative)) / self.fps + stim_start / self.fps
+        second_derivative_time = first_derivative_time
 
-        peak_first_deriv_idx = None
+        peak_first_derivative_idx = None
         window_start = None
         window_end = None
 
         if self._peak_value is not None and self._peak_value >= self.peak_threshold:
-            peak_first_deriv_idx = int(np.argmax(first_deriv))
+            peak_first_derivative_idx = int(np.argmax(first_derivative))
 
             negative_indices = np.where(
-                (first_deriv < 0) & (np.arange(len(first_deriv)) < peak_first_deriv_idx)
+                (first_derivative < 0) & (np.arange(len(first_derivative)) < peak_first_derivative_idx)
             )[0]
             if len(negative_indices) > 0:
                 window_start = int(negative_indices[-1])
             else:
                 window_start = 0
 
-            if peak_first_deriv_idx == 0:
-                window_end = min(1, len(second_deriv))
-            else:
-                window_end = min(peak_first_deriv_idx, len(second_deriv))
+            window_end = peak_first_derivative_idx
 
         fig, axes = plt.subplots(3, 1, figsize=(14, 10), sharex=True)
         ax_trace, ax_first, ax_second = axes
@@ -1226,15 +1219,15 @@ class TraceMetrics:
         ax_trace.grid(True, alpha=0.3)
 
         ax_first.plot(
-            first_deriv_time, first_deriv, color="blue", linewidth=2, label="First derivative"
+            first_derivative_time, first_derivative, color="blue", linewidth=2, label="First derivative"
         )
 
-        if peak_first_deriv_idx is not None:
-            peak_first_deriv_time = (stim_start + peak_first_deriv_idx) / self.fps
-            peak_first_deriv_value = first_deriv[peak_first_deriv_idx]
+        if peak_first_derivative_idx is not None:
+            peak_first_derivative_time = (stim_start + peak_first_derivative_idx) / self.fps
+            peak_first_derivative_value = first_derivative[peak_first_derivative_idx]
             ax_first.plot(
-                peak_first_deriv_time,
-                peak_first_deriv_value,
+                peak_first_derivative_time,
+                peak_first_derivative_value,
                 marker="o",
                 markersize=10,
                 color="green",
@@ -1242,7 +1235,7 @@ class TraceMetrics:
                 label="Peak of first derivative",
             )
             ax_first.axvline(
-                x=peak_first_deriv_time,
+                x=peak_first_derivative_time,
                 color="green",
                 linestyle="--",
                 alpha=0.7,
@@ -1257,8 +1250,8 @@ class TraceMetrics:
         ax_first.grid(True, alpha=0.3)
 
         ax_second.plot(
-            second_deriv_time,
-            second_deriv,
+            second_derivative_time,
+            second_derivative,
             color="black",
             linewidth=1.5,
             alpha=0.3,
@@ -1266,18 +1259,18 @@ class TraceMetrics:
         )
 
         if window_start is not None and window_end is not None and window_end > window_start:
-            window_second_deriv = second_deriv[window_start:window_end]
-            window_second_deriv_time = second_deriv_time[window_start:window_end]
+            window_second_derivative = second_derivative[window_start:window_end]
+            window_second_derivative_time = second_derivative_time[window_start:window_end]
             ax_second.plot(
-                window_second_deriv_time,
-                window_second_deriv,
+                window_second_derivative_time,
+                window_second_derivative,
                 color="red",
                 linewidth=3,
                 label="Second derivative (search window)",
             )
 
-            window_start_time = second_deriv_time[window_start]
-            window_end_time = second_deriv_time[window_end - 1]
+            window_start_time = second_derivative_time[window_start]
+            window_end_time = second_derivative_time[window_end - 1]
             ax_second.axvspan(
                 window_start_time,
                 window_end_time,
@@ -1288,12 +1281,12 @@ class TraceMetrics:
 
         if self._latency is not None and self._response_onset_frame is not None:
             response_onset_time = self._response_onset_frame / self.fps
-            deriv_idx = self._response_onset_frame - stim_start - 1
-            if 0 <= deriv_idx < len(second_deriv):
-                peak_second_deriv_value = second_deriv[deriv_idx]
+            derivative_idx = self._response_onset_frame - stim_start
+            if 0 <= derivative_idx < len(second_derivative):
+                peak_second_derivative_value = second_derivative[derivative_idx]
                 ax_second.plot(
                     response_onset_time,
-                    peak_second_deriv_value,
+                    peak_second_derivative_value,
                     marker="o",
                     markersize=10,
                     color="blue",
