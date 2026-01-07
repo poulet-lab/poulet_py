@@ -73,7 +73,7 @@ arduino = ["pyserial==3.5.*"]
 julabo = ["pyserial==3.5.*"]
 qst = ["pandas==2.3.*", "tqdm==4.67.*", "pyserial==3.5.*"]
 triggers = ["poulet_py[gpio]"]
-gpio = ["gpiozero==2.0.*", "lgpio==0.2.*"]
+gpio = ["gpiozero==2.0.*", "lgpio==0.2.*; platform_system == 'Linux'"]
 # Tools
 
 # Utils
