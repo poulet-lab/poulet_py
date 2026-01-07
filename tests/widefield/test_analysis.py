@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from poulet_py.widefield import WidefieldAnalysis
-from poulet_py.widefield.analysis import DataConfig, PROCESSED_CONFIG, RAW_CONFIG
+from poulet_py.widefield.analysis import PROCESSED_CONFIG, DataConfig
 from poulet_py.widefield.io import (
     extract_trial_metadata,
     load_green_reference,
@@ -307,9 +307,7 @@ class TestMotionCorrectionPipeline:
         assert wf.motion_corrected_data is not None
         assert wf.motion_vectors is not None
 
-    def test_motion_correction_with_movie(
-        self, sample_trial_path: Path, tmp_path: Path
-    ):
+    def test_motion_correction_with_movie(self, sample_trial_path: Path, tmp_path: Path):
         wf = WidefieldAnalysis(sample_trial_path)
         wf.load_data()
 

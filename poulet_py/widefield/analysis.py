@@ -244,7 +244,7 @@ class WidefieldAnalysis:
         import json
 
         try:
-            with open(self.json_path, "r") as f:
+            with open(self.json_path) as f:
                 metadata = json.load(f)
 
             self.file_attrs = metadata.get("file_attributes", {})
@@ -1229,9 +1229,7 @@ class WidefieldAnalysis:
         LOGGER.info(f"Saved motion analysis: {path}")
 
         LOGGER.info("Computing motion vectors for corrected recording...")
-        motion_vectors_corrected, _ = wf_motion.estimate_motion_vectors(
-            self.motion_corrected_data
-        )
+        motion_vectors_corrected, _ = wf_motion.estimate_motion_vectors(self.motion_corrected_data)
         path = wf_motion.save_motion_analysis(
             motion_vectors_corrected,
             output_dir / "motion_analysis_corrected.npz",

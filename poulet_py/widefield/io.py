@@ -294,7 +294,7 @@ def load_trial_metadata(json_path: Path) -> dict[str, Any] | None:
         LOGGER.warning(f"Metadata file not found: {json_path}")
         return None
 
-    with open(json_path, "r") as f:
+    with open(json_path) as f:
         metadata = json.load(f)
 
     LOGGER.info(f"Loaded metadata from: {json_path.name}")
