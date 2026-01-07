@@ -2,17 +2,25 @@
 Widefield imaging data analysis module.
 
 This module provides a class-based interface for analyzing widefield
-imaging TIFF data from body core temperature experiments.
+imaging data from body core temperature experiments.
 
-A trial folder contains:
+A trial folder can be either raw or processed:
+
+Raw folder contains:
 - recording.tiff: Multi-page TIFF stack with imaging data
 - recording.csv: Timestamp metadata for frames
 - data.h5: Sensor data (temperature, camera triggers)
 - green.tiff: Reference/green channel image
+
+Processed folder contains:
+- recording_corrected.npy: Motion-corrected imaging data
+- metadata.json: Extracted metadata from original data.h5
+- green.tiff: Reference/green channel image (copied)
 """
 
 try:
     from collections.abc import Callable
+    from dataclasses import dataclass
     from pathlib import Path
     from typing import Any
 
@@ -42,36 +50,74 @@ Also ensure: h5py, numpy, pandas, scikit-image, imageio, matplotlib are installe
     raise ImportError(msg) from e
 
 
+@dataclass
+class DataConfig:
+    """
+    Configuration for data file locations in a trial folder.
+
+    Allows customization of expected filenames for different
+    data types (raw vs processed).
+
+    Attributes:
+        imaging_file: Name of imaging data file (.tiff or .npy).
+        green_file: Name of green reference image file.
+        timestamps_file: Name of timestamps CSV file (None to skip).
+        metadata_file: Name of HDF5 metadata file (None to skip).
+        metadata_json: Name of JSON metadata file (None to skip).
+    """
+
+    imaging_file: str = "recording.tiff"
+    green_file: str = "green.tiff"
+    timestamps_file: str | None = "recording.csv"
+    metadata_file: str | None = "data.h5"
+    metadata_json: str | None = None
+
+
+RAW_CONFIG = DataConfig()
+
+PROCESSED_CONFIG = DataConfig(
+    imaging_file="recording_corrected.npy",
+    timestamps_file=None,
+    metadata_file=None,
+    metadata_json="metadata.json",
+)
+
+
 class WidefieldAnalysis:
     """
-    Analysis class for widefield imaging TIFF data.
+    Analysis class for widefield imaging data.
 
     Loads and provides access to widefield recording trial data including
-    the imaging stack (TIFF), timestamps (CSV), and sensor data (H5).
+    the imaging stack, timestamps, and sensor data. Supports both raw
+    trial folders and processed data folders via configurable file paths.
 
     Attributes:
         trial_path: Path to the trial folder.
-        imaging_data: Loaded TIFF imaging stack as numpy array.
+        config: DataConfig specifying file locations.
+        imaging_data: Loaded imaging stack as numpy array.
         timestamps: DataFrame with frame timing information.
         sensor_data: Dictionary of sensor traces from H5 file.
     """
 
-    def __init__(self, trial_path: Path):
+    def __init__(self, trial_path: Path, config: DataConfig | None = None):
         """
         Initialize the analyzer with a trial folder path.
 
         Args:
             trial_path: Path to the trial folder containing recording files.
+            config: DataConfig specifying filenames. Defaults to RAW_CONFIG.
 
         Raises:
             FileNotFoundError: If the trial path does not exist.
             ValueError: If required files are missing.
         """
         self.trial_path = Path(trial_path)
+        self.config = config if config is not None else DataConfig()
 
-        self.tiff_path: Path | None = None
+        self.imaging_path: Path | None = None
         self.csv_path: Path | None = None
         self.h5_path: Path | None = None
+        self.json_path: Path | None = None
         self.green_path: Path | None = None
 
         self.imaging_data: np.ndarray | None = None
@@ -95,9 +141,11 @@ class WidefieldAnalysis:
         """
         Validate the trial path and locate required files.
 
+        Uses self.config to determine expected filenames.
+
         Raises:
             FileNotFoundError: If trial path does not exist.
-            ValueError: If recording.tiff is missing.
+            ValueError: If imaging file is missing.
         """
         if not self.trial_path.exists():
             msg = f"Trial path does not exist: {self.trial_path}"
@@ -107,40 +155,47 @@ class WidefieldAnalysis:
             msg = f"Trial path must be a directory: {self.trial_path}"
             raise ValueError(msg)
 
-        self.tiff_path = self.trial_path / "recording.tiff"
-        self.csv_path = self.trial_path / "recording.csv"
-        self.h5_path = self.trial_path / "data.h5"
-        self.green_path = self.trial_path / "green.tiff"
+        self.imaging_path = self.trial_path / self.config.imaging_file
+        self.green_path = self.trial_path / self.config.green_file
 
-        if not self.tiff_path.exists():
-            msg = f"recording.tiff not found in: {self.trial_path}"
+        if self.config.timestamps_file:
+            self.csv_path = self.trial_path / self.config.timestamps_file
+
+        if self.config.metadata_file:
+            self.h5_path = self.trial_path / self.config.metadata_file
+
+        if self.config.metadata_json:
+            self.json_path = self.trial_path / self.config.metadata_json
+
+        if not self.imaging_path.exists():
+            msg = f"{self.config.imaging_file} not found in: {self.trial_path}"
             raise ValueError(msg)
 
     def load_data(self) -> None:
         """
         Load all data files from the trial folder.
 
-        Loads the TIFF imaging stack, green reference image,
-        timestamps CSV, and sensor data from the H5 file.
+        Loads the imaging stack, green reference image,
+        timestamps, and metadata based on the config settings.
         After loading, prints a summary of the loaded data.
         """
         self._load_imaging()
         self._load_green_reference()
         self._load_timestamps()
-        self._load_sensors()
+        self._load_metadata()
         self._print_info()
 
     def _load_imaging(self) -> None:
         """
-        Load the main imaging TIFF stack.
+        Load the main imaging data (TIFF or NPY).
 
         Raises:
-            Exception: If the TIFF file cannot be loaded.
+            Exception: If the imaging file cannot be loaded.
         """
         try:
-            self.imaging_data = wf_io.load_imaging(self.tiff_path)
+            self.imaging_data = wf_io.load_imaging(self.imaging_path)
         except Exception:
-            LOGGER.exception(f"Error loading TIFF: {self.tiff_path}")
+            LOGGER.exception(f"Error loading imaging: {self.imaging_path}")
             raise
 
     def _load_green_reference(self) -> None:
@@ -156,14 +211,46 @@ class WidefieldAnalysis:
 
     def _load_timestamps(self) -> None:
         """
-        Load frame timestamps from CSV.
+        Load frame timestamps from CSV if configured.
 
         Logs but does not raise exceptions on failure.
         """
+        if self.csv_path is None:
+            return
+
         try:
             self.timestamps = wf_io.load_timestamps(self.csv_path)
         except Exception:
             LOGGER.exception(f"Error loading CSV: {self.csv_path}")
+
+    def _load_metadata(self) -> None:
+        """
+        Load metadata from either JSON or H5 file based on config.
+
+        Tries JSON first if configured, then falls back to H5.
+        Logs but does not raise exceptions on failure.
+        """
+        if self.json_path is not None and self.json_path.exists():
+            self._load_metadata_json()
+        elif self.h5_path is not None:
+            self._load_sensors()
+
+    def _load_metadata_json(self) -> None:
+        """
+        Load metadata from JSON file (for processed data).
+
+        Populates file_attrs from the metadata.json structure.
+        """
+        import json
+
+        try:
+            with open(self.json_path, "r") as f:
+                metadata = json.load(f)
+
+            self.file_attrs = metadata.get("file_attributes", {})
+            LOGGER.info(f"Loaded metadata from JSON: {self.json_path.name}")
+        except Exception:
+            LOGGER.exception(f"Error loading JSON: {self.json_path}")
 
     def _load_sensors(self) -> None:
         """
@@ -171,6 +258,9 @@ class WidefieldAnalysis:
 
         Logs but does not raise exceptions on failure.
         """
+        if self.h5_path is None:
+            return
+
         try:
             (
                 self.sensor_data,
@@ -1053,6 +1143,122 @@ class WidefieldAnalysis:
             )
             saved_paths["metadata"] = path
             LOGGER.info(f"Saved metadata: {path}")
+
+        return saved_paths
+
+    def motion_correction(
+        self,
+        output_dir: Path,
+        shift_method: str = "integer",
+        n_parallel_workers: int = 4,
+        create_movie: bool = False,
+        movie_fps: float | None = None,
+        movie_cmap: str = "gray",
+    ) -> dict[str, Path]:
+        """
+        Run complete motion correction pipeline and save all outputs.
+
+        This method performs the full motion correction workflow:
+        1. Apply motion correction to imaging data
+        2. Save corrected recording as .npy
+        3. Save motion vectors
+        4. Save motion correction metadata
+        5. Save motion analysis for raw and corrected data
+        6. Generate motion diagnostic plots
+        7. Optionally create a movie of the corrected recording
+
+        Args:
+            output_dir: Directory to save all output files.
+            shift_method: Method for applying shifts ("integer" or "fourier").
+            n_parallel_workers: Number of parallel workers for processing.
+            create_movie: Whether to create an MP4 movie of corrected data.
+            movie_fps: Frame rate for movie. If None, uses get_fps() or 20.
+            movie_cmap: Colormap for movie visualization.
+
+        Returns:
+            Dictionary mapping output names to file paths.
+
+        Raises:
+            ValueError: If imaging data is not loaded.
+        """
+        if self.imaging_data is None:
+            msg = "No imaging data loaded. Call load_data() first."
+            raise ValueError(msg)
+
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        saved_paths: dict[str, Path] = {}
+
+        LOGGER.info("Applying motion correction...")
+        self.apply_motion_correction(
+            shift_method=shift_method,
+            n_parallel_workers=n_parallel_workers,
+        )
+
+        path = wf_motion.save_corrected_recording(
+            self.motion_corrected_data,
+            output_dir / "recording_corrected.npy",
+        )
+        saved_paths["corrected_recording"] = path
+        LOGGER.info(f"Saved corrected recording: {path}")
+
+        path = wf_motion.save_motion_vectors(
+            self.motion_vectors,
+            output_dir / "motion_vectors.npy",
+        )
+        saved_paths["motion_vectors"] = path
+        LOGGER.info(f"Saved motion vectors: {path}")
+
+        n_frames, height, width = self.imaging_data.shape
+        path = wf_motion.save_motion_correction_metadata(
+            output_path=output_dir / "motion_metadata.txt",
+            shift_method=shift_method,
+            n_frames=n_frames,
+            image_shape=(height, width),
+            raw_trial_path=self.trial_path,
+        )
+        saved_paths["motion_metadata"] = path
+        LOGGER.info(f"Saved motion metadata: {path}")
+
+        path = wf_motion.save_motion_analysis(
+            self.motion_vectors,
+            output_dir / "motion_analysis.npz",
+        )
+        saved_paths["motion_analysis"] = path
+        LOGGER.info(f"Saved motion analysis: {path}")
+
+        LOGGER.info("Computing motion vectors for corrected recording...")
+        motion_vectors_corrected, _ = wf_motion.estimate_motion_vectors(
+            self.motion_corrected_data
+        )
+        path = wf_motion.save_motion_analysis(
+            motion_vectors_corrected,
+            output_dir / "motion_analysis_corrected.npz",
+        )
+        saved_paths["motion_analysis_corrected"] = path
+        LOGGER.info(f"Saved corrected motion analysis: {path}")
+
+        wf_motion.plot_motion_over_time(
+            self.motion_vectors,
+            self.motion_corrected_data,
+            self.motion_reference_image,
+            output_dir,
+        )
+        saved_paths["motion_plots"] = output_dir
+        LOGGER.info(f"Saved motion plots to: {output_dir}")
+
+        if create_movie:
+            fps = movie_fps or self.get_fps() or 20.0
+            movie_path = output_dir / "recording_corrected.mp4"
+            wf_movie.create_movie_from_array(
+                self.motion_corrected_data,
+                movie_path,
+                fps=fps,
+                cmap=movie_cmap,
+            )
+            saved_paths["movie"] = movie_path
+            LOGGER.info(f"Saved movie: {movie_path}")
 
         return saved_paths
 

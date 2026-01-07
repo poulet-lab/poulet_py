@@ -1,14 +1,19 @@
+import json
 from pathlib import Path
 
 import numpy as np
 import pytest
 
 from poulet_py.widefield import WidefieldAnalysis
+from poulet_py.widefield.analysis import DataConfig, PROCESSED_CONFIG, RAW_CONFIG
 from poulet_py.widefield.io import (
+    extract_trial_metadata,
     load_green_reference,
     load_imaging,
     load_sensors,
     load_timestamps,
+    load_trial_metadata,
+    save_trial_metadata,
     tiff_to_numpy,
 )
 from poulet_py.widefield.masks import (
@@ -28,21 +33,53 @@ class TestWidefieldAnalysisInit:
     def test_init_valid_path(self, sample_trial_path: Path):
         wf = WidefieldAnalysis(sample_trial_path)
         assert wf.trial_path == sample_trial_path
-        assert wf.tiff_path == sample_trial_path / "recording.tiff"
+        assert wf.imaging_path == sample_trial_path / "recording.tiff"
         assert wf.csv_path == sample_trial_path / "recording.csv"
         assert wf.h5_path == sample_trial_path / "data.h5"
         assert wf.green_path == sample_trial_path / "green.tiff"
+
+    def test_init_with_default_config(self, sample_trial_path: Path):
+        wf = WidefieldAnalysis(sample_trial_path)
+        assert wf.config.imaging_file == "recording.tiff"
+        assert wf.config.metadata_file == "data.h5"
 
     def test_init_nonexistent_path(self, tmp_path: Path):
         nonexistent = tmp_path / "nonexistent"
         with pytest.raises(FileNotFoundError):
             WidefieldAnalysis(nonexistent)
 
-    def test_init_missing_tiff(self, tmp_path: Path):
+    def test_init_missing_imaging_file(self, tmp_path: Path):
         trial_dir = tmp_path / "trial"
         trial_dir.mkdir()
         with pytest.raises(ValueError, match="recording.tiff not found"):
             WidefieldAnalysis(trial_dir)
+
+    def test_init_with_processed_config(self, tmp_path: Path):
+        trial_dir = tmp_path / "processed_trial"
+        trial_dir.mkdir()
+        np.save(trial_dir / "recording_corrected.npy", np.zeros((10, 50, 50)))
+        (trial_dir / "green.tiff").touch()
+        metadata = {"file_attributes": {"camera_fps": 20}}
+        with open(trial_dir / "metadata.json", "w") as f:
+            json.dump(metadata, f)
+
+        wf = WidefieldAnalysis(trial_dir, config=PROCESSED_CONFIG)
+        assert wf.imaging_path == trial_dir / "recording_corrected.npy"
+        assert wf.json_path == trial_dir / "metadata.json"
+        assert wf.h5_path is None
+
+    def test_init_with_custom_config(self, tmp_path: Path):
+        trial_dir = tmp_path / "custom_trial"
+        trial_dir.mkdir()
+        np.save(trial_dir / "my_data.npy", np.zeros((10, 50, 50)))
+
+        custom_config = DataConfig(
+            imaging_file="my_data.npy",
+            timestamps_file=None,
+            metadata_file=None,
+        )
+        wf = WidefieldAnalysis(trial_dir, config=custom_config)
+        assert wf.imaging_path == trial_dir / "my_data.npy"
 
 
 class TestWidefieldAnalysisLoadData:
@@ -63,6 +100,28 @@ class TestWidefieldAnalysisLoadData:
         assert wf.imaging_data.shape[0] > 0
         assert wf.imaging_data.shape[1] > 0
         assert wf.imaging_data.shape[2] > 0
+
+    def test_load_data_processed(self, tmp_path: Path):
+        trial_dir = tmp_path / "processed_trial"
+        trial_dir.mkdir()
+
+        imaging_data = np.random.rand(10, 50, 50).astype(np.float32)
+        np.save(trial_dir / "recording_corrected.npy", imaging_data)
+        (trial_dir / "green.tiff").touch()
+
+        metadata = {"file_attributes": {"camera_fps": 20, "mouse_id": "test_mouse"}}
+        with open(trial_dir / "metadata.json", "w") as f:
+            json.dump(metadata, f)
+
+        wf = WidefieldAnalysis(trial_dir, config=PROCESSED_CONFIG)
+        wf.load_data()
+
+        assert wf.imaging_data is not None
+        assert wf.imaging_data.shape == (10, 50, 50)
+        assert wf.file_attrs.get("camera_fps") == 20
+        assert wf.file_attrs.get("mouse_id") == "test_mouse"
+        assert wf.timestamps is None
+        assert len(wf.sensor_data) == 0
 
 
 class TestWidefieldAnalysisMetrics:
@@ -220,12 +279,88 @@ class TestWidefieldAnalysisUtility:
         assert wf.sensor_data == {}
 
 
+class TestMotionCorrectionPipeline:
+    def test_motion_correction(self, sample_trial_path: Path, tmp_path: Path):
+        wf = WidefieldAnalysis(sample_trial_path)
+        wf.load_data()
+
+        output_dir = tmp_path / "motion_output"
+        saved_paths = wf.motion_correction(
+            output_dir=output_dir,
+            shift_method="integer",
+            n_parallel_workers=None,
+            create_movie=False,
+        )
+
+        assert (output_dir / "recording_corrected.npy").exists()
+        assert (output_dir / "motion_vectors.npy").exists()
+        assert (output_dir / "motion_metadata.txt").exists()
+        assert (output_dir / "motion_analysis.npz").exists()
+        assert (output_dir / "motion_analysis_corrected.npz").exists()
+
+        assert "corrected_recording" in saved_paths
+        assert "motion_vectors" in saved_paths
+        assert "motion_metadata" in saved_paths
+        assert "motion_analysis" in saved_paths
+        assert "motion_analysis_corrected" in saved_paths
+
+        assert wf.motion_corrected_data is not None
+        assert wf.motion_vectors is not None
+
+    def test_motion_correction_with_movie(
+        self, sample_trial_path: Path, tmp_path: Path
+    ):
+        wf = WidefieldAnalysis(sample_trial_path)
+        wf.load_data()
+
+        output_dir = tmp_path / "motion_output_movie"
+        saved_paths = wf.motion_correction(
+            output_dir=output_dir,
+            create_movie=True,
+            movie_fps=10.0,
+        )
+
+        assert (output_dir / "recording_corrected.mp4").exists()
+        assert "movie" in saved_paths
+
+    def test_motion_correction_no_data(self, tmp_path: Path):
+        trial_dir = tmp_path / "empty_trial"
+        trial_dir.mkdir()
+        np.save(trial_dir / "recording.npy", np.zeros((10, 50, 50)))
+
+        custom_config = DataConfig(
+            imaging_file="recording.npy",
+            timestamps_file=None,
+            metadata_file=None,
+        )
+        wf = WidefieldAnalysis(trial_dir, config=custom_config)
+
+        with pytest.raises(ValueError, match="No imaging data loaded"):
+            wf.motion_correction(output_dir=tmp_path / "output")
+
+
 class TestIOModule:
-    def test_load_imaging(self, sample_trial_path: Path):
+    def test_load_imaging_tiff(self, sample_trial_path: Path):
         tiff_path = sample_trial_path / "recording.tiff"
         data = load_imaging(tiff_path)
         assert data is not None
         assert data.ndim == 3
+
+    def test_load_imaging_npy(self, tmp_path: Path):
+        npy_path = tmp_path / "recording.npy"
+        expected = np.random.rand(10, 50, 50).astype(np.float32)
+        np.save(npy_path, expected)
+
+        data = load_imaging(npy_path)
+        assert data is not None
+        assert data.ndim == 3
+        assert np.array_equal(data, expected)
+
+    def test_load_imaging_unsupported_format(self, tmp_path: Path):
+        bad_path = tmp_path / "recording.xyz"
+        bad_path.touch()
+        with pytest.raises(ValueError, match="Unsupported imaging format"):
+            load_imaging(bad_path)
 
     def test_load_green_reference(self, sample_trial_path: Path):
         green_path = sample_trial_path / "green.tiff"
@@ -245,6 +380,43 @@ class TestIOModule:
         assert isinstance(sensor_data, dict)
         assert isinstance(sensor_attrs, dict)
         assert isinstance(file_attrs, dict)
+
+    def test_extract_trial_metadata(self, sample_trial_path: Path):
+        h5_path = sample_trial_path / "data.h5"
+        metadata = extract_trial_metadata(h5_path)
+
+        assert "source_h5" in metadata
+        assert "trial_name" in metadata
+        assert "file_attributes" in metadata
+        assert "datasets" in metadata
+        assert "parsed" in metadata
+        assert isinstance(metadata["file_attributes"], dict)
+
+    def test_extract_trial_metadata_nonexistent(self, tmp_path: Path):
+        with pytest.raises(FileNotFoundError):
+            extract_trial_metadata(tmp_path / "nonexistent.h5")
+
+    def test_save_and_load_trial_metadata(self, tmp_path: Path):
+        metadata = {
+            "source_h5": "/path/to/data.h5",
+            "trial_name": "test_trial",
+            "file_attributes": {"camera_fps": 30.0, "mouse_id": "test"},
+            "datasets": {},
+            "parsed": {"baseline_temperature": 32.0, "target_temperature": 38.0},
+        }
+
+        output_path = tmp_path / "metadata.json"
+        save_trial_metadata(metadata, output_path)
+        assert output_path.exists()
+
+        loaded = load_trial_metadata(output_path)
+        assert loaded is not None
+        assert loaded["trial_name"] == "test_trial"
+        assert loaded["file_attributes"]["camera_fps"] == 30.0
+
+    def test_load_trial_metadata_nonexistent(self, tmp_path: Path):
+        result = load_trial_metadata(tmp_path / "nonexistent.json")
+        assert result is None
 
     def test_tiff_to_numpy_array(self):
         arr = np.zeros((10, 10, 10))
