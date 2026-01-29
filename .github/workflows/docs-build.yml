@@ -30,7 +30,7 @@ jobs:
 
       - name: Create PR for doc updates
         if: steps.changes.outputs.changes == 'true'
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           commit-message: "Auto-generate API reference docs"
           branch: "docs/auto-update-api-reference"
