@@ -1,16 +1,10 @@
 # Ordering software with hardware
-from enum import Enum
 from nidaqmx import Task
-from nidaqmx.system import System
 from nidaqmx.constants import AcquisitionType, Edge, LineGrouping, TerminalConfiguration
 from nidaqmx.stream_readers import AnalogMultiChannelReader
 from nidaqmx.stream_writers import AnalogMultiChannelWriter
 from nidaqmx.utils import flatten_channel_string
 from pydantic import BaseModel, Field
-from poulet_py import LOGGER
-
-
-from nidaqmx.constants import TerminalConfiguration
 
 
 class SampleClockConfig(BaseModel):

@@ -1,7 +1,9 @@
 try:
     from time import monotonic_ns
+
     from numpy import zeros
-    from poulet_py import DataSink, DataPacket, DataSource
+
+    from poulet_py import DataPacket, DataSink, DataSource
 except ImportError as e:
     msg = """
 Missing 'sources' module. Install options:
