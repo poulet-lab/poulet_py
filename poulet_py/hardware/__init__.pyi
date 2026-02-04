@@ -2,6 +2,7 @@
 from .camera import BaslerCamera, ThermalCamera
 from .stimulator import TCS, Arduino, JulaboChiller, TCSCommand, TCSStimulus
 from .triggers import BaseTrigger, GPIOTrigger, KeyboardTrigger
+from .daq import NIDaQ
 
 __all__ = [
     "TCS",
@@ -14,4 +15,5 @@ __all__ = [
     "BaseTrigger",
     "GPIOTrigger",
     "KeyboardTrigger",
+    "NIDaQ",
 ]
