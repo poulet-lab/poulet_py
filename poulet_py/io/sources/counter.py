@@ -1,6 +1,7 @@
 try:
     from time import monotonic_ns
-    from poulet_py import DataSink, DataPacket, DataSource
+
+    from poulet_py import DataPacket, DataSink, DataSource
 except ImportError as e:
     msg = """
 Missing 'sources' module. Install options:
@@ -9,6 +10,7 @@ Missing 'sources' module. Install options:
 - Full:         pip install poulet_py[all]
 """
     raise ImportError(msg) from e
+
 
 class TrialSource(DataSource):
     def __init__(self, name: str = "trial"):
