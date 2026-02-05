@@ -147,7 +147,7 @@ class TCSStimulus(BaseModel):
     surface : int
         Target surface (0-5, where 0 means all surfaces).
     baseline : float
-        Baseline temperature in °C (20-45).
+        Baseline temperature in °C (16-45).
     target : float
         Target temperature in °C (0-60).
     rise_rate : float
@@ -177,8 +177,8 @@ class TCSStimulus(BaseModel):
     )
     baseline: float = Field(
         30,
-        description="Baseline temperature in °C (20-45)",
-        ge=20,
+        description="Baseline temperature in °C (16-45)",
+        ge=16,
         le=45,
     )
     target: float = Field(
@@ -311,7 +311,7 @@ class TCS:
         self._write_lock = Lock()
         self._read_lock = Lock()
         self._thread = Thread(target=self._read_loop, daemon=True, name="TCS Serial Reader")
-        self._current_search = None  # (pattern, event, result)
+        self._current_search = None
         self._stimulus = TCSStimulus()
 
     @property
@@ -353,10 +353,10 @@ class TCS:
             " or '/dev/ttyUSB<number>'"
             " or '/dev/tty.usb<something>'\n"
 
-        if not 0 <= self.maximum_temperature <= 60:  # noqa: PLR2004
+        if not 0 <= self.maximum_temperature <= 60:
             msg += "Maximum temperature must be between 0 and 60°C\n"
 
-        if not 1 <= self.trigger_out_channel <= 255:  # noqa: PLR2004
+        if not 1 <= self.trigger_out_channel <= 255:
             msg += "Trigger out channel must be between 1 and 255\n"
 
         if self.read_timeout <= 0:
@@ -433,7 +433,6 @@ class TCS:
             If the write operation fails
         """
         try:
-            # Start reader thread if not already running
             self._start_reader()
             self._serial.flush()
             LOGGER.debug(f"Sending command: {command}")

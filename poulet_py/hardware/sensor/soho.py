@@ -1,16 +1,17 @@
 try:
-    import msvcrt
-    import os
-    import re
-    import socket
-    import struct
-    import threading
-    import time
     from collections.abc import Callable
-    from typing import Any, Dict, Optional, Tuple
+    from os.path import join
+    from re import sub
+    from socket import AF_INET, SOCK_STREAM, create_connection
+    from socket import socket as Socket
+    from struct import unpack
+    from threading import Thread
+    from time import sleep, time
+    from typing import Any
 
-    import pandas as pd
+    from pandas import DataFrame, MultiIndex, concat
     from pydantic import BaseModel, Field, PrivateAttr
+    from pynput.keyboard import Key, Listener
     from rich.console import Console
     from rich.prompt import Confirm
 
@@ -38,8 +39,8 @@ class Soho(BaseModel):
 
     _stop: bool = PrivateAttr(False)
     _active: bool = PrivateAttr(True)
-    _collection_thread: threading.Thread | None = PrivateAttr(None)
-    _listener_thread: threading.Thread | None = PrivateAttr(None)
+    _collection_thread: Thread | None = PrivateAttr(None)
+    _keyboard_listener_instance: Listener | None = PrivateAttr(None)
 
     def __init__(
         self,
@@ -54,18 +55,18 @@ class Soho(BaseModel):
         )
         self.error_log_file: str | None = None
         self.output_file: str | None = None
-        self.data: pd.DataFrame | None = None
+        self.data: DataFrame | None = None
         self.experiment_start_time: float | None = None
         self.on_data_callback: Callable[[], None] | None = None
 
     def set_error_log_path(self, path: str, file_name: str) -> None:
         """Set the file used for error logging."""
-        self.error_log_file = os.path.join(path, file_name)
+        self.error_log_file = join(path, file_name)
 
     def set_output_file(self, path: str, extra_name: str, base_file_name: str) -> None:
         """Configure the output CSV file."""
         name = f"{extra_name}_{base_file_name}"
-        self.output_file = os.path.join(path, name)
+        self.output_file = join(path, name)
 
     def set_experiment_start_time(self, start_time: float) -> None:
         """Set the shared experiment start time."""
@@ -75,20 +76,20 @@ class Soho(BaseModel):
         """Set a callback to be called when data is received."""
         self.on_data_callback = callback
 
-    def collect(self) -> pd.DataFrame:
+    def collect(self) -> DataFrame:
         """Collect data from the Ponemah server."""
         metadata: dict[str, dict[str, Any]] = {}
         rows: dict[tuple[str, str], dict[tuple[str, str], str]] = {}
         previous_data = self.data
 
         try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            with Socket(AF_INET, SOCK_STREAM) as sock:
                 sock.connect((self.host, self.port))
                 sock.settimeout(1.0)
                 while not self._stop:
                     try:
                         raw_len = self._read_exact(sock, 2)
-                        length = struct.unpack(">H", raw_len)[0]
+                        length = unpack(">H", raw_len)[0]
                         payload = self._read_exact(sock, length)
                         text = payload.decode("ascii", errors="ignore").strip()
                         fields = text.split(";")
@@ -125,7 +126,7 @@ class Soho(BaseModel):
                                     },
                                 )
                                 if self.experiment_start_time is not None:
-                                    timestamp = time.time() - self.experiment_start_time
+                                    timestamp = time() - self.experiment_start_time
                                     row[("meta", "experiment_timestamp")] = f"{timestamp:.6f}"
                                 row[("meta", "subject_id")] = meta["subject_id"]
                                 channel = meta["channel_label"]
@@ -148,13 +149,13 @@ class Soho(BaseModel):
             Soho.log_error(str(err), self.error_log_file)
 
         ordered_rows = list(rows.values())
-        df = pd.DataFrame(ordered_rows)
+        df = DataFrame(ordered_rows)
         if not df.empty and len(df.columns) > 0:
-            df.columns = pd.MultiIndex.from_tuples(df.columns)
+            df.columns = MultiIndex.from_tuples(df.columns)
 
         if previous_data is not None and not previous_data.empty:
             if not df.empty:
-                self.data = pd.concat([previous_data, df], ignore_index=True)
+                self.data = concat([previous_data, df], ignore_index=True)
             else:
                 self.data = previous_data
         else:
@@ -185,11 +186,10 @@ class Soho(BaseModel):
         console.rule("[bold cyan]🟢 RECORDING WITH PONEMAH[/bold cyan]", style="bold cyan")
         console.print("Press 'e' to end recording, 't' to test connection.")
 
-        self._collection_thread = threading.Thread(target=self.collect)
+        self._collection_thread = Thread(target=self.collect)
         self._collection_thread.start()
 
-        self._listener_thread = threading.Thread(target=self._keyboard_listener)
-        self._listener_thread.start()
+        self._start_keyboard_listener()
 
         console.print("[bold green]Soho recording started.[/bold green]")
 
@@ -197,11 +197,11 @@ class Soho(BaseModel):
         """Signal the collector to stop."""
         self._stop = True
         self._active = False
+        self._stop_keyboard_listener()
 
     def wait_for_completion(self) -> None:
         """Wait for both threads to complete."""
-        if self._listener_thread:
-            self._listener_thread.join()
+        self._stop_keyboard_listener()
         if self._collection_thread:
             self._collection_thread.join()
 
@@ -233,47 +233,59 @@ class Soho(BaseModel):
                 "activated. Press Enter when you're ready to start recording."
             )
             self._stop = False
-            self._collection_thread = threading.Thread(target=self.collect)
+            self._collection_thread = Thread(target=self.collect)
             self._collection_thread.start()
             console.print("[bold green]Recording resumed.[/bold green]")
         else:
             console.print("[bold red]Recording not resumed.[/bold red]")
             self._active = False
 
-    def _keyboard_listener(self) -> None:
-        """Monitor keyboard input for stopping or testing connection."""
-        if msvcrt is None:
-            input()
-            console.print("Recording finished, stopping Soho, waiting for the last reading...")
-            self.stop()
-            return
+    def _start_keyboard_listener(self) -> None:
+        """Start the pynput keyboard listener."""
+        self._keyboard_listener_instance = Listener(on_press=self._on_key_press)
+        self._keyboard_listener_instance.start()
 
-        while self._active:
-            if msvcrt.kbhit():
-                key = msvcrt.getwch()
+    def _stop_keyboard_listener(self) -> None:
+        """Stop the pynput keyboard listener."""
+        if self._keyboard_listener_instance is not None:
+            self._keyboard_listener_instance.stop()
+            self._keyboard_listener_instance = None
 
-                if key.lower() == "e":
-                    confirm = Confirm.ask(
-                        "Are you sure you want to stop recording? (y/n): ", default=True
-                    )
+    def _on_key_press(self, key: Key) -> bool | None:
+        """Handle key press events from pynput."""
+        if not self._active:
+            return False
 
-                    if confirm:
-                        console.print("[bold green]Stopping recording...[/bold green]")
-                        self.stop()
-                        break
+        try:
+            key_char = key.char if hasattr(key, "char") else None
+        except AttributeError:
+            return None
 
-                elif key.lower() == "t":
-                    confirm = Confirm.ask(
-                        "Pause recording to test connection? (y/n): ", default=True
-                    )
+        if key_char is None:
+            return None
 
-                    if confirm:
-                        self.pause_and_test_connection()
+        if key_char.lower() == "e":
+            confirm = Confirm.ask(
+                "Are you sure you want to stop recording? (y/n): ", default=True
+            )
 
-            time.sleep(0.1)
+            if confirm:
+                console.print("[bold green]Stopping recording...[/bold green]")
+                self.stop()
+                return False
+
+        elif key_char.lower() == "t":
+            confirm = Confirm.ask(
+                "Pause recording to test connection? (y/n): ", default=True
+            )
+
+            if confirm:
+                self.pause_and_test_connection()
+
+        return None
 
     @staticmethod
-    def _read_exact(sock: socket.socket, n: int) -> bytes:
+    def _read_exact(sock: Socket, n: int) -> bytes:
         """Read exactly n bytes from a socket."""
         buf = bytearray()
         while len(buf) < n:
@@ -283,16 +295,24 @@ class Soho(BaseModel):
             buf.extend(chunk)
         return bytes(buf)
 
+    @staticmethod
+    def log_error(message: str, log_file: str | None = None) -> None:
+        """Log an error message to LOGGER and optionally to a file."""
+        LOGGER.error(message)
+        if log_file is not None:
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(f"{message}\n")
 
-def test_ponemah_connection(HOST: str, PORT: int) -> None:
+
+def test_ponemah_connection(host: str, port: int) -> bool:
     """Test connection to Ponemah server."""
     console.print("Testing remote connection with PONEMAH")
     while True:
         try:
-            with socket.create_connection((HOST, PORT), timeout=1) as sock:
+            with create_connection((host, port), timeout=1) as sock:
                 sock.settimeout(1)
                 raw = sock.recv(1024).decode("ascii", errors="ignore")
-                clean = re.sub(r"[^ -~]", "", raw).strip()
+                clean = sub(r"[^ -~]", "", raw).strip()
                 if ";;0" in clean or "0;;" in clean:
                     console.print("[bold green]Response successful[/bold green]")
                     return True
@@ -301,4 +321,4 @@ def test_ponemah_connection(HOST: str, PORT: int) -> None:
             console.print(
                 "[red]Connection refused, start test in setup remote connection test[/red]"
             )
-        time.sleep(1)
+        sleep(1)
