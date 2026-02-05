@@ -1,3 +1,19 @@
+"""
+Soho (Ponemah) data collection interface module.
+
+This module provides a Python interface for collecting physiological data
+from DSI Ponemah software via TCP socket connection. It supports real-time
+data streaming, keyboard-controlled recording sessions, and CSV export.
+
+Examples
+--------
+>>> soho = Soho(host="192.168.1.100", port=9000)
+>>> soho.set_output_file("/data", "experiment", "subject01.csv")
+>>> soho.start()
+>>> soho.wait_for_completion()
+>>> soho.save()
+"""
+
 try:
     from collections.abc import Callable
     from os.path import join
@@ -30,7 +46,80 @@ console = Console()
 
 
 class Soho(BaseModel):
-    """Interface for collecting data from Ponemah."""
+    """
+    Interface for collecting physiological data from DSI Ponemah software.
+
+    This class establishes a TCP socket connection to the Ponemah server and
+    collects streaming data in real-time. It provides keyboard controls for
+    managing recording sessions and supports CSV export of collected data.
+
+    Parameters
+    ----------
+    host : str
+        IP address or hostname of the Ponemah server.
+    port : int
+        TCP port number for the Ponemah connection (1-65535).
+    output_path : str, optional
+        Default output directory path for data files.
+    error_log_path : str, optional
+        Default directory path for error log files.
+
+    Attributes
+    ----------
+    host : str
+        IP address or hostname of the Ponemah server.
+    port : int
+        TCP port number for the Ponemah connection.
+    output_path : str or None
+        Default output directory path for data files.
+    error_log_path : str or None
+        Default directory path for error log files.
+    error_log_file : str or None
+        Full path to the error log file.
+    output_file : str or None
+        Full path to the output CSV file.
+    data : DataFrame or None
+        Collected data as a pandas DataFrame with MultiIndex columns.
+    experiment_start_time : float or None
+        Unix timestamp marking the start of the experiment.
+    on_data_callback : Callable or None
+        Optional callback function invoked when data is received.
+
+    Methods
+    -------
+    set_error_log_path(path, file_name)
+        Configure the error log file path.
+    set_output_file(path, extra_name, base_file_name)
+        Configure the output CSV file path.
+    set_experiment_start_time(start_time)
+        Set the experiment start timestamp.
+    set_on_data_callback(callback)
+        Register a callback for data reception events.
+    collect()
+        Collect data from the Ponemah server.
+    save()
+        Save collected data to CSV file.
+    start()
+        Begin data collection with keyboard controls.
+    stop()
+        Stop data collection.
+    wait_for_completion()
+        Block until collection threads complete.
+    pause_and_test_connection()
+        Pause recording and test the server connection.
+    log_error(message, log_file)
+        Log an error message.
+
+    Examples
+    --------
+    >>> soho = Soho(host="192.168.1.100", port=9000)
+    >>> soho.set_output_file("/data", "experiment", "subject01.csv")
+    >>> soho.set_error_log_path("/logs", "errors.log")
+    >>> soho.start()
+    >>> soho.wait_for_completion()
+    >>> soho.save()
+    >>> print(soho.data.head())
+    """
 
     host: str = Field(..., min_length=1)
     port: int = Field(..., ge=1, le=65535)
@@ -50,6 +139,22 @@ class Soho(BaseModel):
         error_log_path: str | None = None,
         **kwargs,
     ) -> None:
+        """
+        Initialize a Soho data collector instance.
+
+        Parameters
+        ----------
+        host : str
+            IP address or hostname of the Ponemah server.
+        port : int
+            TCP port number for the Ponemah connection (1-65535).
+        output_path : str, optional
+            Default output directory path for data files.
+        error_log_path : str, optional
+            Default directory path for error log files.
+        **kwargs
+            Additional keyword arguments passed to BaseModel.
+        """
         super().__init__(
             host=host, port=port, output_path=output_path, error_log_path=error_log_path, **kwargs
         )
@@ -60,24 +165,87 @@ class Soho(BaseModel):
         self.on_data_callback: Callable[[], None] | None = None
 
     def set_error_log_path(self, path: str, file_name: str) -> None:
-        """Set the file used for error logging."""
+        """
+        Configure the file path for error logging.
+
+        Parameters
+        ----------
+        path : str
+            Directory path where the error log file will be stored.
+        file_name : str
+            Name of the error log file.
+        """
         self.error_log_file = join(path, file_name)
 
     def set_output_file(self, path: str, extra_name: str, base_file_name: str) -> None:
-        """Configure the output CSV file."""
+        """
+        Configure the output CSV file path.
+
+        The final filename is constructed as "{extra_name}_{base_file_name}".
+
+        Parameters
+        ----------
+        path : str
+            Directory path where the output file will be stored.
+        extra_name : str
+            Prefix to prepend to the base filename.
+        base_file_name : str
+            Base name of the output file (typically includes .csv extension).
+        """
         name = f"{extra_name}_{base_file_name}"
         self.output_file = join(path, name)
 
     def set_experiment_start_time(self, start_time: float) -> None:
-        """Set the shared experiment start time."""
+        """
+        Set the experiment start timestamp for relative timing.
+
+        When set, collected data will include an experiment_timestamp column
+        calculated as the offset from this start time.
+
+        Parameters
+        ----------
+        start_time : float
+            Unix timestamp (seconds since epoch) marking experiment start.
+        """
         self.experiment_start_time = start_time
 
     def set_on_data_callback(self, callback: Callable[[], None]) -> None:
-        """Set a callback to be called when data is received."""
+        """
+        Register a callback function for data reception events.
+
+        The callback is invoked each time a data packet is received from
+        the Ponemah server. Exceptions in the callback are logged but do
+        not interrupt data collection.
+
+        Parameters
+        ----------
+        callback : Callable[[], None]
+            A function with no arguments to be called on data reception.
+        """
         self.on_data_callback = callback
 
     def collect(self) -> DataFrame:
-        """Collect data from the Ponemah server."""
+        """
+        Collect data from the Ponemah server via TCP socket.
+
+        Establishes a connection to the configured host and port, then
+        continuously reads and parses data packets until stopped. Data is
+        accumulated and merged with any previously collected data.
+
+        Returns
+        -------
+        DataFrame
+            Collected data with MultiIndex columns organized by channel
+            and parameter name. Includes metadata columns for timing and
+            subject identification.
+
+        Raises
+        ------
+        ConnectionError
+            If the socket connection fails or is unexpectedly closed.
+        OSError
+            If a network-related error occurs during data collection.
+        """
         metadata: dict[str, dict[str, Any]] = {}
         rows: dict[tuple[str, str], dict[tuple[str, str], str]] = {}
         previous_data = self.data
@@ -164,7 +332,18 @@ class Soho(BaseModel):
         return self.data
 
     def save(self) -> None:
-        """Save collected data to the configured CSV file."""
+        """
+        Save collected data to the configured CSV file.
+
+        Writes the accumulated DataFrame to the output file path configured
+        via set_output_file(). If no output file or data is available,
+        an error is logged and the method returns without action.
+
+        Raises
+        ------
+        OSError
+            If the file cannot be written due to permissions or disk errors.
+        """
         if self.output_file is None or self.data is None:
             Soho.log_error("Output file or data not set.", self.error_log_file)
             return
@@ -174,7 +353,13 @@ class Soho(BaseModel):
             Soho.log_error(str(err), self.error_log_file)
 
     def start(self) -> None:
-        """Start data collection and keyboard listener threads."""
+        """
+        Start data collection with interactive keyboard controls.
+
+        Launches background threads for data collection and keyboard
+        monitoring. Prompts the user to confirm readiness before starting.
+        During recording, press 'e' to end or 't' to test the connection.
+        """
         self._active = True
         self._stop = False
 
@@ -194,19 +379,37 @@ class Soho(BaseModel):
         console.print("[bold green]Soho recording started.[/bold green]")
 
     def stop(self) -> None:
-        """Signal the collector to stop."""
+        """
+        Signal the data collector to stop recording.
+
+        Sets internal flags to terminate the collection loop and stops
+        the keyboard listener. The collection thread will complete its
+        current operation before fully stopping.
+        """
         self._stop = True
         self._active = False
         self._stop_keyboard_listener()
 
     def wait_for_completion(self) -> None:
-        """Wait for both threads to complete."""
+        """
+        Block until all collection threads have completed.
+
+        Stops the keyboard listener and waits for the data collection
+        thread to finish. Call this method after start() to ensure all
+        data has been collected before saving or processing.
+        """
         self._stop_keyboard_listener()
         if self._collection_thread:
             self._collection_thread.join()
 
     def pause_and_test_connection(self) -> None:
-        """Pause recording, test connection, and optionally resume."""
+        """
+        Pause recording to test the Ponemah server connection.
+
+        Temporarily stops data collection, guides the user through testing
+        the remote connection in Ponemah, and offers the option to resume
+        recording afterward. Previously collected data is preserved.
+        """
         console.print("[bold yellow]Pausing recording...[/bold yellow]")
         self._stop = True
 
@@ -282,7 +485,26 @@ class Soho(BaseModel):
 
     @staticmethod
     def _read_exact(sock: Socket, n: int) -> bytes:
-        """Read exactly n bytes from a socket."""
+        """
+        Read exactly n bytes from a socket.
+
+        Parameters
+        ----------
+        sock : Socket
+            Connected socket to read from.
+        n : int
+            Exact number of bytes to read.
+
+        Returns
+        -------
+        bytes
+            The requested bytes read from the socket.
+
+        Raises
+        ------
+        ConnectionError
+            If the socket is closed before all bytes are read.
+        """
         buf = bytearray()
         while len(buf) < n:
             chunk = sock.recv(n - len(buf))
@@ -293,7 +515,17 @@ class Soho(BaseModel):
 
     @staticmethod
     def log_error(message: str, log_file: str | None = None) -> None:
-        """Log an error message to LOGGER and optionally to a file."""
+        """
+        Log an error message to the application logger and optionally to a file.
+
+        Parameters
+        ----------
+        message : str
+            The error message to log.
+        log_file : str, optional
+            Path to a file where the message should also be appended.
+            If None, the message is only logged to LOGGER.
+        """
         LOGGER.error(message)
         if log_file is not None:
             with open(log_file, "a", encoding="utf-8") as f:
@@ -301,7 +533,25 @@ class Soho(BaseModel):
 
 
 def test_ponemah_connection(host: str, port: int) -> bool:
-    """Test connection to Ponemah server."""
+    """
+    Test the TCP connection to a Ponemah server.
+
+    Attempts to connect to the specified host and port, waiting for a valid
+    response from the Ponemah remote connection test. Retries indefinitely
+    until a successful connection is established.
+
+    Parameters
+    ----------
+    host : str
+        IP address or hostname of the Ponemah server.
+    port : int
+        TCP port number for the Ponemah connection.
+
+    Returns
+    -------
+    bool
+        True when a successful connection response is received.
+    """
     console.print("Testing remote connection with PONEMAH")
     while True:
         try:
