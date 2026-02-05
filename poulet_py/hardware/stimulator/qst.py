@@ -147,7 +147,7 @@ class TCSStimulus(BaseModel):
     surface : int
         Target surface (0-5, where 0 means all surfaces).
     baseline : float
-        Baseline temperature in °C (16-45).
+        Baseline temperature in °C (20-45).
     target : float
         Target temperature in °C (0-60).
     rise_rate : float
@@ -177,8 +177,8 @@ class TCSStimulus(BaseModel):
     )
     baseline: float = Field(
         30,
-        description="Baseline temperature in °C (16-45)",
-        ge=16,
+        description="Baseline temperature in °C (20-45)",
+        ge=20,
         le=45,
     )
     target: float = Field(
