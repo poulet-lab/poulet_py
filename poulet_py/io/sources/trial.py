@@ -18,7 +18,7 @@ class TrialSource(DataSource):
         self._trial = 0
         self._sink = None
 
-    def attach(self, sink):
+    def attach(self, sink: DataSink):
         self._sink = sink
 
     def next_trial(self, **metadata) -> int:

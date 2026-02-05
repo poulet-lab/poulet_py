@@ -50,40 +50,40 @@ constraints-file = "constraints.txt"
 # Converters
 seq = [
   "setuptools<=80.10", # needed for flirpy as it depends on pkg_resources
-  "flirpy",             # install it separately from github repo
-  "zstd<=1.5",
-  "pandas<=2.3",
-  "tqdm==4.67.*",
-  "pillow==11.3.*",
-  "h5py==3.14.*",
+  "flirpy",            # install it separately from github repo
+  "zstandard<=0.25",
+  "pandas<=3.0",
+  "tqdm<=4.67",
+  "pillow<=12.1",
+  "h5py<=3.15",
 ]
 # Hardware
 camera = [
-  "pypylon==4.2.*",
-  "opencv-python==4.12.*",
-  "numpy==2.2.*",
-  "scipy==1.16.*",
-  "matplotlib==3.10.*",
-  "h5py==3.14.*",
-  "keyboard==0.13.*",
-  "pywin32==311; platform_system == 'Windows'",
-  "pythonnet==3.0.*",
+  "pypylon<=4.2",
+  "opencv-python<=4.13",
+  "numpy<=2.4",
+  "scipy<=1.17",
+  "matplotlib<=3.10",
+  "h5py<=3.15",
+  "keyboard<=0.13",
+  "pywin32<=311; platform_system == 'Windows'",
+  "pythonnet<=3.0; platform_system == 'Windows'",
 ]
 daq = ["poulet_py[nidaq]"]
-nidaq = ["nidaqmx<=1.4.1"]
-arduino = ["pyserial==3.5.*"]
-julabo = ["pyserial==3.5.*"]
-qst = ["pandas==2.3.*", "tqdm==4.67.*", "pyserial==3.5.*"]
+nidaq = ["nidaqmx<=1.4"]
+arduino = ["pyserial<=3.5"]
+julabo = ["pyserial<=3.5"]
+qst = ["pandas<=3.0", "tqdm<=4.67", "pyserial<=3.5"]
 triggers = ["poulet_py[gpio]"]
-gpio = ["gpiozero==2.0.*", "lgpio==0.2.*"]
+gpio = ["gpiozero<=2.0", "lgpio<=0.2; platform_system == 'Linux'"]
 # IO
 sinks = ["poulet_py[writers]"]
 sources = ["poulet_py[writers]"]
-writers = ["numpydantic<=1.7.0", "h5py<=3.15.1"]
+writers = ["numpydantic<=1.7", "h5py<=3.15"]
 # Tools
 
 # Utils
-osc = ["pandas==2.3.*", "matplotlib==3.10.*", "numpy==2.2.*"]
+osc = ["pandas<=3.0", "matplotlib<=3.10", "numpy<=2.4"]
 ## Main modules ##
 converters = ["poulet_py[seq]"]
 hardware = ["poulet_py[camera, daq, arduino, julabo, qst, triggers]"]
@@ -94,10 +94,10 @@ utils = ["poulet_py[qst, osc]"]
 all = ["poulet_py[converters, hardware, io, tools, utils]"]
 # Docs
 docs = [
-  "sphinx==8.2.*",
-  "pydata-sphinx-theme==0.16.*",
-  "sphinx-autodoc-typehints==3.2.*",
-  "ipython==9.4.*",
+  "sphinx<=9.1",
+  "pydata-sphinx-theme<=0.16",
+  "sphinx-autodoc-typehints<=3.6",
+  "ipython<=9.10",
 ]
 
 [tool.hatch.envs.docs]
@@ -122,7 +122,7 @@ python -m http.server --directory docs/build 8000
 """
 
 [tool.hatch.envs.lint]
-dependencies = ["mypy==1.17.*", "ruff==0.12.*"]
+dependencies = ["mypy<=1.19", "ruff<=0.15"]
 
 [tool.hatch.envs.lint.scripts]
 typing = "mypy --install-types --non-interactive {args:poulet_py tests}"
@@ -220,7 +220,7 @@ ban-relative-imports = "all"
 
 [tool.hatch.envs.hatch-test]
 extra-dependencies = [
-  "pytest==8.4.*",
+  "pytest<=9.0",
   "flirpy @ git+https://github.com/LJMUAstroecology/flirpy.git",
   "poulet_py[all]",
 ]
@@ -228,7 +228,7 @@ extra-dependencies = [
 [[tool.hatch.envs.hatch-test.matrix]]
 python = ["3.11", "3.12", "3.13"]
 dependencies = [
-  "pytest==8.4.*",
+  "pytest<=9.0",
   "flirpy @ git+https://github.com/LJMUAstroecology/flirpy.git",
   "'poulet_py[all]'",
 ]

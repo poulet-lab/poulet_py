@@ -1,6 +1,6 @@
 # ruff: noqa TID252
 from .sinks import DataSink, QueueDataSink
-from .sources import DataSource, NIAnalogInputSource
+from .sources import DataSource, NIAnalogInputSource, TrialSource
 from .writers import DataPacket, HDFWriter, Writer
 
 __all__ = [
@@ -11,4 +11,5 @@ __all__ = [
     "DataPacket",
     "HDFWriter",
     "Writer",
+    "TrialSource",
 ]

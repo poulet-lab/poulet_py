@@ -25,24 +25,21 @@ class QueueDataSink(DataSink):
         )
         self.thread.start()
 
-
-def push(self, packet: DataPacket):
-    try:
-        self.queue.put_nowait(packet)
-    except queue.Full:
-        LOGGER.warning("DataSink queue full — dropping packet")
-
-
-def _run(self):
-    while self._running or not self.queue.empty():
+    def push(self, packet: DataPacket):
         try:
-            packet = self.queue.get(timeout=0.5)
-        except queue.Empty:
-            continue
+            self.queue.put_nowait(packet)
+        except queue.Full:
+            LOGGER.warning("DataSink queue full — dropping packet")
 
-        self.writer.write(packet)
+    def _run(self):
+        while self._running or not self.queue.empty():
+            try:
+                packet = self.queue.get(timeout=0.5)
+            except queue.Empty:
+                continue
 
+            self.writer.write(packet)
 
-def close(self):
-    self._running = False
-    self.thread.join()
+    def close(self):
+        self._running = False
+        self.thread.join()
