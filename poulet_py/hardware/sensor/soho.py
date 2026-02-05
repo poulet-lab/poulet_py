@@ -265,9 +265,7 @@ class Soho(BaseModel):
             return None
 
         if key_char.lower() == "e":
-            confirm = Confirm.ask(
-                "Are you sure you want to stop recording? (y/n): ", default=True
-            )
+            confirm = Confirm.ask("Are you sure you want to stop recording? (y/n): ", default=True)
 
             if confirm:
                 console.print("[bold green]Stopping recording...[/bold green]")
@@ -275,9 +273,7 @@ class Soho(BaseModel):
                 return False
 
         elif key_char.lower() == "t":
-            confirm = Confirm.ask(
-                "Pause recording to test connection? (y/n): ", default=True
-            )
+            confirm = Confirm.ask("Pause recording to test connection? (y/n): ", default=True)
 
             if confirm:
                 self.pause_and_test_connection()
