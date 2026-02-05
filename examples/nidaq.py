@@ -1,4 +1,5 @@
 from nidaqmx.constants import AcquisitionType
+from numpy import empty
 
 from poulet_py import (
     AnalogInputChannel,
@@ -8,12 +9,11 @@ from poulet_py import (
     ClockTask,
     DigitalOutputChannel,
     DigitalOutputTask,
-    NIDaQ,
-    TrialSource,
-    QueueDataSink,
     HDFWriter,
+    NIDaQ,
+    QueueDataSink,
+    TrialSource,
 )
-from numpy import empty
 
 rate = 1000
 samps_per_chan = rate * 20
@@ -62,4 +62,3 @@ trial_source.attach(qds)
 with nidac:
     trial_source.next_trial()
     ai_task.read()
-
