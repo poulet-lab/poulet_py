@@ -85,7 +85,7 @@ hardware = ["poulet_py[camera, arduino, julabo, qst, triggers, soho]"]
 tools = ["orjson"]
 utils = ["poulet_py[qst, osc]"]
 # Install all modules
-all = ["poulet_py[converters, hardware, tools, utils]"]
+all = ["poulet_py[converters, hardware, tools, utils, soho]"]
 # Docs
 docs = [
   "sphinx==8.2.*",
