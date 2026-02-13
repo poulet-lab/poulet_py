@@ -17,11 +17,11 @@ Examples
 try:
     from collections.abc import Callable
     from os.path import basename, exists, join
-    from subprocess import Popen
     from re import sub
     from socket import AF_INET, SOCK_STREAM, create_connection
     from socket import socket as Socket
     from struct import unpack
+    from subprocess import Popen
     from threading import Thread
     from time import sleep, time
     from typing import Any
@@ -623,6 +623,7 @@ def open_ponemah(
     try:
         if run_as_admin:
             import subprocess
+
             subprocess.run(
                 [
                     "powershell",
