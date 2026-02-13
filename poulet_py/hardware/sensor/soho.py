@@ -27,7 +27,7 @@ try:
     from typing import Any
 
     from pandas import DataFrame, MultiIndex, concat
-    from pydantic import BaseModel, Field, PrivateAttr
+    from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
     from pynput.keyboard import Key, Listener
     from rich.console import Console
     from rich.prompt import Confirm
@@ -126,10 +126,17 @@ class Soho(BaseModel):
     >>> print(soho.data.head())
     """
 
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     host: str = Field(HOST, min_length=1)
     port: int = Field(PORT, ge=1, le=65535)
     output_path: str | None = None
     error_log_path: str | None = None
+    error_log_file: str | None = None
+    output_file: str | None = None
+    data: DataFrame | None = None
+    experiment_start_time: float | None = None
+    on_data_callback: Callable[[], None] | None = None
 
     _stop: bool = PrivateAttr(False)
     _active: bool = PrivateAttr(True)
@@ -163,11 +170,6 @@ class Soho(BaseModel):
         super().__init__(
             host=host, port=port, output_path=output_path, error_log_path=error_log_path, **kwargs
         )
-        self.error_log_file: str | None = None
-        self.output_file: str | None = None
-        self.data: DataFrame | None = None
-        self.experiment_start_time: float | None = None
-        self.on_data_callback: Callable[[], None] | None = None
 
     def set_error_log_path(self, path: str, file_name: str) -> None:
         """
