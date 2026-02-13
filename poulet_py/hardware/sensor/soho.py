@@ -16,7 +16,8 @@ Examples
 
 try:
     from collections.abc import Callable
-    from os.path import join
+    from os.path import basename, exists, join
+    from subprocess import Popen
     from re import sub
     from socket import AF_INET, SOCK_STREAM, create_connection
     from socket import socket as Socket
@@ -43,6 +44,10 @@ Missing 'soho' module. Install options:
     raise ImportError(msg) from e
 
 console = Console()
+
+HOST = "localhost"
+PORT = 6732
+PONEMAH_EXECUTABLE = r"C:\\Ponemah\\PPP3.exe"
 
 
 class Soho(BaseModel):
@@ -121,8 +126,8 @@ class Soho(BaseModel):
     >>> print(soho.data.head())
     """
 
-    host: str = Field(..., min_length=1)
-    port: int = Field(..., ge=1, le=65535)
+    host: str = Field(HOST, min_length=1)
+    port: int = Field(PORT, ge=1, le=65535)
     output_path: str | None = None
     error_log_path: str | None = None
 
@@ -133,8 +138,8 @@ class Soho(BaseModel):
 
     def __init__(
         self,
-        host: str,
-        port: int,
+        host: str = HOST,
+        port: int = PORT,
         output_path: str | None = None,
         error_log_path: str | None = None,
         **kwargs,
@@ -568,3 +573,70 @@ def test_ponemah_connection(host: str, port: int) -> bool:
                 "[red]Connection refused, start test in setup remote connection test[/red]"
             )
         sleep(1)
+
+
+def open_ponemah(
+    executable: str = PONEMAH_EXECUTABLE,
+    wait_seconds: float = 4.0,
+    run_as_admin: bool = True,
+) -> bool:
+    """
+    Launch Ponemah executable if available.
+
+    Ponemah is the DSI telemetry software that Soho connects to for data
+    collection. This helper launches it, typically with elevated privileges.
+
+    Parameters
+    ----------
+    executable : str, optional
+        Full path to the Ponemah executable.
+    wait_seconds : float, optional
+        Time to wait after launching, allowing the UI to open.
+    run_as_admin : bool, optional
+        If True, launch with RunAs (admin). Default True.
+
+    Returns
+    -------
+    bool
+        True if Ponemah is already running or launch succeeds, otherwise False.
+    """
+    try:
+        import psutil
+    except ImportError:
+        psutil = None
+
+    name = basename(executable)
+    if psutil is not None:
+        for proc in psutil.process_iter(["name"]):
+            if proc.info["name"] == name:
+                console.print("[bold green]Ponemah already running.[/bold green]")
+                return True
+
+    if not exists(executable):
+        msg = f"Ponemah executable not found: {executable}"
+        LOGGER.error(msg)
+        console.print(f"[red]{msg}[/red]")
+        return False
+
+    try:
+        if run_as_admin:
+            import subprocess
+            subprocess.run(
+                [
+                    "powershell",
+                    "-Command",
+                    f'Start-Process "{executable}" -Verb RunAs',
+                ],
+                check=True,
+            )
+        else:
+            Popen(executable)
+        LOGGER.info("Ponemah launched successfully")
+        console.print("[bold green]Ponemah launched.[/bold green]")
+        sleep(wait_seconds)
+        return True
+    except OSError as err:
+        msg = f"Failed to open Ponemah: {err}"
+        LOGGER.error(msg)
+        console.print(f"[red]{msg}[/red]")
+        return False
