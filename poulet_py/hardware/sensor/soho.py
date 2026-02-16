@@ -22,7 +22,7 @@ try:
     from socket import socket as Socket
     from struct import unpack
     from subprocess import Popen
-    from threading import Thread
+    from threading import Lock, Thread
     from time import sleep, time
     from typing import Any
 
@@ -142,6 +142,8 @@ class Soho(BaseModel):
     _active: bool = PrivateAttr(True)
     _collection_thread: Thread | None = PrivateAttr(None)
     _keyboard_listener_instance: Listener | None = PrivateAttr(None)
+    _data_lock: Lock = PrivateAttr(default_factory=Lock)
+    _packet_count: int = PrivateAttr(0)
 
     def __init__(
         self,
@@ -231,6 +233,27 @@ class Soho(BaseModel):
         """
         self.on_data_callback = callback
 
+    def _update_data_from_rows(
+        self,
+        rows: dict[tuple[str, str], dict[tuple[str, str], str]],
+        metadata: dict[str, dict[str, Any]],
+        previous_data: DataFrame | None,
+    ) -> None:
+        """Update self.data from current rows for incremental save support."""
+        ordered_rows = list(rows.values())
+        df = DataFrame(ordered_rows)
+        if not df.empty and len(df.columns) > 0:
+            df.columns = MultiIndex.from_tuples(df.columns)
+        if previous_data is not None and not previous_data.empty:
+            if not df.empty:
+                combined = concat([previous_data, df], ignore_index=True)
+            else:
+                combined = previous_data
+        else:
+            combined = df
+        with self._data_lock:
+            self.data = combined
+
     def collect(self) -> DataFrame:
         """
         Collect data from the Ponemah server via TCP socket.
@@ -256,6 +279,7 @@ class Soho(BaseModel):
         metadata: dict[str, dict[str, Any]] = {}
         rows: dict[tuple[str, str], dict[tuple[str, str], str]] = {}
         previous_data = self.data
+        self._packet_count = 0
 
         try:
             with Socket(AF_INET, SOCK_STREAM) as sock:
@@ -315,6 +339,11 @@ class Soho(BaseModel):
                                         Soho.log_error(
                                             f"Error in data callback: {e}", self.error_log_file
                                         )
+                                self._packet_count += 1
+                                if self._packet_count % 100 == 0:
+                                    self._update_data_from_rows(
+                                        rows, metadata, previous_data
+                                    )
                     except TimeoutError:
                         continue
                     except (ConnectionError, OSError) as err:
@@ -330,12 +359,14 @@ class Soho(BaseModel):
 
         if previous_data is not None and not previous_data.empty:
             if not df.empty:
-                self.data = concat([previous_data, df], ignore_index=True)
+                result = concat([previous_data, df], ignore_index=True)
             else:
-                self.data = previous_data
+                result = previous_data
         else:
-            self.data = df
+            result = df
 
+        with self._data_lock:
+            self.data = result
         return self.data
 
     def save(self) -> None:
@@ -351,11 +382,16 @@ class Soho(BaseModel):
         OSError
             If the file cannot be written due to permissions or disk errors.
         """
-        if self.output_file is None or self.data is None:
-            Soho.log_error("Output file or data not set.", self.error_log_file)
+        if self.output_file is None:
+            Soho.log_error("Output file not set.", self.error_log_file)
+            return
+        with self._data_lock:
+            data = self.data
+        if data is None:
+            Soho.log_error("No data to save.", self.error_log_file)
             return
         try:
-            self.data.to_csv(self.output_file, index=False)
+            data.to_csv(self.output_file, index=False)
         except OSError as err:
             Soho.log_error(str(err), self.error_log_file)
 
