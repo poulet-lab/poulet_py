@@ -341,9 +341,7 @@ class Soho(BaseModel):
                                         )
                                 self._packet_count += 1
                                 if self._packet_count % 100 == 0:
-                                    self._update_data_from_rows(
-                                        rows, metadata, previous_data
-                                    )
+                                    self._update_data_from_rows(rows, metadata, previous_data)
                     except TimeoutError:
                         continue
                     except (ConnectionError, OSError) as err:
