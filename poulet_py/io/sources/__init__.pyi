@@ -1,6 +1,7 @@
 # ruff: noqa TID252
-from .common import DataSource
+from .common import BaseDataSource
 from .nidaq import NIAnalogInputSource
-from .trial import TrialSource
+from .counter import CounterSource
 
-__all__ = ["DataSource", "NIAnalogInputSource", "TrialSource"]
+# TODO General Source, TCS source, nidaq source
+__all__ = ["BaseDataSource", "NIAnalogInputSource", "CounterSource"]
