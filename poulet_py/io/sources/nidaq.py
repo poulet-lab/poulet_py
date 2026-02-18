@@ -3,7 +3,7 @@ try:
 
     from numpy import zeros
 
-    from poulet_py import DataPacket, DataSink, DataSource
+    from poulet_py import BaseDataPacket, BaseDataSource
 except ImportError as e:
     msg = """
 Missing 'sources' module. Install options:
@@ -14,16 +14,7 @@ Missing 'sources' module. Install options:
     raise ImportError(msg) from e
 
 
-class NIAnalogInputDP(DataPacket):
-    source: str
-    t0_ns: int
-    dt_ns: int
-    data: np.ndarray
-    channels: list[str]
-    sample_index: int
-
-
-class NIAnalogInputSource(DataSource):
+class NIAnalogInputSource(BaseDataSource):
     def __init__(self, task, reader, channels, samples_per_callback: int):
         self.task = task
         self.reader = reader
