@@ -10,7 +10,7 @@ try:
 
 except ImportError as e:
     msg = """
-Missing 'camera' module. Install options:
+Missing 'utils' module. Install options:
 - Dedicated:    pip install poulet_py[osc, qst]
 - Module:       pip install poulet_py[utils]
 - Full:         pip install poulet_py[all]

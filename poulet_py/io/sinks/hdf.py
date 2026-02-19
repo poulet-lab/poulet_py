@@ -8,7 +8,7 @@ try:
     from orjson import OPT_SERIALIZE_DATACLASS, OPT_SERIALIZE_NUMPY, OPT_SERIALIZE_UUID, dumps
     from pydantic import Field, PrivateAttr
 
-    from poulet_py import BaseDataPacket, BaseDataSink
+    from poulet_py import BaseDataPacket, BaseSink
 
 except ImportError as e:
     msg = """
@@ -20,7 +20,7 @@ Missing 'sinks' module. Install options:
     raise ImportError(msg) from e
 
 
-class HDFDataSink(BaseDataSink):
+class HDFSink(BaseSink):
     file: Path | str = Field(..., description="Path to the output file")
     compression: Literal["gzip", "lzf"] = Field(
         default="lzf", description="Compression algorithm to use"

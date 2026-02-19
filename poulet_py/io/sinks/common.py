@@ -17,15 +17,15 @@ Missing 'sinks' module. Install options:
     raise ImportError(msg) from e
 
 
-class BaseDataSink(BaseModel, ABC):
+class BaseSink(BaseModel, ABC):
     queue_size: int = Field(default=1000, description="Size of the internal queue")
     meta: dict[str, Any] = Field(
         default_factory=dict, description="Additional metadata for the data packet"
     )
 
-    _queue: Queue | None = PrivateAttr(None)
+    _queue: Queue = PrivateAttr()
+    _thread: Thread = PrivateAttr()
     _running: bool = PrivateAttr(False)
-    _thread: Thread | None = PrivateAttr(None)
 
     @abstractmethod
     def _init(self): ...
@@ -50,7 +50,7 @@ class BaseDataSink(BaseModel, ABC):
             finally:
                 self._queue.task_done()
 
-    def push(self, packet: BaseDataPacket):
+    def write(self, packet: BaseDataPacket):
         if not self._running:
             msg = "DataSink not initialized. Call 'open()' first."
             raise RuntimeError(msg)
@@ -78,13 +78,8 @@ class BaseDataSink(BaseModel, ABC):
             return
 
         self._running = False
-
         self._queue.put(None)
-
         self._thread.join()
-
-        self._thread = None
-        self._queue = None
         self._close()
 
     def __enter__(self):

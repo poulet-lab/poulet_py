@@ -1,14 +1,15 @@
 # ruff: noqa TID252
-from .sinks import BaseDataSink, HDFDataSink
-from .sources import BaseDataSource, NIAnalogInputSource, CounterSource
+from .sinks import BaseSink, HDFSink
+from .sources import BaseSource, NIAnalogInputSource, CounterSource, TCSSource
 from .data_packets import BaseDataPacket
 
 __all__ = [
-    "BaseDataSink",
-    "HDFDataSink",
-    "BaseDataSource",
+    "BaseSink",
+    "HDFSink",
+    "BaseSource",
     "NIAnalogInputSource",
     "BaseDataPacket",
-    "HDFDataSink",
+    "HDFSink",
     "CounterSource",
+    "TCSSource",
 ]

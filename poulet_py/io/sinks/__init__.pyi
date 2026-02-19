@@ -1,5 +1,5 @@
 # ruff: noqa TID252
-from .common import BaseDataSink
-from .hdf import HDFDataSink
+from .common import BaseSink
+from .hdf import HDFSink
 
-__all__ = ["BaseDataSink", "HDFDataSink"]
+__all__ = ["BaseSink", "HDFSink"]

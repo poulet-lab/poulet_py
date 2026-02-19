@@ -11,7 +11,7 @@ try:
     from pandas import DataFrame
 except ImportError as e:
     msg = """
-Missing 'camera' module. Install options:
+Missing 'osc' module. Install options:
 - Dedicated:    pip install poulet_py[osc]
 - Module:       pip install poulet_py[utils]
 - Full:         pip install poulet_py[all]

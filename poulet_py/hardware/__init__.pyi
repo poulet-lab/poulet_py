@@ -15,7 +15,7 @@ from .daq import (
     NIDigitalOutputTask,
     NIDaQ,
 )
-from .stimulator import TCS, Arduino, JulaboChiller, TCSCommand, TCSStimulus
+from .stimulator import TCS, Arduino, JulaboChiller, TCSCommand
 from .triggers import BaseTrigger, GPIOTrigger, KeyboardTrigger
 
 __all__ = [
@@ -40,6 +40,5 @@ __all__ = [
     "KeyboardTrigger",
     "NIDaQ",
     "TCSCommand",
-    "TCSStimulus",
     "ThermalCamera",
 ]

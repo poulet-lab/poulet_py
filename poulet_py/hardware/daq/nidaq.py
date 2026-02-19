@@ -22,7 +22,6 @@ Classes:
 
 try:
     from abc import ABC, abstractmethod
-    from dataclasses import dataclass
 
     from nidaqmx import Task
     from nidaqmx.constants import (
@@ -36,7 +35,8 @@ try:
     from nidaqmx.stream_writers import AnalogMultiChannelWriter, DigitalMultiChannelWriter
     from nidaqmx.utils import flatten_channel_string
     from numpy import ndarray
-    from pydantic import BaseModel, Field, PrivateAttr
+    from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
+
 except ImportError as e:
     msg = """
 Missing 'nidaq' module. Install options:
@@ -48,8 +48,7 @@ Missing 'nidaq' module. Install options:
     raise ImportError(msg) from e
 
 
-@dataclass(frozen=True)
-class NIClockHandle:
+class NIClockHandle(BaseModel):
     """
     A handle to a clock configuration used for task synchronization.
 
@@ -62,6 +61,8 @@ class NIClockHandle:
     samps_per_chan : int
         Number of samples per channel. Use -1 for continuous sampling.
     """
+
+    model_config = ConfigDict(frozen=True)
 
     terminal: str = Field(
         ..., description="The terminal path of the clock signal (e.g., '/Dev1/Ctr0InternalOutput')."
@@ -108,7 +109,7 @@ class NIAnalogInputChannel(NIBaseChannel):
     min_val: float = Field(..., description="Minimum expected voltage value in volts.")
     max_val: float = Field(..., description="Maximum expected voltage value in volts.")
     terminal_config: TerminalConfiguration = Field(
-        TerminalConfiguration.RSE,
+        default=TerminalConfiguration.RSE,
         description="Terminal configuration (RSE, NRSE, DIFF, PSEUDO_DIFF). Defaults to RSE.",
     )
 
@@ -422,10 +423,11 @@ class NIAnalogInputTask(NIBaseTask):
         ..., description="List of analog input channel configurations."
     )
     active_edge: Edge = Field(
-        Edge.RISING, description="The active edge for sampling (RISING or FALLING)."
+        default=Edge.RISING, description="The active edge for sampling (RISING or FALLING)."
     )
     sample_mode: AcquisitionType = Field(
-        AcquisitionType.CONTINUOUS, description="The acquisition type (FINITE or CONTINUOUS)."
+        default=AcquisitionType.CONTINUOUS,
+        description="The acquisition type (FINITE or CONTINUOUS).",
     )
 
     _reader: AnalogMultiChannelReader | None = PrivateAttr(None)
@@ -535,10 +537,11 @@ class NIAnalogOutputTask(NIBaseTask):
         ..., description="List of analog output channel configurations."
     )
     active_edge: Edge = Field(
-        Edge.RISING, description="The active edge for sampling (RISING or FALLING)."
+        default=Edge.RISING, description="The active edge for sampling (RISING or FALLING)."
     )
     sample_mode: AcquisitionType = Field(
-        AcquisitionType.CONTINUOUS, description="The acquisition type (FINITE or CONTINUOUS)."
+        default=AcquisitionType.CONTINUOUS,
+        description="The acquisition type (FINITE or CONTINUOUS).",
     )
 
     _writer: AnalogMultiChannelWriter | None = PrivateAttr(None)
@@ -647,13 +650,14 @@ class NIDigitalInputTask(NIBaseTask):
         ..., description="List of digital input channel configurations."
     )
     active_edge: Edge = Field(
-        Edge.RISING, description="The active edge for sampling (RISING or FALLING)."
+        default=Edge.RISING, description="The active edge for sampling (RISING or FALLING)."
     )
     sample_mode: AcquisitionType = Field(
-        AcquisitionType.CONTINUOUS, description="The acquisition type (FINITE or CONTINUOUS)."
+        default=AcquisitionType.CONTINUOUS,
+        description="The acquisition type (FINITE or CONTINUOUS).",
     )
     line_grouping: LineGrouping = Field(
-        LineGrouping.CHAN_PER_LINE,
+        default=LineGrouping.CHAN_PER_LINE,
         description="How to group digital lines (CHAN_PER_LINE or CHAN_FOR_ALL_LINES).",
     )
 
@@ -765,13 +769,14 @@ class NIDigitalOutputTask(NIBaseTask):
         ..., description="List of digital output channel configurations."
     )
     active_edge: Edge = Field(
-        Edge.RISING, description="The active edge for sampling (RISING or FALLING)."
+        default=Edge.RISING, description="The active edge for sampling (RISING or FALLING)."
     )
     sample_mode: AcquisitionType = Field(
-        AcquisitionType.CONTINUOUS, description="The acquisition type (FINITE or CONTINUOUS)."
+        default=AcquisitionType.CONTINUOUS,
+        description="The acquisition type (FINITE or CONTINUOUS).",
     )
     line_grouping: LineGrouping = Field(
-        LineGrouping.CHAN_PER_LINE,
+        default=LineGrouping.CHAN_PER_LINE,
         description="How to group digital lines (CHAN_PER_LINE or CHAN_FOR_ALL_LINES).",
     )
 
