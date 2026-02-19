@@ -4,7 +4,7 @@ try:
     from numpy import array
     from pydantic import Field, PrivateAttr
 
-    from poulet_py import LOGGER, BaseDataPacket, BaseDataSource
+    from poulet_py import LOGGER, BaseDataPacket, BaseSource, BaseStimulus
 except ImportError as e:
     msg = """
 Missing 'sources' module. Install options:
@@ -15,14 +15,20 @@ Missing 'sources' module. Install options:
     raise ImportError(msg) from e
 
 
-class CounterSource(BaseDataSource):
+class CounterSource(BaseSource):
     name: str = Field("trial", description="Name of the trial source")
     _counter: int = PrivateAttr(default=0)
 
-    def next(self) -> int:
+    def _init(self):
+        self._counter = 0
+
+    def _close(self):
+        self._counter = 0
+
+    def next(self, stimulus: BaseStimulus) -> int:
         self._counter += 1
 
-        if self._sink is None:
+        if not self._subscribers:
             LOGGER.warning("CounterSource is not attached to a DataSink")
         else:
             timestamp = array([perf_counter_ns()], dtype="uint64")
@@ -33,6 +39,6 @@ class CounterSource(BaseDataSource):
                 meta={"description": "Counter data"},
             )
 
-            self._sink.push(packet)
+            self.publish(packet)
 
         return self._counter

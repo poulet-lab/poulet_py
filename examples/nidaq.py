@@ -3,7 +3,8 @@ from numpy import empty
 
 from poulet_py import (
     CounterSource,
-    HDFDataSink,
+    Experiment,
+    HDFSink,
     NIAnalogInputChannel,
     NIAnalogInputTask,
     NIAnalogOutputChannel,
@@ -12,27 +13,24 @@ from poulet_py import (
     NIDaQ,
     NIDigitalOutputChannel,
     NIDigitalOutputTask,
+    TCSSource,
+    TCSStimulus,
 )
 
 rate = 1000
-samps_per_chan = rate * 20
+duration_s = 20
+samps_per_chan = rate * duration_s
+device_name = "dev1"
+
 
 ai_channels = [
-    NIAnalogInputChannel(name="0", number=0, max_val=10, min_val=-10),
-    NIAnalogInputChannel(name="1", number=1, max_val=10, min_val=-10),
-    NIAnalogInputChannel(name="2", number=2, max_val=10, min_val=-10),
+    NIAnalogInputChannel(name=str(i), number=i, min_val=-10, max_val=10) for i in range(3)
 ]
-
-ao_channels = [NIAnalogOutputChannel(name="fp-touch", number=0, max_val=1, min_val=-1)]
-
-do_channels = [
-    NIDigitalOutputChannel(name="0", port=0, line=0),
-    NIDigitalOutputChannel(name="1", port=0, line=1),
-    NIDigitalOutputChannel(name="2", port=0, line=2),
-]
+ao_channels = [NIAnalogOutputChannel(name="fp-touch", number=0, min_val=-1, max_val=1)]
+do_channels = [NIDigitalOutputChannel(name=str(i), port=0, line=i) for i in range(3)]
 
 clk_task = NIClockTask(
-    device="dev1",
+    device=device_name,
     name="clock",
     line=0,
     rate=rate,
@@ -40,24 +38,42 @@ clk_task = NIClockTask(
     sample_mode=AcquisitionType.FINITE,
 )
 
-ai_task = NIAnalogInputTask(device="dev1", name="ai", channels=ai_channels)
-ao_task = NIAnalogOutputTask(device="dev1", name="ao", channels=ao_channels)
-do_task = NIDigitalOutputTask(device="dev1", name="do", channels=do_channels)
+tasks = {
+    "ai": NIAnalogInputTask(device=device_name, name="ai", channels=ai_channels),
+    "ao": NIAnalogOutputTask(device=device_name, name="ao", channels=ao_channels),
+    "do": NIDigitalOutputTask(device=device_name, name="do", channels=do_channels),
+}
 
-nidac = NIDaQ(device="dev1")
-
+nidac = NIDaQ(device=device_name)
 nidac.add_task(clk_task)
-nidac.add_task(ai_task)
-nidac.add_task(ao_task)
-nidac.add_task(do_task)
+for task in tasks.values():
+    nidac.add_task(task)
 
 ai_data = empty((len(ai_channels), samps_per_chan))
 
-writer = HDFDataSink("./temp")
-qds = QueueDataSink(writer)
-trial_source = CounterSource()
-trial_source.attach(qds)
+sinks = [HDFSink(file="./temp.h5")]
+sources = [CounterSource(name="trial_source"), TCSSource(name="trial_source", port="/dev/ssf")]
 
-with nidac:
-    trial_source.next_trial()
-    ai_task.read()
+stimuli = [
+    TCSStimulus(
+        surface=0,
+        baseline=32,
+        target=20,
+        rise_rate=10,
+        return_speed=10,
+        duration=3000,
+    ),
+    TCSStimulus(
+        surface=0,
+        baseline=32,
+        target=25,
+        rise_rate=10,
+        return_speed=10,
+        duration=3000,
+    ),
+]
+
+exp = Experiment(sources=sources, sinks=sinks, stimuli=stimuli)
+
+with exp:
+    exp.run()
