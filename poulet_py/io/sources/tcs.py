@@ -1,12 +1,8 @@
 try:
-    from numpy import empty
+    from numpy import empty, ndarray
+    from pydantic import Field, PrivateAttr
 
-    from numpy import ndarray
-    from pydantic import PrivateAttr
-
-    from pydantic import Field
-
-    from poulet_py import TCS, BaseSource, BaseStimulus, TCSStimulus, AcquisitionType
+    from poulet_py import TCS, AcquisitionType, BaseSource, BaseStimulus, TCSStimulus
 except ImportError as e:
     msg = """
 Missing 'sources' module. Install options:
@@ -63,7 +59,7 @@ class TCSSource(BaseSource, TCS):
                     )
                 )
             self._last_sent_idx = self._sampling_idx
-            
+
             if self._samples_buffer is not None and self._sampling_idx > self._last_sent_idx:
                 self.publish(
                     payload={"tcs": self._samples_buffer[self._last_sent_idx : self._sampling_idx]}
