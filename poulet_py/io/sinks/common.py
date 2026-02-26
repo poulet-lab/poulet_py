@@ -6,7 +6,7 @@ try:
 
     from pydantic import BaseModel, Field, PrivateAttr
 
-    from poulet_py import LOGGER, BaseDataPacket
+    from poulet_py import LOGGER, Event, EventBus
 except ImportError as e:
     msg = """
 Missing 'sinks' module. Install options:
@@ -22,10 +22,11 @@ class BaseSink(BaseModel, ABC):
     meta: dict[str, Any] = Field(
         default_factory=dict, description="Additional metadata for the data packet"
     )
+    bus: EventBus | None = Field(default=None)
 
     _queue: Queue = PrivateAttr()
     _thread: Thread = PrivateAttr()
-    _running: bool = PrivateAttr(False)
+    _running: bool = PrivateAttr(default=False)
 
     @abstractmethod
     def _init(self): ...
@@ -33,37 +34,46 @@ class BaseSink(BaseModel, ABC):
     def _close(self): ...
 
     @abstractmethod
-    def _write(self, packet: BaseDataPacket): ...
+    def _handle(self, event: Event): ...
 
     def _run(self):
         while True:
-            packet = self._queue.get()
+            event = self._queue.get()
 
-            if packet is None:  # sentinel
+            if event is None:  # sentinel
                 break
 
             try:
-                self._write(packet)
+                self._handle(event)
             except Exception as e:
                 LOGGER.exception("Error while writing packet: %s", e)
 
             finally:
                 self._queue.task_done()
 
-    def write(self, packet: BaseDataPacket):
+    def handle(self, event: Event):
         if not self._running:
             msg = "DataSink not initialized. Call 'open()' first."
             raise RuntimeError(msg)
 
         try:
-            self._queue.put_nowait(packet)
+            self._queue.put_nowait(event)
         except Full:
             LOGGER.warning("DataSink queue full — dropping packet")
 
-    def open(self):
+    def open(self, bus: EventBus | None = None):
         if self._running:
             LOGGER.warning("DataSink already running.")
             return
+
+        if bus and not self.bus:
+            self.bus = bus
+
+        if not self.bus:
+            msg = "Event bus must be defined"
+            raise RuntimeError(msg)
+
+        self.bus.subscribe(self)
 
         self._queue = Queue(maxsize=self.queue_size)
         self._running = True

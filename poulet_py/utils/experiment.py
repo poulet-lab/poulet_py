@@ -1,17 +1,19 @@
 try:
+    from concurrent.futures import ThreadPoolExecutor, wait
     from secrets import choice
     from time import sleep
     from typing import Literal
 
-    from pydantic import BaseModel, Field
+    from pydantic import BaseModel, Field, PrivateAttr
+    from tqdm.auto import tqdm
 
     from poulet_py import (
-        LOGGER,
         BaseSink,
         BaseSource,
         BaseStimulus,
         BaseTrigger,
-        generate_stimulus_sequence,
+        EventBus,
+        repeat,
     )
 except ImportError as e:
     msg = """
@@ -23,26 +25,41 @@ Missing 'exp' module. Install options:
     raise ImportError(msg) from e
 
 
-class Experiment(BaseModel):
-    stimuli: list[BaseStimulus] = Field(...)
-    n_repetitions: int = Field(default=1, ge=1)
-    stimulus_order: Literal["random", "sequential"] = Field(default="random")
+class ExperimentTrial(BaseModel):
+    stimuli: BaseStimulus | list[BaseStimulus]
     isi: int | list[int] = Field(default=0)
+
+
+class ExperimentBlock(BaseModel):
+    name: str = Field(...)
+    trials: list[ExperimentTrial] = Field(...)
+    repetitions: int = Field(default=1, ge=1)
+    order: Literal["random", "sequential"] = Field(default="random")
     trigger: BaseTrigger | None = Field(default=None)
     trigger_policy: Literal["abort", "skip"] = "abort"
+    isi: int | list[int] = Field(default=0)
+
+
+class ExperimentRuntime(BaseModel):
+    name: str = Field(...)
+    blocks: list[ExperimentBlock] = Field(...)
+    repetitions: int = Field(default=1, ge=1)
+    order: Literal["random", "sequential"] = Field(default="sequential")
+    isi: int | list[int] = Field(default=0)
 
     sources: list[BaseSource] = Field(...)
     sinks: list[BaseSink] = Field(...)
 
+    bus: EventBus = Field(default_factory=EventBus)
+
+    _open: bool = PrivateAttr(False)
+
     def open(self):
-
-        self._auto_wire()
-
         for source in self.sources:
-            source.open()
+            source.open(self.bus)
 
         for sink in self.sinks:
-            sink.open()
+            sink.open(self.bus)
 
     def close(self):
         for sink in self.sinks:
@@ -52,46 +69,48 @@ class Experiment(BaseModel):
             source.close()
 
     def run(self):
-        stimuli = generate_stimulus_sequence(
-            self.n_repetitions, stimuli_options=self.stimuli, mode=self.stimulus_order
-        )
+        if not self._open:
+            raise RuntimeError("Experiment Runtime should open first")
 
-        for stim in stimuli:
-            if self.trigger and not self.trigger.wait():
-                if self.trigger_policy == "skip":
-                    LOGGER.error("Trigger Failed, canceling stimulation")
-                    continue
-                elif self.trigger_policy == "abort":
-                    msg = "Trigger failed — aborting experiment."
-                    raise RuntimeError(msg)
+        with ThreadPoolExecutor(max_workers=len(self.sources)) as executor:
+            blocks: list[ExperimentBlock] = repeat(self.blocks, self.repetitions, mode=self.order)
 
-            for source in self.sources:
-                source.next(stim)
+            for block in tqdm(blocks, desc="Block", smoothing=True):
+                trials: list[ExperimentTrial] = repeat(
+                    block.trials, block.repetitions, mode=block.order
+                )
 
-            isi = self._get_isi()
+                for trial in tqdm(trials, desc="Trial", smoothing=True, leave=False):
+                    if block.trigger and not block.trigger.wait():
+                        msg = "Trigger failed"
+                        raise RuntimeError(msg)
 
-            if isi:
-                sleep(isi / 1000)
+                    stimuli = trial.stimuli if isinstance(trial.stimuli, list) else [trial.stimuli]
+                    isi = ExperimentRuntime.get_isi(
+                        trial.isi if trial.isi != 0 else block.isi if block.isi != 0 else self.isi
+                    )
 
-    def _get_isi(self) -> int:
-        """Get the inter-stimulus period (random if list provided)."""
-        if isinstance(self.isi, list):
-            return choice(self.isi)
-        return self.isi
+                    futures = []
+                    for source in self.sources:
+                        futures.append(executor.submit(source.next, stimuli, isi))
 
-    def _auto_wire(self):
+                    wait(futures)
 
-        for source in self.sources:
-            # Skip if user already defined routing
-            if source._subscribers:
-                continue
-
-            for sink in self.sinks:
-                source.subscribe(sink)
+                    for f in futures:
+                        f.result()
 
     def __enter__(self):
         self.open()
+        self._open = True
         return self
 
     def __exit__(self, exc_type, exc, tb):
+        self._open = False
         self.close()
+
+    @staticmethod
+    def get_isi(isi) -> int:
+        """Get the inter-stimulus period (random if list provided)."""
+        if isinstance(isi, list):
+            return choice(isi)
+        return isi

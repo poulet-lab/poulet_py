@@ -1,14 +1,13 @@
-from numpy import ndarray
-
 try:
     from pathlib import Path
     from typing import Any, Literal
 
     from h5py import File, Group
+    from numpy import ndarray
     from orjson import OPT_SERIALIZE_DATACLASS, OPT_SERIALIZE_NUMPY, OPT_SERIALIZE_UUID, dumps
     from pydantic import Field, PrivateAttr
 
-    from poulet_py import BaseDataPacket, BaseSink
+    from poulet_py import BaseSink, Event
 
 except ImportError as e:
     msg = """
@@ -63,14 +62,15 @@ class HDFSink(BaseSink):
                 option=OPT_SERIALIZE_DATACLASS | OPT_SERIALIZE_NUMPY | OPT_SERIALIZE_UUID,
             ).decode("utf-8")
 
-    def _init_source(self, packet: BaseDataPacket):
-        name = packet.name
+    def _init_source(self, event: Event):
+        name = event.name
         if name in self._sources:
             return
 
         grp = self._h5file.require_group(name)
 
-        self._write_meta(grp, packet.meta)
+        if event.meta:
+            self._write_meta(grp, event.meta)
 
         self._sources[name] = {"group": grp, "datasets": {}}
 
@@ -118,13 +118,13 @@ class HDFSink(BaseSink):
         dataset["data"].resize(new_shape)
         dataset["capacity"] = new_capacity
 
-    def _write(self, packet: BaseDataPacket):
-        name = packet.name
-        self._init_source(packet)
+    def _handle(self, event: Event):
+        name = event.name
+        self._init_source(event)
 
         src = self._sources[name]
 
-        for dataset_name, array in packet.data.items():
+        for dataset_name, array in event.payload.items():
             if array.ndim == 0:
                 array = array.reshape(1)
 

@@ -1,17 +1,12 @@
-from numpy import ndarray
-from pydantic import PrivateAttr
-
-
 try:
-    from typing import Literal
-    from collections.abc import Generator
-    from secrets import choice
-    from time import perf_counter_ns, time
+    from numpy import empty
 
-    from numpy import array
+    from numpy import ndarray
+    from pydantic import PrivateAttr
+
     from pydantic import Field
 
-    from poulet_py import LOGGER, TCS, BaseDataPacket, BaseSource, TCSStimulus
+    from poulet_py import TCS, BaseSource, BaseStimulus, TCSStimulus, AcquisitionType
 except ImportError as e:
     msg = """
 Missing 'sources' module. Install options:
@@ -24,40 +19,57 @@ Missing 'sources' module. Install options:
 
 class TCSSource(BaseSource, TCS):
     name: str = Field("trial", description="Name of the trial source")
-    sample_mode: 
+    pre_ms: int | None = Field(default=None)
+    post_ms: int | None = Field(default=None)
 
+    _last_sent_idx: int = PrivateAttr(0)
 
     def _init(self):
+        if self.data is None:
+            self.data = empty(
+                self.buffer_size,
+                dtype=[
+                    ("timestamp", "uint64"),
+                    ("temperature", "float32", (5,)),
+                ],
+            )
         self.open()
 
     def _close(self):
         self.close()
 
-    def next(self, stimulus: TCSStimulus):
-        self.trigger(stimulus)
+    def _next(self, stimulus: list[BaseStimulus]) -> ndarray:
+        for st in stimulus:
+            if isinstance(st, TCSStimulus):
+                self.trigger(st)
+                while True:
+                    if not self.is_stimulus_running:
+                        break
 
-        start = perf_counter_ns()
+        if self.acquisition_type == AcquisitionType.CONTINUOUS:
+            available = self._sampling_idx - self._last_sent_idx
+            if available <= 0:
+                return None
 
-        readings = []
-        while self._should_continue_trial(start_time, stimulus.duration + interstimulus_period):
-            reading = self.get_readings()
-            if reading:
-                reading["trial"] = idx
-                readings.append(reading.copy())
+            start = self._last_sent_idx % self.buffer_size
+            end = self._sampling_idx % self.buffer_size
+            if start < end:
+                chunk = self._samples_buffer[start:end]
+            else:
+                chunk = np.concatenate(
+                    (
+                        self._samples_buffer[start:],
+                        self._samples_buffer[:end],
+                    )
+                )
+            self._last_sent_idx = self._sampling_idx
+            
+            if self._samples_buffer is not None and self._sampling_idx > self._last_sent_idx:
+                self.publish(
+                    payload={"tcs": self._samples_buffer[self._last_sent_idx : self._sampling_idx]}
+                )
+                return self._samples_buffer[self._last_sent_idx : self._sampling_idx]
 
-        if self._sink is None:
-            LOGGER.warning("CounterSource is not attached to a DataSink")
-        else:
-            timestamp = array([perf_counter_ns()], dtype="uint64")
-            counter = array([self._counter], dtype="uint64")
-            packet = BaseDataPacket(
-                name=self.name,
-                data={"counter": counter, "timestamp": timestamp},
-                meta={"description": "Counter data"},
-            )
-
-            self._sink.push(packet)
-
-        reading
-
-    def _daq_thread(self):
+        elif self.acquisition_type == AcquisitionType.FINITE:
+            pass
+            # TODO

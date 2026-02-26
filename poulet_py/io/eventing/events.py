@@ -1,4 +1,5 @@
 try:
+    from time import time_ns
     from typing import Any
 
     from numpydantic import NDArray
@@ -13,11 +14,12 @@ Missing 'writers' module. Install options:
     raise ImportError(msg) from e
 
 
-class BaseDataPacket(BaseModel):
+class Event(BaseModel):
     name: str = Field(..., description="Name of the data source")
-    data: dict[str, NDArray[Any, Any]] = Field(
+    payload: dict[str, NDArray[Any, Any]] = Field(
         ..., description="Data fields as a dictionary of numpy arrays"
     )
-    meta: dict[str, Any] = Field(
-        default_factory=dict, description="Additional metadata for the data packet"
+    timestamp: int = Field(default_factory=time_ns, description="Timestamp of the event")
+    meta: dict[str, Any] | None = Field(
+        default=None, description="Additional metadata for the data packet"
     )
