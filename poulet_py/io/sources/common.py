@@ -1,9 +1,8 @@
 from enum import Enum
 
-
 try:
-    from time import sleep
     from abc import ABC, abstractmethod
+    from time import sleep
     from typing import Any
 
     from numpydantic import NDArray
