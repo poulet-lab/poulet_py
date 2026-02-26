@@ -1,8 +1,9 @@
 try:
     from typing import ClassVar
+
     from pydantic import Field
 
-    from poulet_py import TCSCommand, BaseStimulus
+    from poulet_py import BaseStimulus, TCSCommand
 
 except ImportError as e:
     msg = """

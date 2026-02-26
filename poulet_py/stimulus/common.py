@@ -9,3 +9,8 @@ class BaseStimulus(BaseModel, ABC):
 
     @abstractmethod
     def build(self, *args, **kwargs) -> Any: ...
+
+
+class EmptyStimulus(BaseStimulus):
+    def build(self, *args, **kwargs) -> Any:
+        return

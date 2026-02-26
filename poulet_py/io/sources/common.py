@@ -1,10 +1,15 @@
+from enum import Enum
+
+
 try:
+    from time import sleep
     from abc import ABC, abstractmethod
     from typing import Any
 
-    from pydantic import BaseModel, Field, PrivateAttr
+    from numpydantic import NDArray
+    from pydantic import BaseModel, Field
 
-    from poulet_py import BaseDataPacket, BaseSink, BaseStimulus
+    from poulet_py import BaseStimulus, EventBus
 except ImportError as e:
     msg = """
 Missing 'sources' module. Install options:
@@ -15,9 +20,15 @@ Missing 'sources' module. Install options:
     raise ImportError(msg) from e
 
 
+class AcquisitionType(str, Enum):
+    CONTINUOUS = "continuous"
+    FINITE = "finite"
+
+
 class BaseSource(BaseModel, ABC):
     name: str = Field(..., description="Name of the data source")
-    _subscribers: list[BaseSink] = PrivateAttr(default_factory=list)
+    acquisition_type: AcquisitionType = Field(default=AcquisitionType.FINITE, description="")
+    bus: EventBus | None = Field(default=None)
 
     @abstractmethod
     def _init(self): ...
@@ -26,16 +37,29 @@ class BaseSource(BaseModel, ABC):
     def _close(self): ...
 
     @abstractmethod
-    def next(self, stimulus: BaseStimulus) -> Any: ...
+    def _next(self, stimulus: list[BaseStimulus]) -> Any: ...
 
-    def subscribe(self, sink: BaseSink):
-        self._subscribers.append(sink)
+    def next(self, stimulus: list[BaseStimulus], isi: int | None = None) -> Any:
+        ret = self._next(stimulus)
+        if isi:
+            sleep(isi / 1000)
+        return ret
 
-    def publish(self, packet: BaseDataPacket):
-        for sub in self._subscribers:
-            sub.write(packet)
+    def publish(self, payload: dict[str, NDArray[Any, Any]], meta: dict[str, Any] | None = None):
+        if self.bus is None:
+            msg = "No Event bus is attached"
+            raise RuntimeError(msg)
 
-    def open(self):
+        self.bus.emit(self.name, payload=payload, meta=meta)
+
+    def open(self, bus: EventBus | None = None):
+        if not bus and not self.bus:
+            msg = "Event bus must be defined"
+            raise RuntimeError(msg)
+
+        if bus and not self.bus:
+            self.bus = bus
+
         self._init()
 
     def close(self):

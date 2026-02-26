@@ -26,7 +26,8 @@ from .hardware import (
     ThermalCamera,
 )
 from .io import (
-    BaseDataPacket,
+    EventBus,
+    Event,
     CounterSource,
     BaseSink,
     BaseSource,
@@ -34,8 +35,10 @@ from .io import (
     NIAnalogInputSource,
     HDFSink,
     TCSSource,
+    AcquisitionType,
 )
 from .stimulus import (
+    EmptyStimulus,
     TCSStimulus,
     BaseStimulus,
     NIAnalogBaseStimulus,
@@ -58,15 +61,17 @@ from .stimulus import (
 from .tools import (
     check_or_create,
     define_folder_name,
-    generate_stimulus_sequence,
+    repeat,
     go_to,
     json_serializer,
     sanitize_path,
     save_metadata_exp,
 )
-from .utils import Oscilloscope, TCSInterface, Experiment
+from .utils import Oscilloscope, ExperimentBlock, ExperimentRuntime, ExperimentTrial
 
 __all__ = [
+    "AcquisitionType",
+    "EmptyStimulus",
     "TCSSource",
     "LOGGER",
     "TCSStimulus",
@@ -84,7 +89,8 @@ __all__ = [
     "BaslerCamera",
     "NIClockHandle",
     "NIClockTask",
-    "BaseDataPacket",
+    "EventBus",
+    "Event",
     "BaseSink",
     "BaseSource",
     "NIDigitalInputChannel",
@@ -101,12 +107,11 @@ __all__ = [
     "Seq",
     "Settings",
     "TCSCommand",
-    "TCSInterface",
     "ThermalCamera",
     "HDFSink",
     "check_or_create",
     "define_folder_name",
-    "generate_stimulus_sequence",
+    "repeat",
     "go_to",
     "json_serializer",
     "sanitize_path",
@@ -129,5 +134,7 @@ __all__ = [
     "NIConstantDigitalStimulus",
     "NIPulseDigitalStimulus",
     "NIPulseTrainDigitalStimulus",
-    "Experiment",
+    "ExperimentBlock",
+    "ExperimentRuntime",
+    "ExperimentTrial",
 ]

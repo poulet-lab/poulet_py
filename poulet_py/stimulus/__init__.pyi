@@ -1,6 +1,6 @@
 # ruff: noqa TID252
 from .tcs import TCSStimulus
-from .common import BaseStimulus
+from .common import BaseStimulus, EmptyStimulus
 from .nidaq import (
     NIAnalogBaseStimulus,
     NIConstantAnalogStimulus,
@@ -21,6 +21,7 @@ from .nidaq import (
 )
 
 __all__ = [
+    "EmptyStimulus",
     "TCSStimulus",
     "BaseStimulus",
     "NIAnalogBaseStimulus",

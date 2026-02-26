@@ -10,11 +10,11 @@ Missing 'tools' module. Install options:
     raise ImportError(msg) from e
 
 
-def generate_stimulus_sequence(
+def repeat(
+    l: list[Any],
     n: int,
     *,
-    stimuli_options: list[Any],
-    mode: Literal["random", "fixed", "sequential"] = "random",
+    mode: Literal["random", "sequential"] = "random",
 ) -> list[Any]:
     """
     Generate a list of trials with specified stimuli distribution.
@@ -63,26 +63,15 @@ def generate_stimulus_sequence(
     >>> generate_trials(3, stimuli_options=[5], mode="fixed")
     [5, 5, 5]
     """
-    n_stim = len(stimuli_options)
+    if len(l) == 0:
+        return l
 
-    if n_stim == 0:
-        msg = "stimuli_options cannot be empty"
-        raise ValueError(msg)
-
-    if mode == "random" or (mode == "fixed" and n_stim > 1):
-        if n % n_stim != 0:
-            msg = f"Number of trials ({n}) must be divisible by the number"
-            "of stimuli ({n_stim}) for equal representation in mode '{mode}'."
-            raise ValueError(msg)
-
+    _l = l * n
     if mode == "random":
-        trials = stimuli_options * (n // n_stim)
-        shuffle(trials)
-        return trials
-    elif mode in {"fixed", "sequential"}:
-        if n_stim == 1:
-            return stimuli_options * n
-        return (stimuli_options * ((n // n_stim) + 1))[:n]
+        shuffle(_l)
+        return _l
+    elif mode == "sequential":
+        return _l
 
-    msg = f"Invalid mode '{mode}'. Choose 'random' or 'fixed'."
+    msg = f"Invalid mode '{mode}'. Choose 'random' or 'sequential'."
     raise ValueError(msg)
