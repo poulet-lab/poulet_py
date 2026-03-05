@@ -47,9 +47,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Log(BaseModel):
-    level: str = Field("info", description="The logging level")
+    level: str = Field(default="info", description="The logging level")
     file: str | None = Field(
-        None,
+        default=None,
         description="""The file path for logging. If `None`,
         logging is done to the console.
         """,
@@ -69,7 +69,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
-    log: Log = Field(Log(), description="Logging configuration settings")
+    log: Log = Field(default_factory=Log, description="Logging configuration settings")
 
 
 # Global instance of the `Settings` class

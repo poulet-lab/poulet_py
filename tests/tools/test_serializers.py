@@ -5,7 +5,7 @@ from tempfile import TemporaryDirectory
 from numpy import array
 from pytest import raises
 
-from poulet_py import json_serializer, save_metadata_exp
+from poulet_py import json_serializer
 
 
 class TestJsonSerializer:
@@ -75,27 +75,3 @@ class TestJsonSerializer:
             file_path = Path(temp_dir) / "test.json"
             result = json_serializer({}, file_path)
             assert result is None
-
-
-class TestSaveMetadataExp:
-    """Tests for the deprecated save_metadata_exp function."""
-
-    def test_save_metadata_exp_creates_directory(self):
-        """Test that the function creates the directory if it doesn't exist."""
-        metadata = {"test": "data"}
-        with TemporaryDirectory() as temp_dir:
-            new_dir = Path(temp_dir) / "new_dir"
-            save_metadata_exp(metadata, new_dir, "test")
-
-            assert (new_dir / "test.json").exists()
-
-    def test_save_metadata_exp_content(self):
-        """Test that the function saves correct content."""
-        metadata = {"key": "value"}
-        with TemporaryDirectory() as temp_dir:
-            save_metadata_exp(metadata, temp_dir, "test")
-
-            file_path = Path(temp_dir) / "test.json"
-            with open(file_path) as f:
-                content = load(f)
-                assert content == metadata

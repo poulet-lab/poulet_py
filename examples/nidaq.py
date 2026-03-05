@@ -3,14 +3,13 @@ from numpy import empty
 
 from poulet_py import (
     CounterSource,
-    Experiment,
     HDFSink,
     NIAnalogInputChannel,
     NIAnalogInputTask,
     NIAnalogOutputChannel,
     NIAnalogOutputTask,
     NIClockTask,
-    NIDaQ,
+    NIDaQSource,
     NIDigitalOutputChannel,
     NIDigitalOutputTask,
     TCSSource,
@@ -29,25 +28,20 @@ ai_channels = [
 ao_channels = [NIAnalogOutputChannel(name="fp-touch", number=0, min_val=-1, max_val=1)]
 do_channels = [NIDigitalOutputChannel(name=str(i), port=0, line=i) for i in range(3)]
 
-clk_task = NIClockTask(
-    device=device_name,
-    name="clock",
-    line=0,
-    rate=rate,
-    samps_per_chan=samps_per_chan,
-    sample_mode=AcquisitionType.FINITE,
-)
+tasks = [
+    NIClockTask(
+        name="clock",
+        line=0,
+        rate=rate,
+        samps_per_chan=samps_per_chan,
+        sample_mode=AcquisitionType.FINITE,
+    ),
+    NIAnalogInputTask(name="ai", channels=ai_channels),
+    NIAnalogOutputTask(name="ao", channels=ao_channels),
+    NIDigitalOutputTask(name="do", channels=do_channels),
+]
 
-tasks = {
-    "ai": NIAnalogInputTask(device=device_name, name="ai", channels=ai_channels),
-    "ao": NIAnalogOutputTask(device=device_name, name="ao", channels=ao_channels),
-    "do": NIDigitalOutputTask(device=device_name, name="do", channels=do_channels),
-}
-
-nidac = NIDaQ(device=device_name)
-nidac.add_task(clk_task)
-for task in tasks.values():
-    nidac.add_task(task)
+nidac_source = NIDaQSource(name="nidaq", device=device_name, tasks=tasks)
 
 ai_data = empty((len(ai_channels), samps_per_chan))
 

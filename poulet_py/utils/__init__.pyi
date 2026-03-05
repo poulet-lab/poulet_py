@@ -1,5 +1,5 @@
 # ruff: noqa TID252
-from .oscilloscope import Oscilloscope
 from .experiment import ExperimentBlock, ExperimentRuntime, ExperimentTrial
+from .oscilloscope import Oscilloscope
 
-__all__ = ["Oscilloscope", "ExperimentBlock", "ExperimentRuntime", "ExperimentTrial"]
+__all__ = ["ExperimentBlock", "ExperimentRuntime", "ExperimentTrial", "Oscilloscope"]

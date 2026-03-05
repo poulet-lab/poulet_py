@@ -7,7 +7,7 @@ try:
     from orjson import OPT_SERIALIZE_DATACLASS, OPT_SERIALIZE_NUMPY, OPT_SERIALIZE_UUID, dumps
     from pydantic import Field, PrivateAttr
 
-    from poulet_py import BaseSink, Event
+    from poulet_py import BaseEvent, BaseSink, SinkEvent
 
 except ImportError as e:
     msg = """
@@ -62,7 +62,10 @@ class HDFSink(BaseSink):
                 option=OPT_SERIALIZE_DATACLASS | OPT_SERIALIZE_NUMPY | OPT_SERIALIZE_UUID,
             ).decode("utf-8")
 
-    def _init_source(self, event: Event):
+    def _init_source(self, event: SinkEvent):
+        if not self._h5file:
+            return
+
         name = event.name
         if name in self._sources:
             return
@@ -118,34 +121,36 @@ class HDFSink(BaseSink):
         dataset["data"].resize(new_shape)
         dataset["capacity"] = new_capacity
 
-    def _handle(self, event: Event):
-        name = event.name
-        self._init_source(event)
+    def _on_event(self, event: BaseEvent):
+        if isinstance(event, SinkEvent):
+            name = event.name
+            self._init_source(event)
 
-        src = self._sources[name]
+            src = self._sources[name]
 
-        for dataset_name, array in event.payload.items():
-            if array.ndim == 0:
-                array = array.reshape(1)
+            for dataset_name, array in event.payload.items():
+                if not isinstance(array, ndarray):
+                    continue
 
-            self._init_dataset(name, dataset_name, array)
+                arr = array.reshape(1) if array.ndim == 0 else array
 
-            dataset = src["datasets"][dataset_name]
+                self._init_dataset(name, dataset_name, arr)
 
-            # Validate fixed dimensions
-            if array.shape[1:] != dataset["fixed_shape"]:
-                msg = (
-                    f"Shape mismatch for dataset '{dataset_name}'. "
-                    f"Expected (*, {dataset['fixed_shape']}), "
-                    f"got {array.shape}"
-                )
-                raise ValueError(msg)
+                dataset = src["datasets"][dataset_name]
 
-            append_len = array.shape[0]
-            self._grow_if_needed(dataset, append_len)
+                if arr.shape[1:] != dataset["fixed_shape"]:
+                    msg = (
+                        f"Shape mismatch for dataset '{dataset_name}'. "
+                        f"Expected (*, {dataset['fixed_shape']}), "
+                        f"got {arr.shape}"
+                    )
+                    raise ValueError(msg)
 
-            start = dataset["size"]
-            end = start + append_len
+                append_len = arr.shape[0]
+                self._grow_if_needed(dataset, append_len)
 
-            dataset["data"][start:end] = array
-            dataset["size"] = end
+                start = dataset["size"]
+                end = start + append_len
+
+                dataset["data"][start:end] = arr
+                dataset["size"] = end

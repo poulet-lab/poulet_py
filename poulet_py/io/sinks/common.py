@@ -1,12 +1,12 @@
 try:
-    from abc import ABC, abstractmethod
+    from abc import abstractmethod
     from queue import Full, Queue
     from threading import Thread
     from typing import Any
 
-    from pydantic import BaseModel, Field, PrivateAttr
+    from pydantic import Field, PrivateAttr
 
-    from poulet_py import LOGGER, Event, EventBus
+    from poulet_py import LOGGER, BaseEvent, EventBus, EventHandler
 except ImportError as e:
     msg = """
 Missing 'sinks' module. Install options:
@@ -17,7 +17,7 @@ Missing 'sinks' module. Install options:
     raise ImportError(msg) from e
 
 
-class BaseSink(BaseModel, ABC):
+class BaseSink(EventHandler):
     queue_size: int = Field(default=1000, description="Size of the internal queue")
     meta: dict[str, Any] = Field(
         default_factory=dict, description="Additional metadata for the data packet"
@@ -30,11 +30,12 @@ class BaseSink(BaseModel, ABC):
 
     @abstractmethod
     def _init(self): ...
+
     @abstractmethod
     def _close(self): ...
 
     @abstractmethod
-    def _handle(self, event: Event): ...
+    def _on_event(self, event: BaseEvent): ...
 
     def _run(self):
         while True:
@@ -44,26 +45,26 @@ class BaseSink(BaseModel, ABC):
                 break
 
             try:
-                self._handle(event)
+                self._on_event(event)
             except Exception as e:
                 LOGGER.exception("Error while writing packet: %s", e)
 
             finally:
                 self._queue.task_done()
 
-    def handle(self, event: Event):
+    def on_event(self, event: BaseEvent):
         if not self._running:
-            msg = "DataSink not initialized. Call 'open()' first."
+            msg = "Sink not initialized. Call 'open()' first."
             raise RuntimeError(msg)
 
         try:
             self._queue.put_nowait(event)
         except Full:
-            LOGGER.warning("DataSink queue full — dropping packet")
+            LOGGER.warning("Sink queue full — dropping packet")
 
     def open(self, bus: EventBus | None = None):
         if self._running:
-            LOGGER.warning("DataSink already running.")
+            LOGGER.warning("Sink already running.")
             return
 
         if bus and not self.bus:
@@ -92,8 +93,8 @@ class BaseSink(BaseModel, ABC):
         self._thread.join()
         self._close()
 
-    def __enter__(self):
-        self.open()
+    def __enter__(self, bus: EventBus | None = None):
+        self.open(bus=bus)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):

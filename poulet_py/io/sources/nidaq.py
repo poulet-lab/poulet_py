@@ -1,9 +1,15 @@
 try:
-    from time import monotonic_ns
+    from collections.abc import Sequence
 
-    from numpy import zeros
-
-    from poulet_py import BaseSource, DataSink
+    from poulet_py import (
+        AcquisitionType,
+        BaseSource,
+        BaseStimulus,
+        NIAnalogBaseStimulus,
+        NIDaQ,
+        NIDigitalBaseStimulus,
+        SinkEvent,
+    )
 except ImportError as e:
     msg = """
 Missing 'sources' module. Install options:
@@ -14,37 +20,49 @@ Missing 'sources' module. Install options:
     raise ImportError(msg) from e
 
 
-class NIAnalogInputSource(BaseSource):
-    def __init__(self, task, reader, channels, samples_per_callback: int):
-        self.task = task
-        self.reader = reader
-        self.channels = channels
-        self.samples = samples_per_callback
+class NIDaQSource(BaseSource, NIDaQ):
+    def _init(self):
+        NIDaQ.open(self)
+        if self.acquisition_type == AcquisitionType.CONTINUOUS:
+            self.start()
 
-        self.buffer = zeros((len(channels), samples_per_callback))
+    def _close(self):
+        if self.acquisition_type == AcquisitionType.CONTINUOUS:
+            self.stop()
+        NIDaQ.close(self)
 
-    def attach(self, sink: DataSink):
-        dt_ns = int(1e9 / sample_rate)
-        sample_index = 0
+    def _supports(self, stimuli: Sequence[BaseStimulus]) -> Sequence[BaseStimulus]:
+        return [
+            st for st in stimuli if isinstance(st, (NIAnalogBaseStimulus, NIDigitalBaseStimulus))
+        ]
 
-        def callback(task_handle, event_type, n_samples, cb_data):
-            nonlocal sample_index
-            reader.read_many_sample(self.buffer, n_samples)
+    def _fire(self, stimuli: Sequence[BaseStimulus]) -> bool:
+        duration = 0
 
-            t0 = monotonic_ns()
+        for st in stimuli:
+            if isinstance(st, (NIAnalogBaseStimulus, NIDigitalBaseStimulus)):
+                self.write(st)
+                current_duration = (st.duration + st.pre_delay + st.post_delay) / 1000
+                duration = max(duration, current_duration)
 
-            packet = NIAnalogInputDP(
-                source="ai",
-                t0_ns=t0,
-                dt_ns=dt_ns,
-                data=self.buffer.copy(),
-                channels=self.channels,
-                sample_index0=sample_index,
+        if self.acquisition_type == AcquisitionType.FINITE:
+            self.start()
+
+        self.wait(timeout=duration + 2)
+
+        if self.acquisition_type == AcquisitionType.FINITE:
+            self.stop()
+
+        return True
+
+    def _publish(self, stimuli: Sequence[BaseStimulus]) -> bool:
+
+        data = self.read(-1, 0.01)
+        if data:
+            self.publish(
+                SinkEvent(
+                    name=self.name, payload=data, meta={"acquisition": self.acquisition_type.value}
+                )
             )
 
-            sample_index += n_samples
-            sink.push(packet)
-
-            return 0
-
-        self.task.register_every_n_samples_acquired_into_buffer_event(self.samples, callback)
+        return True

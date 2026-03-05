@@ -1,14 +1,11 @@
-from enum import Enum
-
 try:
     from abc import ABC, abstractmethod
-    from time import sleep
-    from typing import Any
+    from collections.abc import Sequence
+    from enum import Enum
 
-    from numpydantic import NDArray
     from pydantic import BaseModel, Field
 
-    from poulet_py import BaseStimulus, EventBus
+    from poulet_py import BaseEvent, BaseStimulus, EventBus
 except ImportError as e:
     msg = """
 Missing 'sources' module. Install options:
@@ -20,6 +17,7 @@ Missing 'sources' module. Install options:
 
 
 class AcquisitionType(str, Enum):
+    NONE = "None"
     CONTINUOUS = "continuous"
     FINITE = "finite"
 
@@ -36,20 +34,27 @@ class BaseSource(BaseModel, ABC):
     def _close(self): ...
 
     @abstractmethod
-    def _next(self, stimulus: list[BaseStimulus]) -> Any: ...
+    def _supports(self, stimuli: Sequence[BaseStimulus]) -> Sequence[BaseStimulus]: ...
 
-    def next(self, stimulus: list[BaseStimulus], isi: int | None = None) -> Any:
-        ret = self._next(stimulus)
-        if isi:
-            sleep(isi / 1000)
-        return ret
+    @abstractmethod
+    def _fire(self, stimuli: Sequence[BaseStimulus]) -> bool: ...
 
-    def publish(self, payload: dict[str, NDArray[Any, Any]], meta: dict[str, Any] | None = None):
+    @abstractmethod
+    def _publish(self, stimuli: Sequence[BaseStimulus]) -> bool: ...
+
+    def fire(self, stimuli: Sequence[BaseStimulus]) -> bool:
+        st = self._supports(stimuli)
+        self._fire(st)
+        self._publish(st)
+
+        return True
+
+    def publish(self, event: BaseEvent):
         if self.bus is None:
             msg = "No Event bus is attached"
             raise RuntimeError(msg)
 
-        self.bus.emit(self.name, payload=payload, meta=meta)
+        self.bus.emit(event)
 
     def open(self, bus: EventBus | None = None):
         if not bus and not self.bus:
@@ -64,8 +69,8 @@ class BaseSource(BaseModel, ABC):
     def close(self):
         self._close()
 
-    def __enter__(self):
-        self.open()
+    def __enter__(self, bus: EventBus | None = None):
+        self.open(bus=bus)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):

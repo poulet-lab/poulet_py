@@ -1,23 +1,17 @@
 try:
+    from collections.abc import Sequence
     from concurrent.futures import ThreadPoolExecutor, wait
     from secrets import choice
-    from time import sleep
-    from typing import Literal
+    from typing import Literal, Self
 
-    from pydantic import BaseModel, Field, PrivateAttr
+    from pydantic import BaseModel, Field, PrivateAttr, model_validator
     from tqdm.auto import tqdm
 
-    from poulet_py import (
-        BaseSink,
-        BaseSource,
-        BaseStimulus,
-        BaseTrigger,
-        EventBus,
-        repeat,
-    )
+    from poulet_py import BaseSink, BaseSource, BaseStimulus, BaseTrigger, EventBus, repeat
+
 except ImportError as e:
     msg = """
-Missing 'exp' module. Install options:
+Missing 'experiment' module. Install options:
 - Dedicated:    pip install poulet_py[exp]
 - Module:       pip install poulet_py[utils]
 - Full:         pip install poulet_py[all]
@@ -26,33 +20,44 @@ Missing 'exp' module. Install options:
 
 
 class ExperimentTrial(BaseModel):
-    stimuli: BaseStimulus | list[BaseStimulus]
-    isi: int | list[int] = Field(default=0)
+    stimuli: BaseStimulus | Sequence[BaseStimulus]
 
 
 class ExperimentBlock(BaseModel):
     name: str = Field(...)
-    trials: list[ExperimentTrial] = Field(...)
-    repetitions: int = Field(default=1, ge=1)
-    order: Literal["random", "sequential"] = Field(default="random")
+    trials: Sequence[ExperimentTrial] = Field(...)
+    trial_repetitions: int = Field(default=1, ge=1)
+    trial_order: Literal["random", "sequential"] = Field(default="random")
     trigger: BaseTrigger | None = Field(default=None)
     trigger_policy: Literal["abort", "skip"] = "abort"
-    isi: int | list[int] = Field(default=0)
+    isi: int | Sequence[int] | range = Field(default=0)
+
+    @model_validator(mode="after")
+    def validate_isi(self) -> Self:
+        if isinstance(self.isi, range):
+            self.isi = list(self.isi)
+        return self
 
 
 class ExperimentRuntime(BaseModel):
     name: str = Field(...)
-    blocks: list[ExperimentBlock] = Field(...)
-    repetitions: int = Field(default=1, ge=1)
-    order: Literal["random", "sequential"] = Field(default="sequential")
-    isi: int | list[int] = Field(default=0)
+    blocks: Sequence[ExperimentBlock] = Field(...)
+    block_repetitions: int = Field(default=1, ge=1)
+    block_order: Literal["random", "sequential"] = Field(default="sequential")
+    isi: int | Sequence[int] | range = Field(default=0)
 
-    sources: list[BaseSource] = Field(...)
-    sinks: list[BaseSink] = Field(...)
+    sources: Sequence[BaseSource] = Field(...)
+    sinks: Sequence[BaseSink] = Field(...)
 
     bus: EventBus = Field(default_factory=EventBus)
 
     _open: bool = PrivateAttr(False)
+
+    @model_validator(mode="after")
+    def validate_isi(self) -> Self:
+        if isinstance(self.isi, range):
+            self.isi = list(self.isi)
+        return self
 
     def open(self):
         for source in self.sources:
@@ -70,29 +75,38 @@ class ExperimentRuntime(BaseModel):
 
     def run(self):
         if not self._open:
-            raise RuntimeError("Experiment Runtime should open first")
+            msg = "Experiment Runtime should open first"
+            raise RuntimeError(msg)
 
         with ThreadPoolExecutor(max_workers=len(self.sources)) as executor:
-            blocks: list[ExperimentBlock] = repeat(self.blocks, self.repetitions, mode=self.order)
-
-            for block in tqdm(blocks, desc="Block", smoothing=True):
-                trials: list[ExperimentTrial] = repeat(
-                    block.trials, block.repetitions, mode=block.order
+            blocks: Sequence[ExperimentBlock] = repeat(
+                self.blocks, self.block_repetitions, mode=self.block_order
+            )
+            n_blocks = len(blocks)
+            for blk_idx, block in tqdm(enumerate(blocks), desc="Block", smoothing=True):
+                trials: Sequence[ExperimentTrial] = repeat(
+                    block.trials, block.trial_repetitions, mode=block.trial_order
                 )
+                n_trials = len(trials)
 
-                for trial in tqdm(trials, desc="Trial", smoothing=True, leave=False):
+                for trial_idx, trial in tqdm(
+                    enumerate(trials), desc="Trial", smoothing=True, leave=False
+                ):
                     if block.trigger and not block.trigger.wait():
                         msg = "Trigger failed"
                         raise RuntimeError(msg)
 
-                    stimuli = trial.stimuli if isinstance(trial.stimuli, list) else [trial.stimuli]
-                    isi = ExperimentRuntime.get_isi(
-                        trial.isi if trial.isi != 0 else block.isi if block.isi != 0 else self.isi
+                    isi = ExperimentRuntime.get_isi(block.isi if block.isi != 0 else self.isi)
+                    stimuli = (
+                        trial.stimuli if isinstance(trial.stimuli, Sequence) else [trial.stimuli]
                     )
+
+                    for st in stimuli:
+                        st.isi = isi
 
                     futures = []
                     for source in self.sources:
-                        futures.append(executor.submit(source.next, stimuli, isi))
+                        futures.append(executor.submit(source.fire, stimuli))
 
                     wait(futures)
 
@@ -109,8 +123,12 @@ class ExperimentRuntime(BaseModel):
         self.close()
 
     @staticmethod
-    def get_isi(isi) -> int:
+    def get_isi(isi: int | Sequence[int] | range) -> int:
         """Get the inter-stimulus period (random if list provided)."""
-        if isinstance(isi, list):
+        if isinstance(isi, range):
+            return choice(list(isi))
+
+        if isinstance(isi, Sequence):
             return choice(isi)
+
         return isi

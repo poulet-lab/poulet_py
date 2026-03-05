@@ -1,10 +1,11 @@
 try:
-    from time import perf_counter_ns
+    from collections.abc import Sequence
+    from time import monotonic_ns
 
     from numpy import array
     from pydantic import Field, PrivateAttr
 
-    from poulet_py import BaseSource, BaseStimulus
+    from poulet_py import BaseSource, BaseStimulus, SinkEvent
 except ImportError as e:
     msg = """
 Missing 'sources' module. Install options:
@@ -23,17 +24,32 @@ class CounterSource(BaseSource):
         self._counter = 0
 
     def _close(self):
-        self._counter = 0
+        pass
 
-    def _next(self, stimulus: list[BaseStimulus]) -> int:
+    def _supports(self, stimuli: Sequence[BaseStimulus]) -> Sequence[BaseStimulus]:
+        return stimuli
+
+    def _fire(self, stimuli: Sequence[BaseStimulus]) -> bool:
+        if not stimuli:
+            return False
+
         self._counter += 1
 
-        timestamp = array([perf_counter_ns()], dtype="uint64")
-        counter = array([self._counter], dtype="uint64")
+        return True
 
-        self.publish(
-            payload={"counter": counter, "timestamp": timestamp},
-            meta={"description": "Counter data"},
+    def _publish(self, stimuli: Sequence[BaseStimulus]) -> bool:
+        if not stimuli:
+            return False
+
+        counter = array(
+            [(monotonic_ns(), self._counter)],
+            dtype=[("timestamp", "uint64"), ("counter", "uint64")],
         )
 
-        return self._counter
+        self.publish(
+            SinkEvent(
+                name=self.name, payload={"counter": counter}, meta={"description": "Counter data"}
+            )
+        )
+
+        return True

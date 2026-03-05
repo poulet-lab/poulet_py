@@ -1,5 +1,6 @@
 try:
     from abc import ABC, abstractmethod
+    from collections.abc import Sequence
 
     from numpy import (
         arange,
@@ -28,7 +29,6 @@ except ImportError as e:
     msg = """
 Missing 'nidaq' module. Install options:
 - Dedicated:    pip install poulet_py[nidaq]
-- Submodule:    pip install poulet_py[daq]
 - Module:       pip install poulet_py[daq]
 - Full:         pip install poulet_py[all]
 """
@@ -156,7 +156,7 @@ class NIWhiteNoiseAnalogStimulus(NIAnalogBaseStimulus):
 
 
 class NIArbitraryAnalogStimulus(NIAnalogBaseStimulus):
-    waveform: list[float] = Field(...)
+    waveform: Sequence[float] = Field(...)
 
     def _generate(self, t, rate):
         data = asarray(self.waveform, dtype=float)
@@ -165,8 +165,8 @@ class NIArbitraryAnalogStimulus(NIAnalogBaseStimulus):
 
 
 class NISteppedAnalogStimulus(NIAnalogBaseStimulus):
-    step_values: list[float] = Field(...)
-    step_durations: list[int] = Field(...)
+    step_values: Sequence[float] = Field(...)
+    step_durations: Sequence[int] = Field(...)
 
     def _generate(self, t, rate):
         y = zeros_like(t)

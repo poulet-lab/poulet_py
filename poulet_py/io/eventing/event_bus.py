@@ -1,13 +1,12 @@
 try:
-    from typing import TYPE_CHECKING, Any
+    from abc import ABC, abstractmethod
+    from collections.abc import Sequence
+    from concurrent.futures import ThreadPoolExecutor
 
-    from numpydantic import NDArray
     from pydantic import BaseModel, PrivateAttr
 
-    from poulet_py import Event
+    from poulet_py import BaseEvent
 
-    if TYPE_CHECKING:
-        from poulet_py import BaseSink
 except ImportError as e:
     msg = """
 Missing 'writers' module. Install options:
@@ -18,17 +17,38 @@ Missing 'writers' module. Install options:
     raise ImportError(msg) from e
 
 
+class EventHandler(BaseModel, ABC):
+    @abstractmethod
+    def on_event(self, event: BaseEvent) -> None: ...
+
+
 class EventBus(BaseModel):
-    _subscribers: list["BaseSink"] = PrivateAttr(default_factory=list)
+    _subs: Sequence[EventHandler] = PrivateAttr(default_factory=list)
+    _executor: ThreadPoolExecutor | None = PrivateAttr(None)
 
-    def subscribe(self, handler: "BaseSink"):
-        self._subscribers.append(handler)
+    def subscribe(self, handler: EventHandler):
+        self._subs.append(handler)
 
-    def emit(
-        self, name: str, payload: dict[str, NDArray[Any, Any]], meta: dict[str, Any] | None = None
-    ):
-        if meta is None:
-            meta = {}
-        event = Event(name=nameƒ, payload=payload, meta=meta)
-        for handler in self._subscribers:
-            handler.handle(event)
+    def emit(self, event: BaseEvent):
+        if not self._executor:
+            msg = "EventBus must be opened first"
+            raise RuntimeError(msg)
+
+        for handlers in self._subs:
+            self._executor.submit(handlers.on_event, event)
+
+    def open(self, max_workers: int | None = None):
+        if not self._executor:
+            self._executor = ThreadPoolExecutor(max_workers=max_workers)
+
+    def close(self):
+        if self._executor:
+            self._executor.shutdown()
+            self._executor = None
+
+    def __enter__(self, max_workers: int | None = None):
+        self.open(max_workers=max_workers)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()

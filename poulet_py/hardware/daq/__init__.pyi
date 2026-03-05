@@ -8,11 +8,11 @@ from .nidaq import (
     NIBaseTask,
     NIClockHandle,
     NIClockTask,
+    NIDaQ,
     NIDigitalInputChannel,
     NIDigitalInputTask,
     NIDigitalOutputChannel,
     NIDigitalOutputTask,
-    NIDaQ,
 )
 
 __all__ = [
@@ -24,9 +24,9 @@ __all__ = [
     "NIBaseTask",
     "NIClockHandle",
     "NIClockTask",
+    "NIDaQ",
     "NIDigitalInputChannel",
     "NIDigitalInputTask",
     "NIDigitalOutputChannel",
     "NIDigitalOutputTask",
-    "NIDaQ",
 ]

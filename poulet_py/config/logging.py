@@ -74,7 +74,7 @@ def setup_logging(
         rich_handler.setFormatter(Formatter("%(message)s"))
         logger.addHandler(rich_handler)
 
-    logger.setLevel(level.upper())
+    logger.setLevel(level.upper() if isinstance(level, str) else level)
     logger.propagate = False
 
 
