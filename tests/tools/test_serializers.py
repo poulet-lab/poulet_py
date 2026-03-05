@@ -1,4 +1,4 @@
-from json import load, loads
+from json import loads
 from pathlib import Path
 from tempfile import TemporaryDirectory
 

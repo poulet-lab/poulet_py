@@ -15,7 +15,6 @@ Missing 'writers' module. Install options:
     raise ImportError(msg) from e
 
 
-
 class BaseEvent(BaseModel):
     name: str = Field(..., description="Name of the data source")
     timestamp: int = Field(default_factory=time_ns, description="Timestamp of the event")
