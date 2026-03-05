@@ -4,6 +4,7 @@ try:
 
     from numpydantic import NDArray
     from pydantic import BaseModel, Field
+
 except ImportError as e:
     msg = """
 Missing 'writers' module. Install options:
@@ -14,12 +15,16 @@ Missing 'writers' module. Install options:
     raise ImportError(msg) from e
 
 
-class Event(BaseModel):
+
+class BaseEvent(BaseModel):
     name: str = Field(..., description="Name of the data source")
+    timestamp: int = Field(default_factory=time_ns, description="Timestamp of the event")
+
+
+class SinkEvent(BaseEvent):
     payload: dict[str, NDArray[Any, Any]] = Field(
         ..., description="Data fields as a dictionary of numpy arrays"
     )
-    timestamp: int = Field(default_factory=time_ns, description="Timestamp of the event")
     meta: dict[str, Any] | None = Field(
         default=None, description="Additional metadata for the data packet"
     )

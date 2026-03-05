@@ -2,7 +2,7 @@ try:
     from collections import deque
     from re import Match, Pattern, compile, search
     from threading import Condition, Event, Thread
-    from time import monotonic, monotonic_ns, sleep
+    from time import monotonic_ns, sleep
 
     from numpy import empty, ndarray
     from numpy.typing import ArrayLike
@@ -76,7 +76,7 @@ class TCS(BaseModel, validate_assignment=True):
         description="A Trigger found in poulet_py/hardware/triggers to trigger the next stimulus",
     )
     _serial: Serial = PrivateAttr()
-    _is_open: bool = PrivateAttr(False)
+    _is_open: bool = PrivateAttr(default=False)
 
     _sampling_idx: int = PrivateAttr(0)
     _samples_buffer: ndarray | None = PrivateAttr(None)
@@ -85,7 +85,7 @@ class TCS(BaseModel, validate_assignment=True):
     _sampling_cond: Condition = PrivateAttr(default_factory=Condition)
 
     _stimulus_thread: Thread | None = PrivateAttr(None)
-    _stimulus_running: Event = PrivateAttr(default_factory=Event)
+    _stimulus_done: Event = PrivateAttr(default_factory=Event)
 
     _temperature_line_pattern: Pattern[bytes] = PrivateAttr(
         default=compile(
@@ -93,10 +93,6 @@ class TCS(BaseModel, validate_assignment=True):
         )
     )
     _serial_search_queue: deque[TCSSerialSearchRequest] = PrivateAttr(default_factory=deque)
-
-    @property
-    def is_stimulus_running(self) -> bool:
-        return self._stimulus_running.is_set()
 
     def _validate_stimulus(self, stimulus: TCSStimulus) -> None:
         if not isinstance(stimulus, TCSStimulus):
@@ -121,7 +117,7 @@ class TCS(BaseModel, validate_assignment=True):
         try:
             sleep(duration_ms / 1000.0)
         finally:
-            self._stimulus_running.clear()
+            self._stimulus_done.set()
 
     def _start_streaming(self):
         if self._samples_buffer is None:
@@ -154,7 +150,8 @@ class TCS(BaseModel, validate_assignment=True):
     def _streaming_loop(self):
         try:
             if self._samples_buffer is None:
-                raise RuntimeError("Samples buffer is not initialized")
+                msg = "Samples buffer is not initialized"
+                raise RuntimeError(msg)
 
             while not self._sampling_stop_event.is_set():
                 line = self._serial.read_until(b"\n")
@@ -188,7 +185,8 @@ class TCS(BaseModel, validate_assignment=True):
         try:
             if self._is_open:
                 self.close()
-                raise RuntimeError("Device already open")
+                msg = "Device already open"
+                raise RuntimeError(msg)
 
             self._serial = Serial(
                 port=self.port,
@@ -256,12 +254,14 @@ class TCS(BaseModel, validate_assignment=True):
             expected_pattern=compile(rb"(?P<voltage>\d+\.\d+)v\s+(?P<percent>\d+)%"),
         )
         if not result:
-            raise RuntimeError("No response from device")
+            msg = "No response from device"
+            raise RuntimeError(msg)
 
         _, match = result
 
         if not match:
-            raise RuntimeError("Battery response did not match expected format")
+            msg = "Battery response did not match expected format"
+            raise RuntimeError(msg)
 
         return {
             "voltage": float(match.group("voltage")),
@@ -270,7 +270,8 @@ class TCS(BaseModel, validate_assignment=True):
 
     def write(self, command: bytes) -> int | None:
         if not self._is_open:
-            raise RuntimeError("use open() first")
+            msg = "use open() first"
+            raise RuntimeError(msg)
 
         self._serial.flush()
         LOGGER.debug(f"Sending command: {command}")
@@ -287,7 +288,8 @@ class TCS(BaseModel, validate_assignment=True):
         timeout: float | None = None,
     ) -> tuple[int, Match[bytes] | None] | None:
         if not self._is_open:
-            raise RuntimeError("use open() first")
+            msg = "use open() first"
+            raise RuntimeError(msg)
 
         request = TCSSerialSearchRequest(pattern=expected_pattern)
         event = request.event
@@ -310,7 +312,8 @@ class TCS(BaseModel, validate_assignment=True):
 
     def trigger(self, stimulus: TCSStimulus):
         if not self._is_open:
-            raise RuntimeError("use open() first")
+            msg = "use open() first"
+            raise RuntimeError(msg)
 
         self._validate_stimulus(stimulus)
 
@@ -324,11 +327,10 @@ class TCS(BaseModel, validate_assignment=True):
 
         self.execute_command(TCSCommand.TRIGGER_STIMULATION)
 
-        self._stimulus_running.set()
-        self._stimulus_thread = Thread(
+        self._stimulus_done.clear()
+        Thread(
             target=self._stimulus_timer, args=(stimulus.duration,), name="TCS Stimulus Timer"
-        )
-        self._stimulus_thread.start()
+        ).start()
 
         if self.beep:
             self.execute_command(TCSCommand.BUZZER, min(999, stimulus.duration // 10), 44)
@@ -341,7 +343,8 @@ class TCS(BaseModel, validate_assignment=True):
 
     def calibration(self, timeout: float = 30.0) -> float:
         if not self._is_open:
-            raise RuntimeError("use open() first")
+            msg = "use open() first"
+            raise RuntimeError(msg)
 
         match = self.execute_command(
             command=TCSCommand.AUTOMATIC_CALIBRATION,
@@ -363,14 +366,16 @@ class TCS(BaseModel, validate_assignment=True):
 
     def reset(self):
         if not self._is_open:
-            raise RuntimeError("use open() first")
+            msg = "use open() first"
+            raise RuntimeError(msg)
 
         self.execute_command(TCSCommand.RESET)
         LOGGER.info("Reset successfully")
 
     def read_last_sample(self) -> ArrayLike:
         if not self._is_open or self._samples_buffer is None:
-            raise RuntimeError("use open() first")
+            msg = "use open() first"
+            raise RuntimeError(msg)
 
         with self._sampling_cond:
             if self._sampling_idx == 0:
@@ -382,16 +387,18 @@ class TCS(BaseModel, validate_assignment=True):
 
     def read_many_sample(self, data: ndarray, n: int, timeout: float = 10.0) -> int:
         if not self._is_open or self._samples_buffer is None:
-            raise RuntimeError("use open() first")
+            msg = "use open() first"
+            raise RuntimeError(msg)
 
         if data.shape[0] < n:
-            raise ValueError(f"Provided array has {data.shape[0]} rows, need at least {n}")
+            msg = f"Provided array has {data.shape[0]} rows, need at least {n}"
+            raise ValueError(msg)
 
-        deadline = monotonic() + timeout
+        deadline = monotonic_ns() + timeout
 
         with self._sampling_cond:
             while self._sampling_idx == 0:
-                remaining = deadline - monotonic()
+                remaining = deadline - monotonic_ns()
                 if remaining <= 0:
                     return 0
                 self._sampling_cond.wait(timeout=remaining)

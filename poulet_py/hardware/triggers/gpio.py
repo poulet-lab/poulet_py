@@ -21,10 +21,10 @@ class GPIOTrigger(BaseTrigger):
     """GPIO-based trigger using gpiozero."""
 
     pin: int = Field(..., description="GPIO pin number")
-    pull_up: bool = Field(False, description="Use pull-up resistor")
+    pull_up: bool = Field(default=False, description="Use pull-up resistor")
     edge: Literal["rising", "falling", "both"] = Field("rising", description="Edge to detect")
 
-    _triggered: bool = PrivateAttr(False)
+    _triggered: bool = PrivateAttr(default=False)
     _device: Button | None = PrivateAttr(None)
 
     def __init__(self, **data):

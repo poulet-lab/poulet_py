@@ -1,4 +1,5 @@
 try:
+    from collections.abc import Sequence
     from typing import ClassVar
 
     from pydantic import Field
@@ -8,8 +9,7 @@ try:
 except ImportError as e:
     msg = """
 Missing 'qst' module. Install options:
-- Dedicated:    pip install poulet_py[qst]
-- Module:       pip install poulet_py[hardware]
+- Module:       pip install poulet_py[qst]
 - Full:         pip install poulet_py[all]
 """
     raise ImportError(msg) from e
@@ -85,7 +85,7 @@ class TCSStimulus(BaseStimulus):
         le=99999,
     )
 
-    def build(self, *args, **kwargs) -> list[bytes]:
+    def build(self, *args, **kwargs) -> Sequence[bytes]:
         """
         Generate the sequence of commands needed to configure this stimulus.
 

@@ -1,4 +1,5 @@
 try:
+    from collections.abc import Sequence
     from random import shuffle
     from typing import Any, Literal
 except ImportError as e:
@@ -11,11 +12,8 @@ Missing 'tools' module. Install options:
 
 
 def repeat(
-    l: list[Any],
-    n: int,
-    *,
-    mode: Literal["random", "sequential"] = "random",
-) -> list[Any]:
+    l: Sequence[Any], n: int, *, mode: Literal["random", "sequential"] = "random"
+) -> Sequence[Any]:
     """
     Generate a list of trials with specified stimuli distribution.
 
@@ -25,7 +23,7 @@ def repeat(
         Number of trials to generate. Must be divisible by the number of
         stimuli options when mode is 'random' or when multiple stimuli
         are provided in 'fixed' mode.
-    stimuli_options : List[Any]
+    stimuli_options : Sequence[Any]
         List of possible stimulus values. For a single stimulus, all trials
         will use it. For multiple stimuli, distribution depends on mode.
         note use sequential instead of fixed
@@ -38,7 +36,7 @@ def repeat(
 
     Returns
     -------
-    List[Any]
+    Sequence[Any]
         Generated list of stimuli for each trial
 
     Raises
@@ -66,7 +64,7 @@ def repeat(
     if len(l) == 0:
         return l
 
-    _l = l * n
+    _l = list(l) * n
     if mode == "random":
         shuffle(_l)
         return _l

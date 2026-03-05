@@ -1,5 +1,5 @@
 # ruff: noqa TID252
-from .events import Event
-from .event_bus import EventBus
+from .event_bus import EventBus, EventHandler
+from .events import BaseEvent, SinkEvent
 
-__all__ = ["EventBus", "Event"]
+__all__ = ["BaseEvent", "EventBus", "EventHandler", "SinkEvent"]

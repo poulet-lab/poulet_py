@@ -22,6 +22,10 @@ Classes:
 
 try:
     from abc import ABC, abstractmethod
+    from collections.abc import Sequence
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from time import monotonic_ns
+    from typing import Self
 
     from nidaqmx import Task
     from nidaqmx.constants import (
@@ -34,15 +38,16 @@ try:
     from nidaqmx.stream_readers import AnalogMultiChannelReader, DigitalMultiChannelReader
     from nidaqmx.stream_writers import AnalogMultiChannelWriter, DigitalMultiChannelWriter
     from nidaqmx.utils import flatten_channel_string
-    from numpy import ndarray
-    from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
+    from numpy import arange, empty, float32, ndarray, uint32, uint64
+    from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
+    from poulet_py import NIAnalogBaseStimulus, NIDigitalBaseStimulus
 except ImportError as e:
     msg = """
 Missing 'nidaq' module. Install options:
 - Dedicated:    pip install poulet_py[nidaq]
 - Submodule:    pip install poulet_py[daq]
-- Module:       pip install poulet_py[daq]
+- Module:       pip install poulet_py[hardware]
 - Full:         pip install poulet_py[all]
 """
     raise ImportError(msg) from e
@@ -51,15 +56,6 @@ Missing 'nidaq' module. Install options:
 class NIClockHandle(BaseModel):
     """
     A handle to a clock configuration used for task synchronization.
-
-    Attributes
-    ----------
-    terminal : str
-        The terminal path of the clock signal (e.g., "/Dev1/Ctr0InternalOutput").
-    rate : float
-        The sampling rate in Hz.
-    samps_per_chan : int
-        Number of samples per channel. Use -1 for continuous sampling.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -69,18 +65,14 @@ class NIClockHandle(BaseModel):
     )
     rate: float = Field(..., description="The sampling rate in Hz.")
     samps_per_chan: int = Field(
-        ..., description="Number of samples per channel. Use -1 for continuous sampling."
+        ...,
+        description="Number of samples per channel. On continuous sampling defines the buffer size",
     )
 
 
 class NIBaseChannel(BaseModel):
     """
     Abstract base class for all channel configurations.
-
-    Attributes
-    ----------
-    name : str
-        Unique name to assign to the channel for identification.
     """
 
     name: str = Field(..., description="Unique name to assign to the channel for identification.")
@@ -89,20 +81,6 @@ class NIBaseChannel(BaseModel):
 class NIAnalogInputChannel(NIBaseChannel):
     """
     Configuration for an analog input channel.
-
-    Attributes
-    ----------
-    name : str
-        Unique name to assign to the channel for identification.
-    number : int
-        The AI channel number (e.g., 0 for ai0).
-    min_val : float
-        Minimum expected voltage value in volts.
-    max_val : float
-        Maximum expected voltage value in volts.
-    terminal_config : TerminalConfiguration
-        Terminal configuration (RSE, NRSE, DIFF, PSEUDO_DIFF).
-        Defaults to TerminalConfiguration.RSE.
     """
 
     number: int = Field(..., description="The AI channel number (e.g., 0 for ai0).")
@@ -117,17 +95,6 @@ class NIAnalogInputChannel(NIBaseChannel):
 class NIAnalogOutputChannel(NIBaseChannel):
     """
     Configuration for an analog output channel.
-
-    Attributes
-    ----------
-    name : str
-        Unique name to assign to the channel for identification.
-    number : int
-        The AO channel number (e.g., 0 for ao0).
-    min_val : float
-        Minimum output voltage value in volts.
-    max_val : float
-        Maximum output voltage value in volts.
     """
 
     number: int = Field(..., description="The AO channel number (e.g., 0 for ao0).")
@@ -138,15 +105,6 @@ class NIAnalogOutputChannel(NIBaseChannel):
 class NIDigitalInputChannel(NIBaseChannel):
     """
     Configuration for a digital input channel.
-
-    Attributes
-    ----------
-    name : str
-        Unique name to assign to the channel for identification.
-    port : int
-        The digital port number.
-    line : int
-        The line number within the port.
     """
 
     port: int = Field(..., description="The digital port number.")
@@ -156,15 +114,6 @@ class NIDigitalInputChannel(NIBaseChannel):
 class NIDigitalOutputChannel(NIBaseChannel):
     """
     Configuration for a digital output channel.
-
-    Attributes
-    ----------
-    name : str
-        Unique name to assign to the channel for identification.
-    port : int
-        The digital port number.
-    line : int
-        The line number within the port.
     """
 
     port: int = Field(..., description="The digital port number.")
@@ -176,49 +125,26 @@ class NIBaseTask(BaseModel, ABC):
     Abstract base class for all DAQ tasks.
 
     This class provides common functionality for task management including
-    building, starting, stopping, and cleaning up tasks.
-
-    Attributes
-    ----------
-    device : str
-        The device name (e.g., "Dev1").
-    name : str
-        A descriptive name for the task.
-
-    Private Attributes
-    ------------------
-    _requires_clock : bool
-        Whether the task requires an external clock. Defaults to True.
-    _task : Task | None
-        The underlying NI-DAQmx Task object.
-    _built : bool
-        Flag indicating whether the task has been built.
-
-    Methods
-    -------
-    build(clock: NIClockHandle | None = None) -> None
-        Abstract method to build the task.
-    start() -> None
-        Starts the task.
-    stop() -> None
-        Stops the task.
-    close() -> None
-        Closes the task and releases resources.
-    is_running() -> bool
-        Checks if the task is currently running.
+    opening, starting, stopping, and cleaning up tasks.
     """
 
-    device: str = Field(..., description='The device name (e.g., "Dev1").')
+    device: str | None = Field(
+        default=None,
+        description='The device name (e.g., "Dev1"). If None should be defined on NIDaQ',
+    )
     name: str = Field(..., description="A descriptive name for the task.")
 
-    _requires_clock: bool = PrivateAttr(True)
-    _task: Task | None = PrivateAttr(None)
-    _built: bool = PrivateAttr(False)
+    _requires_clock: bool = PrivateAttr(default=True)
+    _clock_handle: NIClockHandle | None = PrivateAttr(None)
+    _task: Task | None = PrivateAttr(default=None)
+    _is_open: bool = PrivateAttr(default=False)
 
     @abstractmethod
-    def build(self, clock: NIClockHandle | None = None) -> None:
+    def _open(self) -> None: ...
+
+    def open(self, clock: NIClockHandle | None = None) -> None:
         """
-        Build the task with the given clock configuration.
+        Open the task with the given clock configuration.
 
         Parameters
         ----------
@@ -229,11 +155,25 @@ class NIBaseTask(BaseModel, ABC):
         Raises
         ------
         RuntimeError
-            If the task has already been built.
+            If the task has already been opened.
         RuntimeError
             If a clock is required but not provided.
         """
-        ...
+        if clock and self._requires_clock:
+            self._clock_handle = clock
+        else:
+            msg = "NIAnalogInputTask requires a clock"
+            raise RuntimeError(msg)
+
+        if self._is_open:
+            msg = "Task already opened"
+            raise RuntimeError(msg)
+
+        self._task = Task()
+
+        self._open()
+
+        self._is_open = True
 
     def start(self) -> None:
         """
@@ -244,10 +184,11 @@ class NIBaseTask(BaseModel, ABC):
         Raises
         ------
         RuntimeError
-            If the task has not been built.
+            If the task has not been opened.
         """
-        if not self._built or not self._task:
-            raise RuntimeError(f"Task '{self.name}' not built")
+        if not self._is_open or not self._task:
+            msg = f"Task '{self.name}' not opened"
+            raise RuntimeError(msg)
 
         self._task.control(TaskMode.TASK_VERIFY)
         self._task.start()
@@ -272,8 +213,14 @@ class NIBaseTask(BaseModel, ABC):
         if self._task:
             self._task.close()
             self._task = None
-            self._built = False
 
+        self._is_open = False
+
+    @property
+    def requires_clock(self) -> bool:
+        return self._requires_clock
+
+    @property
     def is_running(self) -> bool:
         """
         Check if the task is currently running.
@@ -286,6 +233,18 @@ class NIBaseTask(BaseModel, ABC):
         return not self._task.is_task_done() if self._task else False
 
     @property
+    def is_open(self) -> bool:
+        """
+        Check if the task is currently open.
+
+        Returns
+        -------
+        bool
+            True if the task is open, False otherwise.
+        """
+        return self._is_open
+
+    @property
     def task(self) -> Task | None:
         """
         Get the underlying NI-DAQmx Task object.
@@ -293,9 +252,18 @@ class NIBaseTask(BaseModel, ABC):
         Returns
         -------
         Task | None
-            The NI-DAQmx Task object, or None if not built.
+            The NI-DAQmx Task object, or None if not opened.
         """
         return self._task
+
+    def __enter__(self, clock: NIClockHandle | None = None):
+        self.open(clock=clock)
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.stop()
+        self.close()
 
 
 class NIClockTask(NIBaseTask):
@@ -305,162 +273,103 @@ class NIClockTask(NIBaseTask):
     This task creates a counter output pulse train that can be used to
     synchronize other tasks.
 
-    Attributes
-    ----------
-    device : str
-        The device name (e.g., "Dev1").
-    name : str
-        A descriptive name for the task.
-    line : int
-        The counter line number to use (e.g., 0 for ctr0).
-    rate : float
-        The frequency of the clock signal in Hz.
-    samps_per_chan : int
-        Number of samples per channel. Use -1 for continuous sampling.
-    sample_mode : AcquisitionType
-        The acquisition type (FINITE or CONTINUOUS).
-        Defaults to AcquisitionType.CONTINUOUS.
     """
 
     line: int = Field(..., description="The counter line number to use (e.g., 0 for ctr0).")
     rate: float = Field(..., description="The frequency of the clock signal in Hz.")
     samps_per_chan: int = Field(
-        ..., description="Number of samples per channel. Use -1 for continuous sampling."
+        ...,
+        description="Number of samples per channel. On continuous sampling defines the buffer size.",
     )
     sample_mode: AcquisitionType = Field(
-        AcquisitionType.CONTINUOUS, description="The acquisition type (FINITE or CONTINUOUS)."
+        AcquisitionType.FINITE, description="The acquisition type (FINITE or CONTINUOUS)."
     )
 
-    _requires_clock = False
+    _requires_clock: bool = PrivateAttr(default=False)
 
-    def build(self, clock: NIClockHandle | None = None) -> None:
+    def _open(self) -> None:
         """
-        Build the clock task.
+        open the clock task.
 
         Creates a counter output channel configured as a pulse train.
-
-        Parameters
-        ----------
-        clock : NIClockHandle | None, optional
-            Not used for NIClockTask (ignored).
-
-        Raises
-        ------
-        RuntimeError
-            If the task has already been built.
         """
-        if self._built:
-            msg = "NIClockTask already built"
+        if not self._task:
+            msg = "Task not created"
             raise RuntimeError(msg)
 
-        task = Task()
-
-        task.co_channels.add_co_pulse_chan_freq(
-            f"{self.device}/ctr{self.line}",
-            freq=self.rate,
-        )
-        task.timing.cfg_implicit_timing(
-            sample_mode=self.sample_mode,
-            samps_per_chan=self.samps_per_chan,
+        self._task.co_channels.add_co_pulse_chan_freq(
+            f"{self.device}/ctr{self.line}", freq=self.rate
         )
 
-        self._task = task
-        self._built = True
+        self._task.timing.cfg_implicit_timing(
+            sample_mode=self.sample_mode, samps_per_chan=self.samps_per_chan
+        )
 
-    def export(self) -> NIClockHandle:
-        """
-        Export the clock configuration for use by other tasks.
-
-        Returns
-        -------
-        NIClockHandle
-            A handle containing the clock terminal path, rate, and samples per channel.
-
-        Raises
-        ------
-        RuntimeError
-            If the task has not been built.
-        """
-        if not self._built:
-            msg = "NIClockTask not built"
-            raise RuntimeError(msg)
-
-        return NIClockHandle(
+        self._clock_handle = NIClockHandle(
             terminal=f"/{self.device}/Ctr{self.line}InternalOutput",
             rate=self.rate,
             samps_per_chan=self.samps_per_chan,
         )
+
+    @property
+    def clock_handle(self) -> NIClockHandle | None:
+        return self._clock_handle
+
+    def wait(self, timeout: float = 10.0):
+        if not self._task:
+            msg = "NIClockTask not opened"
+            raise RuntimeError(msg)
+
+        self._task.wait_until_done(timeout=timeout)
 
 
 class NIAnalogInputTask(NIBaseTask):
     """
     Task for reading analog input data.
 
-    This task configures one or more analog input channels and reads voltage data.
-
-    Attributes
-    ----------
-    device : str
-        The device name (e.g., "Dev1").
-    name : str
-        A descriptive name for the task.
-    channels : list[NIAnalogInputChannel]
-        List of analog input channel configurations.
-    active_edge : Edge
-        The active edge for sampling (RISING or FALLING).
-        Defaults to Edge.RISING.
-    sample_mode : AcquisitionType
-        The acquisition type (FINITE or CONTINUOUS).
-        Defaults to AcquisitionType.CONTINUOUS.
-
-    Private Attributes
-    ------------------
-    _reader : AnalogMultiChannelReader | None
-        The stream reader for analog input data.
+    This task configures one or more analog input channels and reads data.
+    Currently only voltage channels are supported
     """
 
-    channels: list[NIAnalogInputChannel] = Field(
+    channels: Sequence[NIAnalogInputChannel] = Field(
         ..., description="List of analog input channel configurations."
     )
     active_edge: Edge = Field(
         default=Edge.RISING, description="The active edge for sampling (RISING or FALLING)."
     )
     sample_mode: AcquisitionType = Field(
-        default=AcquisitionType.CONTINUOUS,
+        default=AcquisitionType.FINITE,
         description="The acquisition type (FINITE or CONTINUOUS).",
     )
 
     _reader: AnalogMultiChannelReader | None = PrivateAttr(None)
+    _ai_buffer: ndarray | None = PrivateAttr(None)
+    _buffer: ndarray | None = PrivateAttr(None)
 
-    def build(self, clock: NIClockHandle | None = None) -> None:
-        """
-        Build the analog input task.
-
-        Configures analog input channels and sets up timing based on the provided clock.
-
-        Parameters
-        ----------
-        clock : NIClockHandle | None
-            Clock configuration for synchronization. Required.
-
-        Raises
-        ------
-        RuntimeError
-            If no clock is provided.
-        RuntimeError
-            If the task has already been built.
-        """
-        if not clock:
-            msg = "NIAnalogInputTask requires a clock"
-            raise RuntimeError(msg)
-        if self._built:
-            msg = "Task already built"
+    def _ensure_buffer(self, samples: int):
+        if not self._reader or not self._ai_buffer:
+            msg = "Task not opened"
             raise RuntimeError(msg)
 
-        task = Task()
+        capacity = self._ai_buffer.shape[1]
+
+        if samples > capacity:
+            new_capacity = max(samples, capacity * 2)
+
+            self._ai_buffer = empty((len(self.channels), new_capacity), dtype=float32)
+
+            self._buffer = empty(
+                new_capacity,
+                dtype=[("timestamp", uint64), ("ai", float32, (len(self.channels),))],
+            )
+
+    def _open(self) -> None:
+        if not self._task or not self._clock_handle:
+            msg = "Task not created"
+            raise RuntimeError(msg)
 
         for ch in self.channels:
-            task.ai_channels.add_ai_voltage_chan(
+            self._task.ai_channels.add_ai_voltage_chan(
                 f"{self.device}/ai{ch.number}",
                 name_to_assign_to_channel=ch.name,
                 min_val=ch.min_val,
@@ -468,19 +377,24 @@ class NIAnalogInputTask(NIBaseTask):
                 terminal_config=ch.terminal_config,
             )
 
-        task.timing.cfg_samp_clk_timing(
-            rate=clock.rate,
-            source=clock.terminal,
+        self._task.timing.cfg_samp_clk_timing(
+            rate=self._clock_handle.rate,
+            source=self._clock_handle.terminal,
             active_edge=self.active_edge,
             sample_mode=self.sample_mode,
-            samps_per_chan=clock.samps_per_chan,
+            samps_per_chan=self._clock_handle.samps_per_chan,
         )
 
-        self._reader = AnalogMultiChannelReader(task.in_stream)
-        self._task = task
-        self._built = True
+        self._ai_buffer = empty(
+            (len(self.channels), self._clock_handle.samps_per_chan), dtype=float32
+        )
+        self._buffer = empty(
+            self._clock_handle.samps_per_chan,
+            dtype=[("timestamp", uint64), ("ai", float32, (len(self.channels),))],
+        )
+        self._reader = AnalogMultiChannelReader(self._task.in_stream)
 
-    def read(self, data: ndarray, samples: int = -1, timeout: float = 10.0):
+    def read(self, samples: int = -1, timeout: float = 10.0) -> ndarray:
         """
         Read analog input data.
 
@@ -498,100 +412,73 @@ class NIAnalogInputTask(NIBaseTask):
         Raises
         ------
         RuntimeError
-            If the task has not been built.
+            If the task has not been opened.
         """
-        if not self._reader:
-            msg = "Task not built"
+        if not self._reader or not self._ai_buffer or not self._buffer or not self._clock_handle:
+            msg = "Task not opened"
             raise RuntimeError(msg)
-        self._reader.read_many_sample(data, samples, timeout)
+
+        self._ensure_buffer(samples)
+        n = self._reader.read_many_sample(self._ai_buffer, samples, timeout)
+
+        if n > 0:
+            data = self._ai_buffer[:, :n]
+            self._buffer["ai"][:n] = data.T
+
+            t_read = monotonic_ns()
+            dt = uint64(1e9 / self._clock_handle.rate)
+            t0 = t_read - (n - 1) * dt
+
+            timestamps = self._buffer["timestamp"][:n]
+            timestamps[:] = t0
+            timestamps += dt * arange(n, dtype=uint64)
+
+        return self._buffer[:n].copy()
 
 
 class NIAnalogOutputTask(NIBaseTask):
     """
     Task for writing analog output data.
 
-    This task configures one or more analog output channels and writes voltage data.
-
-    Attributes
-    ----------
-    device : str
-        The device name (e.g., "Dev1").
-    name : str
-        A descriptive name for the task.
-    channels : list[NIAnalogOutputChannel]
-        List of analog output channel configurations.
-    active_edge : Edge
-        The active edge for sampling (RISING or FALLING).
-        Defaults to Edge.RISING.
-    sample_mode : AcquisitionType
-        The acquisition type (FINITE or CONTINUOUS).
-        Defaults to AcquisitionType.CONTINUOUS.
-
-    Private Attributes
-    ------------------
-    _writer : AnalogMultiChannelWriter | None
-        The stream writer for analog output data.
+    This task configures one or more analog output channels and writes data.
+    Currently only voltage channels are supported
     """
 
-    channels: list[NIAnalogOutputChannel] = Field(
+    channels: Sequence[NIAnalogOutputChannel] = Field(
         ..., description="List of analog output channel configurations."
     )
     active_edge: Edge = Field(
         default=Edge.RISING, description="The active edge for sampling (RISING or FALLING)."
     )
     sample_mode: AcquisitionType = Field(
-        default=AcquisitionType.CONTINUOUS,
+        default=AcquisitionType.FINITE,
         description="The acquisition type (FINITE or CONTINUOUS).",
     )
 
     _writer: AnalogMultiChannelWriter | None = PrivateAttr(None)
 
-    def build(self, clock: NIClockHandle | None = None) -> None:
-        """
-        Build the analog output task.
-
-        Configures analog output channels and sets up timing based on the provided clock.
-
-        Parameters
-        ----------
-        clock : NIClockHandle | None
-            Clock configuration for synchronization. Required.
-
-        Raises
-        ------
-        RuntimeError
-            If no clock is provided.
-        RuntimeError
-            If the task has already been built.
-        """
-        if not clock:
-            msg = "NIAnalogOutputTask requires a clock"
+    def _open(self) -> None:
+        if not self._task or not self._clock_handle:
+            msg = "Task not created"
             raise RuntimeError(msg)
-        if self._built:
-            msg = "Task already built"
-            raise RuntimeError(msg)
-
-        task = Task()
 
         for ch in self.channels:
-            task.ao_channels.add_ao_voltage_chan(
+            self._task.ao_channels.add_ao_voltage_chan(
                 f"{self.device}/ao{ch.number}",
                 name_to_assign_to_channel=ch.name,
                 min_val=ch.min_val,
                 max_val=ch.max_val,
             )
 
-        task.timing.cfg_samp_clk_timing(
-            rate=clock.rate,
-            source=clock.terminal,
+        self._task.timing.cfg_samp_clk_timing(
+            rate=self._clock_handle.rate,
+            source=self._clock_handle.terminal,
             active_edge=self.active_edge,
             sample_mode=self.sample_mode,
-            samps_per_chan=clock.samps_per_chan,
+            samps_per_chan=self._clock_handle.samps_per_chan,
         )
 
-        self._writer = AnalogMultiChannelWriter(task.out_stream, auto_start=False)
-        self._task = task
-        self._built = True
+        self._writer = AnalogMultiChannelWriter(self._task.out_stream, auto_start=False)
 
     def write(self, data: ndarray, timeout: float = 10.0):
         """
@@ -608,11 +495,12 @@ class NIAnalogOutputTask(NIBaseTask):
         Raises
         ------
         RuntimeError
-            If the task has not been built.
+            If the task has not been opened.
         """
         if not self._writer:
-            msg = "Task not built"
+            msg = "Task not opened"
             raise RuntimeError(msg)
+
         self._writer.write_many_sample(data, timeout=timeout)
 
 
@@ -621,39 +509,16 @@ class NIDigitalInputTask(NIBaseTask):
     Task for reading digital input data.
 
     This task configures one or more digital input lines and reads digital data.
-
-    Attributes
-    ----------
-    device : str
-        The device name (e.g., "Dev1").
-    name : str
-        A descriptive name for the task.
-    channels : list[NIDigitalInputChannel]
-        List of digital input channel configurations.
-    active_edge : Edge
-        The active edge for sampling (RISING or FALLING).
-        Defaults to Edge.RISING.
-    sample_mode : AcquisitionType
-        The acquisition type (FINITE or CONTINUOUS).
-        Defaults to AcquisitionType.CONTINUOUS.
-    line_grouping : LineGrouping
-        How to group digital lines (CHAN_PER_LINE or CHAN_FOR_ALL_LINES).
-        Defaults to LineGrouping.CHAN_PER_LINE.
-
-    Private Attributes
-    ------------------
-    _reader : DigitalMultiChannelReader | None
-        The stream reader for digital input data.
     """
 
-    channels: list[NIDigitalInputChannel] = Field(
+    channels: Sequence[NIDigitalInputChannel] = Field(
         ..., description="List of digital input channel configurations."
     )
     active_edge: Edge = Field(
         default=Edge.RISING, description="The active edge for sampling (RISING or FALLING)."
     )
     sample_mode: AcquisitionType = Field(
-        default=AcquisitionType.CONTINUOUS,
+        default=AcquisitionType.FINITE,
         description="The acquisition type (FINITE or CONTINUOUS).",
     )
     line_grouping: LineGrouping = Field(
@@ -662,54 +527,57 @@ class NIDigitalInputTask(NIBaseTask):
     )
 
     _reader: DigitalMultiChannelReader | None = PrivateAttr(None)
+    _di_buffer: ndarray | None = PrivateAttr(None)
+    _buffer: ndarray | None = PrivateAttr(None)
 
-    def build(self, clock: NIClockHandle | None = None) -> None:
-        """
-        Build the digital input task.
-
-        Configures digital input channels and sets up timing based on the provided clock.
-
-        Parameters
-        ----------
-        clock : NIClockHandle | None
-            Clock configuration for synchronization. Required.
-
-        Raises
-        ------
-        RuntimeError
-            If no clock is provided.
-        RuntimeError
-            If the task has already been built.
-        """
-        if not clock:
-            msg = "NIDigitalInputTask requires a clock"
-            raise RuntimeError(msg)
-        if self._built:
-            msg = "Task already built"
+    def _ensure_buffer(self, samples: int):
+        if not self._reader or not self._di_buffer:
+            msg = "Task not opened"
             raise RuntimeError(msg)
 
-        task = Task()
+        capacity = self._di_buffer.shape[1]
+
+        if samples > capacity:
+            new_capacity = max(samples, capacity * 2)
+
+            self._di_buffer = empty((len(self.channels), new_capacity), dtype=uint32)
+
+            self._buffer = empty(
+                new_capacity,
+                dtype=[("timestamp", uint64), ("di", uint32, (len(self.channels),))],
+            )
+
+    def _open(self) -> None:
+        if not self._task or not self._clock_handle:
+            msg = "Task not created"
+            raise RuntimeError(msg)
 
         lines = [f"{self.device}/port{c.port}/line{c.line}" for c in self.channels]
 
-        task.di_channels.add_di_chan(
+        self._task.di_channels.add_di_chan(
             flatten_channel_string(lines),
             line_grouping=self.line_grouping,
         )
 
-        task.timing.cfg_samp_clk_timing(
-            rate=clock.rate,
-            source=clock.terminal,
+        self._task.timing.cfg_samp_clk_timing(
+            rate=self._clock_handle.rate,
+            source=self._clock_handle.terminal,
             active_edge=self.active_edge,
             sample_mode=self.sample_mode,
-            samps_per_chan=clock.samps_per_chan,
+            samps_per_chan=self._clock_handle.samps_per_chan,
         )
 
-        self._reader = DigitalMultiChannelReader(task.in_stream)
-        self._task = task
-        self._built = True
+        self._di_buffer = empty(
+            (len(self.channels), self._clock_handle.samps_per_chan), dtype=uint32
+        )
+        self._buffer = empty(
+            self._clock_handle.samps_per_chan,
+            dtype=[("timestamp", uint64), ("di", uint32, (len(self.channels),))],
+        )
 
-    def read(self, data: ndarray, samples: int = -1, timeout: float = 10.0):
+        self._reader = DigitalMultiChannelReader(self._task.in_stream)
+
+    def read(self, samples: int = -1, timeout: float = 10.0) -> ndarray:
         """
         Read digital input data.
 
@@ -727,12 +595,29 @@ class NIDigitalInputTask(NIBaseTask):
         Raises
         ------
         RuntimeError
-            If the task has not been built.
+            If the task has not been opened.
         """
-        if not self._reader:
-            msg = "Task not built"
+        if not self._reader or not self._di_buffer or not self._buffer or not self._clock_handle:
+            msg = "Task not opened"
             raise RuntimeError(msg)
-        self._reader.read_many_sample_port_uint32(data, samples, timeout)
+
+        self._ensure_buffer(samples)
+
+        n = self._reader.read_many_sample_port_uint32(self._di_buffer, samples, timeout)
+
+        if n > 0:
+            data = self._di_buffer[:, :n]
+            self._buffer["di"][:n] = data.T
+
+            t_read = monotonic_ns()
+            dt = uint64(1e9 / self._clock_handle.rate)
+            t0 = t_read - (n - 1) * dt
+
+            timestamps = self._buffer["timestamp"][:n]
+            timestamps[:] = t0
+            timestamps += dt * arange(n, dtype=uint64)
+
+        return self._buffer[:n].copy()
 
 
 class NIDigitalOutputTask(NIBaseTask):
@@ -740,32 +625,9 @@ class NIDigitalOutputTask(NIBaseTask):
     Task for writing digital output data.
 
     This task configures one or more digital output lines and writes digital data.
-
-    Attributes
-    ----------
-    device : str
-        The device name (e.g., "Dev1").
-    name : str
-        A descriptive name for the task.
-    channels : list[NIDigitalOutputChannel]
-        List of digital output channel configurations.
-    active_edge : Edge
-        The active edge for sampling (RISING or FALLING).
-        Defaults to Edge.RISING.
-    sample_mode : AcquisitionType
-        The acquisition type (FINITE or CONTINUOUS).
-        Defaults to AcquisitionType.CONTINUOUS.
-    line_grouping : LineGrouping
-        How to group digital lines (CHAN_PER_LINE or CHAN_FOR_ALL_LINES).
-        Defaults to LineGrouping.CHAN_PER_LINE.
-
-    Private Attributes
-    ------------------
-    _writer : DigitalMultiChannelWriter | None
-        The stream writer for digital output data.
     """
 
-    channels: list[NIDigitalOutputChannel] = Field(
+    channels: Sequence[NIDigitalOutputChannel] = Field(
         ..., description="List of digital output channel configurations."
     )
     active_edge: Edge = Field(
@@ -782,51 +644,29 @@ class NIDigitalOutputTask(NIBaseTask):
 
     _writer: DigitalMultiChannelWriter | None = PrivateAttr(None)
 
-    def build(self, clock: NIClockHandle | None = None) -> None:
-        """
-        Build the digital output task.
-
-        Configures digital output channels and sets up timing based on the provided clock.
-
-        Parameters
-        ----------
-        clock : NIClockHandle | None
-            Clock configuration for synchronization. Required.
-
-        Raises
-        ------
-        RuntimeError
-            If no clock is provided.
-        RuntimeError
-            If the task has already been built.
-        """
-        if not clock:
-            msg = "NIDigitalOutputTask requires a clock"
+    def _open(self) -> None:
+        if not self._task or not self._clock_handle:
+            msg = "Task not created"
             raise RuntimeError(msg)
-        if self._built:
-            msg = "Task already built"
-            raise RuntimeError(msg)
-
-        task = Task()
 
         lines = [f"{self.device}/port{c.port}/line{c.line}" for c in self.channels]
 
-        task.do_channels.add_do_chan(
+        self._task.do_channels.add_do_chan(
             flatten_channel_string(lines),
             line_grouping=self.line_grouping,
         )
 
-        task.timing.cfg_samp_clk_timing(
-            rate=clock.rate,
-            source=clock.terminal,
+        self._task.timing.cfg_samp_clk_timing(
+            rate=self._clock_handle.rate,
+            source=self._clock_handle.terminal,
             active_edge=self.active_edge,
             sample_mode=self.sample_mode,
-            samps_per_chan=clock.samps_per_chan,
+            samps_per_chan=self._clock_handle.samps_per_chan,
         )
 
-        self._writer = DigitalMultiChannelWriter(task.out_stream, auto_start=False)
-        self._task = task
-        self._built = True
+        self._writer = DigitalMultiChannelWriter(self._task.out_stream, auto_start=False)
+        self._task = self._task
+        self._is_open = True
 
     def write(self, data: ndarray, timeout: float = 10.0):
         """
@@ -843,11 +683,12 @@ class NIDigitalOutputTask(NIBaseTask):
         Raises
         ------
         RuntimeError
-            If the task has not been built.
+            If the task has not been opened.
         """
         if not self._writer:
-            msg = "Task not built"
+            msg = "Task not opened"
             raise RuntimeError(msg)
+
         self._writer.write_many_sample_port_uint32(data, timeout=timeout)
 
 
@@ -855,84 +696,96 @@ class NIDaQ(BaseModel):
     """
     Main class for managing multiple synchronized NI-DAQmx tasks.
 
-    This class provides a centralized way to create, build, start, and stop
+    This class provides a centralized way to create, open, start, and stop
     multiple tasks that are synchronized to a common clock.
 
-    Attributes
-    ----------
-    device : str
-        The device name (e.g., "Dev1") used by all tasks.
-
-    Private Attributes
-    ------------------
-    _tasks : list[NIBaseTask]
-        List of all registered tasks.
-    _clock_task : NIClockTask | None
-        The clock task used for synchronization.
-    _clock_handle : NIClockHandle | None
-        The clock handle exported by the clock task.
-
-    Methods
-    -------
-    add_task(task: NIBaseTask) -> None
-        Add a task to the manager.
-    build_all() -> None
-        Build all registered tasks.
-    start_all() -> None
-        Start all registered tasks.
-    stop_all() -> None
-        Stop all registered tasks.
-    close_all() -> None
-        Close all registered tasks.
-    __enter__()
-        Context manager entry.
-    __exit__(exc_type, exc, tb)
-        Context manager exit.
     """
 
     device: str = Field(..., description='The device name (e.g., "Dev1") used by all tasks.')
+    tasks: Sequence[NIBaseTask] = Field(...)
 
-    _tasks: dict[str, NIBaseTask] = PrivateAttr(default_factory=dict)
     _clock_task: NIClockTask | None = PrivateAttr(None)
-    _clock_handle: NIClockHandle | None = PrivateAttr(None)
+    _read_tasks: Sequence[NIAnalogInputTask | NIDigitalInputTask] = PrivateAttr(
+        default_factory=list
+    )
+    _write_tasks: Sequence[NIAnalogOutputTask | NIDigitalOutputTask] = PrivateAttr(
+        default_factory=list
+    )
+    _is_open: bool = PrivateAttr(default=False)
+    _executor: ThreadPoolExecutor | None = PrivateAttr(None)
 
-    def add_task(self, task: NIBaseTask) -> None:
-        """
-        Add a task to the manager.
-
-        Parameters
-        ----------
-        task : NIBaseTask
-            The task to add.
-
-        Raises
-        ------
-        ValueError
-            If the task device doesn't match the NIDaQ device.
-        ValueError
-            If trying to add more than one NIClockTask.
-        """
-        if task.device != self.device:
-            msg = "Task device mismatch"
-            raise ValueError(msg)
-
-        if isinstance(task, NIClockTask):
-            if self._clock_task:
-                msg = "Only one NIClockTask allowed"
+    @model_validator(mode="after")
+    def validate_tasks(self) -> Self:
+        names = []
+        for t in self.tasks:
+            if not t.device:
+                t.device = self.device
+            elif t.device != self.device:
+                msg = "Task device mismatch"
                 raise ValueError(msg)
-            self._clock_task = task
 
-        if task.name in self._tasks.keys():
-            msg = "A task with the same name already exist"
+            if isinstance(t, NIClockTask):
+                if self._clock_task:
+                    msg = "Only one NIClockTask allowed"
+                    raise ValueError(msg)
+                self._clock_task = t
+
+            if t.name in names:
+                msg = "A task with the same name already exist"
+                raise RuntimeError(msg)
+            if isinstance(t, (NIAnalogInputTask, NIDigitalInputTask)):
+                self._read_tasks = [*self._read_tasks, t]
+            if isinstance(t, (NIAnalogOutputTask, NIDigitalOutputTask)):
+                self._write_tasks = [*self._write_tasks, t]
+            names.append(t.name)
+
+        return self
+
+    def write(self, stimulus: NIAnalogBaseStimulus | NIDigitalBaseStimulus):
+        if not self._is_open or not self._clock_task:
+            msg = "NIDaQ must be first opened"
             raise RuntimeError(msg)
 
-        self._tasks[task.name] = task
+        for task in self._write_tasks:
+            if isinstance(task, NIDigitalOutputTask) and isinstance(
+                stimulus, NIDigitalBaseStimulus
+            ):
+                task.write(stimulus.build(task._clock_handle.rate))
+            elif isinstance(task, NIAnalogOutputTask) and isinstance(
+                stimulus, NIAnalogBaseStimulus
+            ):
+                task.write(stimulus.build(task._clock_handle.rate))
 
-    def build_all(self) -> None:
+    def read(self, samples: int = -1, timeout: float = 10.0) -> dict[str, ndarray]:
+        if not self._is_open or not self._executor:
+            msg = "NIDaQ must be first opened"
+            raise RuntimeError(msg)
+
+        ret: dict[str, ndarray] = {}
+
+        future_map = {
+            self._executor.submit(task.read, samples=samples, timeout=timeout): task
+            for task in self._read_tasks
+        }
+
+        for future in as_completed(future_map):
+            task = future_map[future]
+            ret[task.name] = future.result()
+
+        return ret
+
+    def wait(self, timeout: float = 10.0):
+        if not self._is_open or not self._clock_task:
+            msg = "NIDaQ must be first opened"
+            raise RuntimeError(msg)
+
+        self._clock_task.wait(timeout)
+
+    def open(self) -> None:
         """
-        Build all registered tasks.
+        open all registered tasks.
 
-        This method builds the clock task first, then builds all other tasks
+        This method opens the clock task first, then opens all other tasks
         using the exported clock handle.
 
         Raises
@@ -940,17 +793,23 @@ class NIDaQ(BaseModel):
         RuntimeError
             If no NIClockTask has been registered.
         """
+        if self._is_open:
+            return
+
         if not self._clock_task:
             msg = "No NIClockTask registered"
             raise RuntimeError(msg)
 
-        self._clock_task.build()
-        self._clock_handle = self._clock_task.export()
+        self._clock_task.open()
 
-        for name, task in self._tasks.items():
-            task.build(self._clock_handle if task._requires_clock else None)
+        for task in self.tasks:
+            task.open(self._clock_task.clock_handle)
 
-    def start_all(self) -> None:
+        self._executor = ThreadPoolExecutor(len(self._read_tasks)) if self._read_tasks else None
+
+        self._is_open = True
+
+    def start(self) -> None:
         """
         Start all registered tasks.
 
@@ -959,51 +818,65 @@ class NIDaQ(BaseModel):
         Raises
         ------
         RuntimeError
-            If the system has not been built.
+            If the system has not been opened.
         """
-        if not self._clock_task:
-            msg = "System not built"
+        if not self._is_open or not self._clock_task:
+            msg = "NIDaQ must be first opened"
             raise RuntimeError(msg)
 
-        self._clock_task.start()
-        for name, task in self._tasks.items():
+        for task in self.tasks:
             if task is not self._clock_task:
                 task.start()
 
-    def stop_all(self) -> None:
+        self._clock_task.start()
+
+    def stop(self) -> None:
         """
         Stop all registered tasks.
 
         Stops all tasks except the clock task first, then stops the clock task.
         """
-        for name, task in self._tasks.items():
+        if not self._is_open:
+            return
+
+        for task in self.tasks:
             if task is not self._clock_task:
                 task.stop()
+
         if self._clock_task:
             self._clock_task.stop()
 
-    def close_all(self) -> None:
+    def close(self) -> None:
         """
         Close all registered tasks and release resources.
 
         This should be called when the NIDaQ instance is no longer needed.
         """
-        for name, task in self._tasks.items():
+        if not self._is_open:
+            return
+
+        for task in self.tasks:
             task.close()
+
+        if self._executor:
+            self._executor.shutdown(wait=True)
+            self._executor = None
+
+        self._is_open = False
 
     def __enter__(self):
         """
         Context manager entry.
 
-        Builds and starts all tasks when entering a context.
+        opens and starts all tasks when entering a context.
 
         Returns
         -------
         NIDaQ
             The NIDaQ instance.
         """
-        self.build_all()
-        self.start_all()
+        self.open()
+        self.start()
         return self
 
     def __exit__(self, exc_type, exc, tb):
@@ -1021,5 +894,5 @@ class NIDaQ(BaseModel):
         tb : TracebackType | None
             Traceback if an exception occurred.
         """
-        self.stop_all()
-        self.close_all()
+        self.stop()
+        self.close()
