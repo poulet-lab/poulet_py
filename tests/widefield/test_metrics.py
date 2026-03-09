@@ -7,6 +7,7 @@ from poulet_py.widefield.metrics import (
     calculate_baseline_movie,
     calculate_deltaff_movie,
     calculate_percentile_movie,
+    calculate_rolling_baseline_movie,
     calculate_spatial_threshold_metrics,
 )
 
@@ -30,21 +31,24 @@ class TestCalculateSpatialThresholdMetrics:
         return (xx + yy) / 2
 
     def test_basic_functionality(self, simple_image: np.ndarray):
-        """Test basic function call returns expected keys."""
+        """Test basic function call returns expected fields (structured array)."""
         result = calculate_spatial_threshold_metrics(simple_image)
 
         assert result is not None
-        assert "threshold" in result
-        assert "threshold_mask" in result
-        assert "n_pixels_above" in result
-        assert "total_pixels" in result
-        assert "percent_above" in result
-        assert "auc_above_threshold" in result
-        assert "smoothed_image" in result
-        assert "max_activity" in result
-        assert "min_activity" in result
-        assert "mean_activity" in result
-        assert "std_activity" in result
+        expected_fields = (
+            "threshold",
+            "threshold_mask",
+            "n_pixels_above",
+            "total_pixels",
+            "percent_above",
+            "auc_above_threshold",
+            "smoothed_image",
+            "max_activity",
+            "min_activity",
+            "mean_activity",
+            "std_activity",
+        )
+        assert result.dtype.names == expected_fields
 
     def test_threshold_calculation(self, simple_image: np.ndarray):
         """Test threshold is correctly calculated as percentage of max."""
@@ -172,6 +176,45 @@ class TestCalculateSpatialThresholdMetrics:
         assert result["max_activity"] == pytest.approx(expected_max)
         assert result["mean_activity"] == pytest.approx(expected_mean)
         assert result["std_activity"] == pytest.approx(expected_std)
+
+
+class TestCalculateRollingBaselineMovie:
+    """Tests for calculate_rolling_baseline_movie (sliding_window_view)."""
+
+    def test_basic_rolling_baseline(self):
+        """Rolling mean shape is T - window_frames + 1."""
+        data = np.random.rand(100, 50, 50).astype(np.float32)
+        window = 30
+        result = calculate_rolling_baseline_movie(data, window)
+
+        assert result is not None
+        assert result.shape == (100 - window + 1, 50, 50)
+        assert result.dtype == np.float64
+
+    def test_rolling_mean_matches_manual_slice(self):
+        """First window mean equals mean of data[0:window]."""
+        data = np.random.rand(20, 5, 5).astype(np.float32)
+        window = 5
+        result = calculate_rolling_baseline_movie(data, window)
+        manual_first = np.mean(data[0:window], axis=0)
+
+        assert result is not None
+        np.testing.assert_array_almost_equal(result[0], manual_first)
+
+    def test_invalid_input_not_3d(self):
+        """2D input returns None."""
+        result = calculate_rolling_baseline_movie(np.zeros((50, 50)), 10)
+        assert result is None
+
+    def test_invalid_window_zero(self):
+        """window_frames=0 returns None."""
+        result = calculate_rolling_baseline_movie(np.zeros((10, 5, 5)), 0)
+        assert result is None
+
+    def test_invalid_window_too_large(self):
+        """window_frames > T returns None."""
+        result = calculate_rolling_baseline_movie(np.zeros((10, 5, 5)), 11)
+        assert result is None
 
 
 class TestCalculatePercentileMovie:
