@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/poulet-lab/poulet_py/schemas/widefield_trial_metadata.json",
+  "title": "Widefield trial metadata",
+  "description": "Metadata extracted from a widefield imaging trial (e.g. from data.h5 or saved metadata.json). Used for processed and raw trial data.",
+  "type": "object",
+  "required": ["source_h5", "trial_name", "file_attributes", "datasets"],
+  "properties": {
+    "source_h5": {
+      "type": "string",
+      "description": "Original HDF5 file path (or path from which metadata was extracted)."
+    },
+    "trial_name": {
+      "type": "string",
+      "description": "Name of the trial (typically the parent folder name)."
+    },
+    "file_attributes": {
+      "type": "object",
+      "description": "File-level HDF5 attributes (e.g. mouse_id, protocol_name, comment, camera_fps).",
+      "additionalProperties": true,
+      "properties": {
+        "mouse_id": { "type": "string", "description": "Subject identifier." },
+        "protocol_name": { "type": "string", "description": "Name of the protocol." },
+        "comment": { "type": "string", "description": "Free-form comment (may contain parsed temp range)." },
+        "camera_fps": { "type": "number", "description": "Camera frame rate in Hz." }
+      }
+    },
+    "datasets": {
+      "type": "object",
+      "description": "Per-dataset info (shape, dtype, attributes). Keys are dataset names.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["shape", "dtype", "attributes"],
+        "properties": {
+          "shape": {
+            "type": "array",
+            "items": { "type": "integer" },
+            "description": "Dataset shape (e.g. [n_frames] or [n_frames, n_channels])."
+          },
+          "dtype": {
+            "type": "string",
+            "description": "NumPy dtype as string (e.g. float64, uint16)."
+          },
+          "attributes": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Dataset-level HDF5 attributes (e.g. sr for sample rate)."
+          }
+        }
+      }
+    },
+    "parsed": {
+      "type": "object",
+      "description": "Optional parsed fields (e.g. temperature range from comment).",
+      "additionalProperties": true,
+      "properties": {
+        "baseline_temperature": { "type": "number" },
+        "target_temperature": { "type": "number" },
+        "amplitude": { "type": "number" }
+      }
+    }
+  }
+}
