@@ -223,15 +223,11 @@ class TestCalculatePercentileMovie:
         """Test that from_ms >= to_ms returns None."""
         data = np.random.rand(100, 50, 50).astype(np.float32)
         assert (
-            calculate_percentile_movie(
-                data, percentile=15.0, from_ms=500.0, to_ms=200.0, fps=10.0
-            )
+            calculate_percentile_movie(data, percentile=15.0, from_ms=500.0, to_ms=200.0, fps=10.0)
             is None
         )
         assert (
-            calculate_percentile_movie(
-                data, percentile=15.0, from_ms=300.0, to_ms=300.0, fps=10.0
-            )
+            calculate_percentile_movie(data, percentile=15.0, from_ms=300.0, to_ms=300.0, fps=10.0)
             is None
         )
 
