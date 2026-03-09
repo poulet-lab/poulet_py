@@ -15,33 +15,42 @@ from poulet_py import LOGGER
 
 def calculate_percentile_movie(
     data: np.ndarray,
-    percentile: float = 15.0,
+    percentile: float | list[float] = 15.0,
+    from_ms: float | None = None,
+    to_ms: float | None = None,
+    fps: float | None = None,
+    *,
     stimulus_start_frame: int | None = None,
     baseline_ms: float | None = None,
-    fps: float | None = None,
 ) -> np.ndarray | None:
     """
     Calculate a percentile projection across time for each pixel.
 
-    Computes the specified percentile value for each pixel across
-    all frames or within a specified baseline window. This is commonly
-    used to establish a baseline fluorescence value (F0) for delta F/F
-    calculations.
+    Computes the specified percentile value(s) for each pixel across
+    all frames or within a time window [from_ms, to_ms). Commonly
+    used to establish a baseline fluorescence value (F0) for delta F/F.
 
     Args:
         data: 3D numpy array with shape (frames, height, width).
-        percentile: The percentile to compute (0-100). Default is 15.0.
-        stimulus_start_frame: Frame index where stimulus begins.
-            If provided along with baseline_ms, only frames before
-            the stimulus are used for calculation.
-        baseline_ms: Duration of baseline period in milliseconds.
-            Used with stimulus_start_frame to define the window.
-        fps: Frames per second. Required when using window parameters.
+        percentile: Percentile(s) to compute (0-100). A single float or
+            list of floats. Default is 15.0.
+        from_ms: Start of time window in milliseconds (inclusive).
+            If set, to_ms and fps must also be set.
+        to_ms: End of time window in milliseconds (exclusive).
+            If set, from_ms and fps must also be set.
+        fps: Frames per second. Required when using from_ms/to_ms.
+        stimulus_start_frame: (Backward compatibility.) Frame index where
+            stimulus begins. Used with baseline_ms to define the window
+            when from_ms/to_ms are not provided.
+        baseline_ms: (Backward compatibility.) Duration of baseline period
+            in ms. Frames from (stimulus_start_frame - baseline_frames)
+            to stimulus_start_frame are used.
 
     Returns:
-        2D numpy array with shape (height, width) containing the
-        percentile value for each pixel. Zero values are replaced
-        with 1 to prevent division by zero. Returns None on error.
+        If percentile is a single value: 2D array (height, width).
+        If percentile is a list: 3D array (n_percentiles, height, width).
+        Zero values are replaced with 1 to prevent division by zero.
+        Returns None on error.
     """
     if data.ndim != 3:
         LOGGER.error(f"Expected 3D array (T, H, W), got: {data.shape}")
@@ -51,39 +60,78 @@ def calculate_percentile_movie(
     window_data = data
     window_info = "all frames"
 
-    if stimulus_start_frame is not None and baseline_ms is not None:
-        if fps is None:
-            LOGGER.error("fps must be provided when using window parameters")
-            return None
+    use_from_to = from_ms is not None or to_ms is not None
+    use_stimulus_baseline = stimulus_start_frame is not None and baseline_ms is not None
 
+    if use_from_to:
+        if from_ms is None or to_ms is None:
+            LOGGER.error("Both from_ms and to_ms must be provided when using time window")
+            return None
+        if fps is None:
+            LOGGER.error("fps must be provided when using from_ms and to_ms")
+            return None
+        if from_ms >= to_ms:
+            LOGGER.error(f"Invalid time window: from_ms ({from_ms}) must be < to_ms ({to_ms})")
+            return None
+        start_frame = int(round(from_ms / 1000.0 * fps))
+        end_frame = int(round(to_ms / 1000.0 * fps))
+        start_frame = max(0, min(start_frame, T))
+        end_frame = max(0, min(end_frame, T))
+        if start_frame >= end_frame:
+            LOGGER.error(
+                f"Time window yields empty frame range: start={start_frame}, end={end_frame}"
+            )
+            return None
+        if start_frame != int(round(from_ms / 1000.0 * fps)) or end_frame != int(
+            round(to_ms / 1000.0 * fps)
+        ):
+            LOGGER.warning(
+                f"Time window clamped to frames [{start_frame}:{end_frame}] "
+                f"(from_ms={from_ms}, to_ms={to_ms}, fps={fps})"
+            )
+        window_data = data[start_frame:end_frame]
+        window_info = f"frames [{start_frame}:{end_frame}] ({len(window_data)} frames)"
+    elif use_stimulus_baseline:
+        if fps is None:
+            LOGGER.error("fps must be provided when using stimulus_start_frame and baseline_ms")
+            return None
         baseline_frames = int(baseline_ms / 1000.0 * fps)
         baseline_start = max(0, stimulus_start_frame - baseline_frames)
         baseline_end = stimulus_start_frame
-
         if baseline_end > T:
             LOGGER.warning(
                 f"Stimulus start frame ({baseline_end}) exceeds data "
                 f"length ({T}). Using data length instead."
             )
             baseline_end = T
-
         if baseline_start >= baseline_end:
-            LOGGER.error(f"Invalid baseline window: start={baseline_start}, end={baseline_end}")
+            LOGGER.error(
+                f"Invalid baseline window: start={baseline_start}, end={baseline_end}"
+            )
             return None
-
         window_data = data[baseline_start:baseline_end]
         window_info = f"frames [{baseline_start}:{baseline_end}] ({len(window_data)} frames)"
 
-    LOGGER.info(f"Calculating {percentile}th percentile for {window_info} ({H}x{W})")
+    q = [percentile] if np.isscalar(percentile) else list(percentile)
+    if not q:
+        LOGGER.error("percentile must be a non-empty float or list of floats")
+        return None
 
-    f_base = np.percentile(window_data, percentile, axis=0)
-    f_base = np.where(f_base == 0, 1, f_base)
+    LOGGER.info(f"Calculating percentile(s) {q} for {window_info} ({H}x{W})")
+    result = np.percentile(window_data, q, axis=0)
+    result = np.where(result == 0, 1, result)
 
+    if len(q) == 1:
+        LOGGER.info(
+            f"Percentile calculated: min={result.min():.2f}, "
+            f"max={result.max():.2f}, mean={result.mean():.2f}"
+        )
+        return result[0]
     LOGGER.info(
-        f"Percentile calculated: min={f_base.min():.2f}, "
-        f"max={f_base.max():.2f}, mean={f_base.mean():.2f}"
+        f"Percentiles calculated: {len(q)} maps, "
+        f"min={result.min():.2f}, max={result.max():.2f}"
     )
-    return f_base
+    return result
 
 
 def calculate_deltaff_movie(

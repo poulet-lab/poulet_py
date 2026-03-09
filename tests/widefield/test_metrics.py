@@ -7,7 +7,6 @@ from poulet_py.widefield.metrics import (
     calculate_baseline_movie,
     calculate_deltaff_movie,
     calculate_percentile_movie,
-    calculate_rolling_baseline_movie,
     calculate_spatial_threshold_metrics,
 )
 
@@ -178,45 +177,6 @@ class TestCalculateSpatialThresholdMetrics:
         assert result["std_activity"] == pytest.approx(expected_std)
 
 
-class TestCalculateRollingBaselineMovie:
-    """Tests for calculate_rolling_baseline_movie (sliding_window_view)."""
-
-    def test_basic_rolling_baseline(self):
-        """Rolling mean shape is T - window_frames + 1."""
-        data = np.random.rand(100, 50, 50).astype(np.float32)
-        window = 30
-        result = calculate_rolling_baseline_movie(data, window)
-
-        assert result is not None
-        assert result.shape == (100 - window + 1, 50, 50)
-        assert result.dtype == np.float64
-
-    def test_rolling_mean_matches_manual_slice(self):
-        """First window mean equals mean of data[0:window]."""
-        data = np.random.rand(20, 5, 5).astype(np.float32)
-        window = 5
-        result = calculate_rolling_baseline_movie(data, window)
-        manual_first = np.mean(data[0:window], axis=0)
-
-        assert result is not None
-        np.testing.assert_array_almost_equal(result[0], manual_first)
-
-    def test_invalid_input_not_3d(self):
-        """2D input returns None."""
-        result = calculate_rolling_baseline_movie(np.zeros((50, 50)), 10)
-        assert result is None
-
-    def test_invalid_window_zero(self):
-        """window_frames=0 returns None."""
-        result = calculate_rolling_baseline_movie(np.zeros((10, 5, 5)), 0)
-        assert result is None
-
-    def test_invalid_window_too_large(self):
-        """window_frames > T returns None."""
-        result = calculate_rolling_baseline_movie(np.zeros((10, 5, 5)), 11)
-        assert result is None
-
-
 class TestCalculatePercentileMovie:
     """Tests for calculate_percentile_movie function."""
 
@@ -231,6 +191,54 @@ class TestCalculatePercentileMovie:
     def test_invalid_input(self):
         """Test that 2D input returns None."""
         result = calculate_percentile_movie(np.zeros((50, 50)))
+        assert result is None
+
+    def test_from_ms_to_ms_window(self):
+        """Test time window via from_ms and to_ms (ms)."""
+        data = np.random.rand(100, 50, 50).astype(np.float32)
+        # 0–500 ms at 10 fps = frames 0–5 (5 frames)
+        result = calculate_percentile_movie(
+            data, percentile=15.0, from_ms=0.0, to_ms=500.0, fps=10.0
+        )
+        assert result is not None
+        assert result.shape == (50, 50)
+
+    def test_multiple_percentiles_returns_3d(self):
+        """Test list of percentiles returns (n_percentiles, H, W)."""
+        data = np.random.rand(100, 50, 50).astype(np.float32)
+        result = calculate_percentile_movie(data, percentile=[15.0, 50.0, 85.0])
+        assert result is not None
+        assert result.shape == (3, 50, 50)
+        assert result[0].shape == (50, 50)
+        assert result[1].shape == (50, 50)
+        assert result[2].shape == (50, 50)
+
+    def test_from_ms_to_ms_only_one_returns_none(self):
+        """Test that only from_ms or only to_ms returns None."""
+        data = np.random.rand(100, 50, 50).astype(np.float32)
+        assert calculate_percentile_movie(data, from_ms=0.0, to_ms=None, fps=10.0) is None
+        assert calculate_percentile_movie(data, from_ms=None, to_ms=500.0, fps=10.0) is None
+
+    def test_from_ms_ge_to_ms_returns_none(self):
+        """Test that from_ms >= to_ms returns None."""
+        data = np.random.rand(100, 50, 50).astype(np.float32)
+        assert (
+            calculate_percentile_movie(
+                data, percentile=15.0, from_ms=500.0, to_ms=200.0, fps=10.0
+            )
+            is None
+        )
+        assert (
+            calculate_percentile_movie(
+                data, percentile=15.0, from_ms=300.0, to_ms=300.0, fps=10.0
+            )
+            is None
+        )
+
+    def test_empty_percentile_list_returns_none(self):
+        """Test that empty list for percentile returns None."""
+        data = np.random.rand(100, 50, 50).astype(np.float32)
+        result = calculate_percentile_movie(data, percentile=[])
         assert result is None
 
 
