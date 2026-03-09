@@ -292,19 +292,21 @@ def calculate_spatial_threshold_metrics(
     )
 
     H, W = smoothed_image.shape
-    dtype = np.dtype([
-        ("threshold", np.float64),
-        ("threshold_mask", bool, (H, W)),
-        ("n_pixels_above", np.int64),
-        ("total_pixels", np.int64),
-        ("percent_above", np.float64),
-        ("auc_above_threshold", np.float64),
-        ("smoothed_image", np.float64, (H, W)),
-        ("max_activity", np.float64),
-        ("min_activity", np.float64),
-        ("mean_activity", np.float64),
-        ("std_activity", np.float64),
-    ])
+    dtype = np.dtype(
+        [
+            ("threshold", np.float64),
+            ("threshold_mask", bool, (H, W)),
+            ("n_pixels_above", np.int64),
+            ("total_pixels", np.int64),
+            ("percent_above", np.float64),
+            ("auc_above_threshold", np.float64),
+            ("smoothed_image", np.float64, (H, W)),
+            ("max_activity", np.float64),
+            ("min_activity", np.float64),
+            ("mean_activity", np.float64),
+            ("std_activity", np.float64),
+        ]
+    )
     out = np.empty(1, dtype=dtype)
     out["threshold"] = threshold
     out["threshold_mask"] = threshold_mask
