@@ -5,8 +5,8 @@ try:
     from pydantic import BaseModel, Field
 except ImportError as e:
     msg = """
-Missing 'stimulus' module. Install options:
-- Module:       pip install poulet_py[stimulus]
+Missing 'stim' module. Install options:
+- Module:       pip install poulet_py[stim]
 - Full:         pip install poulet_py[all]
 """
     raise ImportError(msg) from e
