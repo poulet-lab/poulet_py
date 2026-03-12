@@ -6,9 +6,9 @@ try:
         BaseSource,
         BaseStimulus,
         NIAnalogBaseStimulus,
+        NIAnalogCompositeStimulus,
         NIDaQ,
         NIDigitalBaseStimulus,
-        NIAnalogCompositeStimulus,
         SinkEvent,
     )
 except ImportError as e:
