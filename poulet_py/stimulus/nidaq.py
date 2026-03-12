@@ -15,6 +15,7 @@ try:
         ones_like,
         pi,
         sin,
+        stack,
         tile,
         zeros,
         zeros_like,
@@ -58,7 +59,8 @@ class NIAnalogBaseStimulus(BaseStimulus):
 
         signal[pre_samples : pre_samples + active_samples] = waveform
         signal += self.offset
-        return signal
+
+        return signal.reshape((1, -1))
 
     @abstractmethod
     def _generate(self, t: NDArray[float64], rate: float) -> NDArray[float64]: ...
@@ -182,6 +184,19 @@ class NISteppedAnalogStimulus(NIAnalogBaseStimulus):
         return y
 
 
+class NIAnalogCompositeStimulus(BaseStimulus):
+    stimuli: Sequence[NIAnalogBaseStimulus] = Field(...)
+
+    def build(self, rate: float) -> NDArray[float64]:
+        if rate <= 0:
+            msg = "Sampling rate must be positive"
+            raise ValueError(msg)
+        build = []
+        for stim in self.stimuli:
+            build.append(stim.build(rate))
+        return stack(build).squeeze()
+
+
 class NIDigitalBaseStimulus(BaseStimulus, ABC):
     duration: int = Field(..., ge=1)
     pre_delay: int = Field(default=0, ge=0)
@@ -201,7 +216,7 @@ class NIDigitalBaseStimulus(BaseStimulus, ABC):
 
         active = self._generate(active_samples, rate)
         signal[pre_samples : pre_samples + active_samples] = active
-        return signal
+        return signal.reshape((1, -1))
 
     @abstractmethod
     def _generate(self, samples: int, rate: float) -> NDArray[bool_]: ...

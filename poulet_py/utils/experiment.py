@@ -30,7 +30,7 @@ class ExperimentBlock(BaseModel):
     trial_order: Literal["random", "sequential"] = Field(default="random")
     trigger: BaseTrigger | None = Field(default=None)
     trigger_policy: Literal["abort", "skip"] = "abort"
-    isi: int | Sequence[int] | range = Field(default=0)
+    isi: int | Sequence[int] = Field(default=0)
 
     @model_validator(mode="after")
     def validate_isi(self) -> Self:
@@ -44,7 +44,7 @@ class ExperimentRuntime(BaseModel):
     blocks: Sequence[ExperimentBlock] = Field(...)
     block_repetitions: int = Field(default=1, ge=1)
     block_order: Literal["random", "sequential"] = Field(default="sequential")
-    isi: int | Sequence[int] | range = Field(default=0)
+    isi: int | Sequence[int] = Field(default=0)
 
     sources: Sequence[BaseSource] = Field(...)
     sinks: Sequence[BaseSink] = Field(...)
@@ -60,18 +60,26 @@ class ExperimentRuntime(BaseModel):
         return self
 
     def open(self):
+        self.bus.open()
+
         for source in self.sources:
             source.open(self.bus)
 
         for sink in self.sinks:
             sink.open(self.bus)
 
+        self._open = True
+
     def close(self):
+        self._open = False
+
         for sink in self.sinks:
             sink.close()
 
         for source in self.sources:
             source.close()
+
+        self.bus.close()
 
     def run(self):
         if not self._open:
@@ -83,14 +91,17 @@ class ExperimentRuntime(BaseModel):
                 self.blocks, self.block_repetitions, mode=self.block_order
             )
             n_blocks = len(blocks)
-            for blk_idx, block in tqdm(enumerate(blocks), desc="Block", smoothing=True):
+
+            for blk_idx, block in tqdm(
+                enumerate(blocks), total=n_blocks, desc="Block", smoothing=True
+            ):
                 trials: Sequence[ExperimentTrial] = repeat(
                     block.trials, block.trial_repetitions, mode=block.trial_order
                 )
                 n_trials = len(trials)
 
                 for trial_idx, trial in tqdm(
-                    enumerate(trials), desc="Trial", smoothing=True, leave=False
+                    enumerate(trials), total=n_trials, desc="Trial", smoothing=True, leave=False
                 ):
                     if block.trigger and not block.trigger.wait():
                         msg = "Trigger failed"
@@ -115,15 +126,13 @@ class ExperimentRuntime(BaseModel):
 
     def __enter__(self):
         self.open()
-        self._open = True
         return self
 
     def __exit__(self, exc_type, exc, tb):
-        self._open = False
         self.close()
 
     @staticmethod
-    def get_isi(isi: int | Sequence[int] | range) -> int:
+    def get_isi(isi: int | Sequence[int]) -> int:
         """Get the inter-stimulus period (random if list provided)."""
         if isinstance(isi, range):
             return choice(list(isi))

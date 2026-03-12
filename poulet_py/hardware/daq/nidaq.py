@@ -29,7 +29,9 @@ try:
 
     from nidaqmx import Task
     from nidaqmx.constants import (
-        AcquisitionType,
+        AcquisitionType as NIAcquisitionType,
+    )
+    from nidaqmx.constants import (
         Edge,
         LineGrouping,
         TaskMode,
@@ -39,10 +41,15 @@ try:
     from nidaqmx.stream_writers import AnalogMultiChannelWriter, DigitalMultiChannelWriter
     from nidaqmx.system import System
     from nidaqmx.utils import flatten_channel_string
-    from numpy import arange, empty, float32, ndarray, uint32, uint64
+    from numpy import arange, empty, float64, ndarray, uint32, uint64, zeros
     from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
-    from poulet_py import NIAnalogBaseStimulus, NIDigitalBaseStimulus
+    from poulet_py import (
+        AcquisitionType,
+        NIAnalogBaseStimulus,
+        NIAnalogCompositeStimulus,
+        NIDigitalBaseStimulus,
+    )
 except ImportError as e:
     msg = """
 Missing 'nidaq' module. Install options:
@@ -69,6 +76,16 @@ class NIClockHandle(BaseModel):
         ...,
         description="Number of samples per channel. On continuous sampling defines the buffer size",
     )
+    acquisition_type: AcquisitionType = Field(AcquisitionType.FINITE)
+
+    def to_ni_acquisition_type(self) -> NIAcquisitionType:
+        if self.acquisition_type == AcquisitionType.FINITE:
+            return NIAcquisitionType.FINITE
+        if self.acquisition_type == AcquisitionType.CONTINUOUS:
+            return NIAcquisitionType.CONTINUOUS
+
+        msg = "wrong acquisition type"
+        raise RuntimeError(msg)
 
 
 class NIBaseChannel(BaseModel):
@@ -160,11 +177,12 @@ class NIBaseTask(BaseModel, ABC):
         RuntimeError
             If a clock is required but not provided.
         """
-        if clock and self._requires_clock:
-            self._clock_handle = clock
-        else:
-            msg = "NIAnalogInputTask requires a clock"
-            raise RuntimeError(msg)
+        if self._requires_clock:
+            if clock:
+                self._clock_handle = clock
+            else:
+                msg = f"{type(self)} requires a clock"
+                raise RuntimeError(msg)
 
         if self._is_open:
             msg = "Task already opened"
@@ -282,7 +300,7 @@ class NIClockTask(NIBaseTask):
         ...,
         description="Number of samples per channel. On continuous sampling defines the buffer size.",
     )
-    sample_mode: AcquisitionType = Field(
+    acquisition_type: AcquisitionType = Field(
         AcquisitionType.FINITE, description="The acquisition type (FINITE or CONTINUOUS)."
     )
 
@@ -298,17 +316,19 @@ class NIClockTask(NIBaseTask):
             msg = "Task not created"
             raise RuntimeError(msg)
 
+        self._clock_handle = NIClockHandle(
+            terminal=f"/{self.device}/Ctr{self.line}InternalOutput",
+            rate=self.rate,
+            samps_per_chan=self.samps_per_chan,
+            acquisition_type=self.acquisition_type,
+        )
+
         self._task.co_channels.add_co_pulse_chan_freq(
             f"{self.device}/ctr{self.line}", freq=self.rate
         )
 
         self._task.timing.cfg_implicit_timing(
-            sample_mode=self.sample_mode, samps_per_chan=self.samps_per_chan
-        )
-
-        self._clock_handle = NIClockHandle(
-            terminal=f"/{self.device}/Ctr{self.line}InternalOutput",
-            rate=self.rate,
+            sample_mode=self._clock_handle.to_ni_acquisition_type(),
             samps_per_chan=self.samps_per_chan,
         )
 
@@ -338,17 +358,13 @@ class NIAnalogInputTask(NIBaseTask):
     active_edge: Edge = Field(
         default=Edge.RISING, description="The active edge for sampling (RISING or FALLING)."
     )
-    sample_mode: AcquisitionType = Field(
-        default=AcquisitionType.FINITE,
-        description="The acquisition type (FINITE or CONTINUOUS).",
-    )
 
     _reader: AnalogMultiChannelReader | None = PrivateAttr(None)
     _ai_buffer: ndarray | None = PrivateAttr(None)
     _buffer: ndarray | None = PrivateAttr(None)
 
     def _ensure_buffer(self, samples: int):
-        if not self._reader or not self._ai_buffer:
+        if not self._reader or self._ai_buffer is None:
             msg = "Task not opened"
             raise RuntimeError(msg)
 
@@ -357,11 +373,11 @@ class NIAnalogInputTask(NIBaseTask):
         if samples > capacity:
             new_capacity = max(samples, capacity * 2)
 
-            self._ai_buffer = empty((len(self.channels), new_capacity), dtype=float32)
+            self._ai_buffer = empty((len(self.channels), new_capacity), dtype=float64)
 
             self._buffer = empty(
                 new_capacity,
-                dtype=[("timestamp", uint64), ("ai", float32, (len(self.channels),))],
+                dtype=[("timestamp", uint64), ("ai", float64, (len(self.channels),))],
             )
 
     def _open(self) -> None:
@@ -382,16 +398,16 @@ class NIAnalogInputTask(NIBaseTask):
             rate=self._clock_handle.rate,
             source=self._clock_handle.terminal,
             active_edge=self.active_edge,
-            sample_mode=self.sample_mode,
+            sample_mode=self._clock_handle.to_ni_acquisition_type(),
             samps_per_chan=self._clock_handle.samps_per_chan,
         )
 
         self._ai_buffer = empty(
-            (len(self.channels), self._clock_handle.samps_per_chan), dtype=float32
+            (len(self.channels), self._clock_handle.samps_per_chan), dtype=float64
         )
         self._buffer = empty(
             self._clock_handle.samps_per_chan,
-            dtype=[("timestamp", uint64), ("ai", float32, (len(self.channels),))],
+            dtype=[("timestamp", uint64), ("ai", float64, (len(self.channels),))],
         )
         self._reader = AnalogMultiChannelReader(self._task.in_stream)
 
@@ -415,7 +431,12 @@ class NIAnalogInputTask(NIBaseTask):
         RuntimeError
             If the task has not been opened.
         """
-        if not self._reader or not self._ai_buffer or not self._buffer or not self._clock_handle:
+        if (
+            not self._reader
+            or not self._clock_handle
+            or self._ai_buffer is None
+            or self._buffer is None
+        ):
             msg = "Task not opened"
             raise RuntimeError(msg)
 
@@ -451,10 +472,6 @@ class NIAnalogOutputTask(NIBaseTask):
     active_edge: Edge = Field(
         default=Edge.RISING, description="The active edge for sampling (RISING or FALLING)."
     )
-    sample_mode: AcquisitionType = Field(
-        default=AcquisitionType.FINITE,
-        description="The acquisition type (FINITE or CONTINUOUS).",
-    )
 
     _writer: AnalogMultiChannelWriter | None = PrivateAttr(None)
 
@@ -475,11 +492,13 @@ class NIAnalogOutputTask(NIBaseTask):
             rate=self._clock_handle.rate,
             source=self._clock_handle.terminal,
             active_edge=self.active_edge,
-            sample_mode=self.sample_mode,
+            sample_mode=self._clock_handle.to_ni_acquisition_type(),
             samps_per_chan=self._clock_handle.samps_per_chan,
         )
 
         self._writer = AnalogMultiChannelWriter(self._task.out_stream, auto_start=False)
+
+        # self.write(zeros((len(self.channels),1)))
 
     def write(self, data: ndarray, timeout: float = 10.0):
         """
@@ -518,10 +537,6 @@ class NIDigitalInputTask(NIBaseTask):
     active_edge: Edge = Field(
         default=Edge.RISING, description="The active edge for sampling (RISING or FALLING)."
     )
-    sample_mode: AcquisitionType = Field(
-        default=AcquisitionType.FINITE,
-        description="The acquisition type (FINITE or CONTINUOUS).",
-    )
     line_grouping: LineGrouping = Field(
         default=LineGrouping.CHAN_PER_LINE,
         description="How to group digital lines (CHAN_PER_LINE or CHAN_FOR_ALL_LINES).",
@@ -532,7 +547,7 @@ class NIDigitalInputTask(NIBaseTask):
     _buffer: ndarray | None = PrivateAttr(None)
 
     def _ensure_buffer(self, samples: int):
-        if not self._reader or not self._di_buffer:
+        if not self._reader or self._di_buffer is None:
             msg = "Task not opened"
             raise RuntimeError(msg)
 
@@ -564,7 +579,7 @@ class NIDigitalInputTask(NIBaseTask):
             rate=self._clock_handle.rate,
             source=self._clock_handle.terminal,
             active_edge=self.active_edge,
-            sample_mode=self.sample_mode,
+            sample_mode=self._clock_handle.to_ni_acquisition_type(),
             samps_per_chan=self._clock_handle.samps_per_chan,
         )
 
@@ -598,7 +613,12 @@ class NIDigitalInputTask(NIBaseTask):
         RuntimeError
             If the task has not been opened.
         """
-        if not self._reader or not self._di_buffer or not self._buffer or not self._clock_handle:
+        if (
+            not self._reader
+            or not self._clock_handle
+            or self._di_buffer is None
+            or self._buffer is None
+        ):
             msg = "Task not opened"
             raise RuntimeError(msg)
 
@@ -634,10 +654,6 @@ class NIDigitalOutputTask(NIBaseTask):
     active_edge: Edge = Field(
         default=Edge.RISING, description="The active edge for sampling (RISING or FALLING)."
     )
-    sample_mode: AcquisitionType = Field(
-        default=AcquisitionType.CONTINUOUS,
-        description="The acquisition type (FINITE or CONTINUOUS).",
-    )
     line_grouping: LineGrouping = Field(
         default=LineGrouping.CHAN_PER_LINE,
         description="How to group digital lines (CHAN_PER_LINE or CHAN_FOR_ALL_LINES).",
@@ -661,13 +677,15 @@ class NIDigitalOutputTask(NIBaseTask):
             rate=self._clock_handle.rate,
             source=self._clock_handle.terminal,
             active_edge=self.active_edge,
-            sample_mode=self.sample_mode,
+            sample_mode=self._clock_handle.to_ni_acquisition_type(),
             samps_per_chan=self._clock_handle.samps_per_chan,
         )
 
         self._writer = DigitalMultiChannelWriter(self._task.out_stream, auto_start=False)
         self._task = self._task
         self._is_open = True
+
+        self.write(zeros((len(self.channels), 1)))
 
     def write(self, data: ndarray, timeout: float = 10.0):
         """
@@ -746,7 +764,9 @@ class NIDaQ(BaseModel):
 
         return self
 
-    def write(self, stimulus: NIAnalogBaseStimulus | NIDigitalBaseStimulus):
+    def write(
+        self, stimulus: NIAnalogCompositeStimulus | NIAnalogBaseStimulus | NIDigitalBaseStimulus
+    ):
         if not self._is_open or not self._clock_task:
             msg = "NIDaQ must be first opened"
             raise RuntimeError(msg)
@@ -757,7 +777,7 @@ class NIDaQ(BaseModel):
             ):
                 task.write(stimulus.build(task._clock_handle.rate))
             elif isinstance(task, NIAnalogOutputTask) and isinstance(
-                stimulus, NIAnalogBaseStimulus
+                stimulus, (NIAnalogBaseStimulus, NIAnalogCompositeStimulus)
             ):
                 task.write(stimulus.build(task._clock_handle.rate))
 
@@ -808,7 +828,8 @@ class NIDaQ(BaseModel):
         self._clock_task.open()
 
         for task in self.tasks:
-            task.open(self._clock_task.clock_handle)
+            if task != self._clock_task:
+                task.open(self._clock_task.clock_handle)
 
         self._executor = ThreadPoolExecutor(len(self._read_tasks)) if self._read_tasks else None
 

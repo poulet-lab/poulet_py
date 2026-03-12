@@ -8,6 +8,7 @@ try:
         NIAnalogBaseStimulus,
         NIDaQ,
         NIDigitalBaseStimulus,
+        NIAnalogCompositeStimulus,
         SinkEvent,
     )
 except ImportError as e:
@@ -33,36 +34,41 @@ class NIDaQSource(BaseSource, NIDaQ):
 
     def _supports(self, stimuli: Sequence[BaseStimulus]) -> Sequence[BaseStimulus]:
         return [
-            st for st in stimuli if isinstance(st, (NIAnalogBaseStimulus, NIDigitalBaseStimulus))
+            st
+            for st in stimuli
+            if isinstance(
+                st, (NIAnalogCompositeStimulus, NIAnalogBaseStimulus, NIDigitalBaseStimulus)
+            )
         ]
 
     def _fire(self, stimuli: Sequence[BaseStimulus]) -> bool:
-        duration = 0
+        if not stimuli:
+            return False
 
         for st in stimuli:
-            if isinstance(st, (NIAnalogBaseStimulus, NIDigitalBaseStimulus)):
+            if isinstance(
+                st, (NIAnalogCompositeStimulus, NIAnalogBaseStimulus, NIDigitalBaseStimulus)
+            ):
                 self.write(st)
-                current_duration = (st.duration + st.pre_delay + st.post_delay) / 1000
-                duration = max(duration, current_duration)
 
         if self.acquisition_type == AcquisitionType.FINITE:
             self.start()
 
-        self.wait(timeout=duration + 2)
-
-        if self.acquisition_type == AcquisitionType.FINITE:
-            self.stop()
-
         return True
 
     def _publish(self, stimuli: Sequence[BaseStimulus]) -> bool:
+        if not stimuli and self.acquisition_type == AcquisitionType.FINITE:
+            return False
 
-        data = self.read(-1, 0.01)
+        data = self.read(-1, -1)
         if data:
             self.publish(
                 SinkEvent(
                     name=self.name, payload=data, meta={"acquisition": self.acquisition_type.value}
                 )
             )
+
+        if self.acquisition_type == AcquisitionType.FINITE:
+            self.stop()
 
         return True
