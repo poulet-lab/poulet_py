@@ -33,7 +33,7 @@ class TCSSource(BaseSource, TCS):
         return [st for st in stimuli if isinstance(st, TCSStimulus)]
 
     def _fire(self, stimuli: Sequence[BaseStimulus]) -> bool:
-        if self._samples_buffer and self.acquisition_type == AcquisitionType.FINITE:
+        if self._samples_buffer is not None and self.acquisition_type == AcquisitionType.FINITE:
             self._last_timestamp = self._samples_buffer["timestamp"][self._sampling_idx - 1]
 
         for st in stimuli:
@@ -48,7 +48,7 @@ class TCSSource(BaseSource, TCS):
         return True
 
     def _publish(self, stimuli: Sequence[BaseStimulus]) -> bool:
-        if not self._samples_buffer:
+        if self._samples_buffer is None:
             return False
 
         if self.acquisition_type == AcquisitionType.CONTINUOUS:
@@ -59,7 +59,7 @@ class TCSSource(BaseSource, TCS):
         return False
 
     def _publish_continuous(self, stimuli: Sequence[BaseStimulus]) -> bool:
-        if not self._samples_buffer:
+        if self._samples_buffer is None:
             return False
 
         start = self._last_timestamp
@@ -82,7 +82,7 @@ class TCSSource(BaseSource, TCS):
         return True
 
     def _publish_finite(self, stimuli: Sequence[BaseStimulus]) -> bool:
-        if not self._samples_buffer or not stimuli:
+        if self._samples_buffer is None or not stimuli:
             return False
 
         total_ms = 0
