@@ -7,8 +7,8 @@ try:
 
 except ImportError as e:
     msg = """
-Missing 'writers' module. Install options:
-- Dedicated:    pip install poulet_py[writers]
+Missing 'event' module. Install options:
+- Dedicated:    pip install poulet_py[event]
 - Module:       pip install poulet_py[io]
 - Full:         pip install poulet_py[all]
 """

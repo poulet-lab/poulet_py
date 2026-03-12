@@ -77,21 +77,23 @@ qst = ["pandas<=3.0", "tqdm<=4.67", "pyserial<=3.5"]
 triggers = ["poulet_py[gpio]"]
 gpio = ["gpiozero<=2.0", "lgpio<=0.2; platform_system == 'Linux'"]
 # IO
-sinks = ["poulet_py[writers]"]
-sources = ["poulet_py[writers]"]
-writers = ["numpydantic<=1.7", "h5py<=3.15"]
+event = ["numpydantic<=1.7"]
+sinks = ["poulet_py[event]", "h5py<=3.15", "orjson<=3.11.7", "numpy<=2.4"]
+sources = ["poulet_py[event]", "numpy<=2.4"]
 # Tools
 
 # Utils
+exp = ["poulet_py[io]"]
 osc = ["pandas<=3.0", "matplotlib<=3.10", "numpy<=2.4"]
 ## Main modules ##
 converters = ["poulet_py[seq]"]
 hardware = ["poulet_py[camera, daq, arduino, julabo, qst, triggers]"]
-io = ["poulet_py[sinks, sources, writers]"]
-tools = ["orjson"]
-utils = ["poulet_py[qst, osc]"]
+io = ["poulet_py[event, sinks, sources]"]
+stim = ["poulet_py[qst, nidaq, io, tools, utils]"]
+tools = ["orjson<=3.11.7"]
+utils = ["poulet_py[exp, osc]"]
 # Install all modules
-all = ["poulet_py[converters, hardware, io, tools, utils]"]
+all = ["poulet_py[converters, hardware, io, stim, tools, utils]"]
 # Docs
 docs = [
   "sphinx<=9.1",

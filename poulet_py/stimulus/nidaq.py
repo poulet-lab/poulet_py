@@ -27,9 +27,9 @@ try:
 
 except ImportError as e:
     msg = """
-Missing 'nidaq' module. Install options:
+Missing 'stim' module. Install options:
 - Dedicated:    pip install poulet_py[nidaq]
-- Module:       pip install poulet_py[daq]
+- Module:       pip install poulet_py[stim]
 - Full:         pip install poulet_py[all]
 """
     raise ImportError(msg) from e

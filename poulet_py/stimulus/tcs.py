@@ -8,8 +8,9 @@ try:
 
 except ImportError as e:
     msg = """
-Missing 'qst' module. Install options:
-- Module:       pip install poulet_py[qst]
+Missing 'stim' module. Install options:
+- Dedicated:       pip install poulet_py[qst]
+- Module:       pip install poulet_py[stim]
 - Full:         pip install poulet_py[all]
 """
     raise ImportError(msg) from e
