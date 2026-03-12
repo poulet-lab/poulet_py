@@ -311,7 +311,7 @@ class TCS:
         self._write_lock = Lock()
         self._read_lock = Lock()
         self._thread = Thread(target=self._read_loop, daemon=True, name="TCS Serial Reader")
-        self._current_search = None  # (pattern, event, result)
+        self._current_search = None
         self._stimulus = TCSStimulus()
 
     @property
@@ -353,10 +353,10 @@ class TCS:
             " or '/dev/ttyUSB<number>'"
             " or '/dev/tty.usb<something>'\n"
 
-        if not 0 <= self.maximum_temperature <= 60:  # noqa: PLR2004
+        if not 0 <= self.maximum_temperature <= 60:
             msg += "Maximum temperature must be between 0 and 60°C\n"
 
-        if not 1 <= self.trigger_out_channel <= 255:  # noqa: PLR2004
+        if not 1 <= self.trigger_out_channel <= 255:
             msg += "Trigger out channel must be between 1 and 255\n"
 
         if self.read_timeout <= 0:
@@ -433,7 +433,6 @@ class TCS:
             If the write operation fails
         """
         try:
-            # Start reader thread if not already running
             self._start_reader()
             self._serial.flush()
             LOGGER.debug(f"Sending command: {command}")
