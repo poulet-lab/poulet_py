@@ -105,9 +105,7 @@ def calculate_percentile_movie(
             )
             baseline_end = T
         if baseline_start >= baseline_end:
-            LOGGER.error(
-                f"Invalid baseline window: start={baseline_start}, end={baseline_end}"
-            )
+            LOGGER.error(f"Invalid baseline window: start={baseline_start}, end={baseline_end}")
             return None
         window_data = data[baseline_start:baseline_end]
         window_info = f"frames [{baseline_start}:{baseline_end}] ({len(window_data)} frames)"
@@ -128,8 +126,7 @@ def calculate_percentile_movie(
         )
         return result[0]
     LOGGER.info(
-        f"Percentiles calculated: {len(q)} maps, "
-        f"min={result.min():.2f}, max={result.max():.2f}"
+        f"Percentiles calculated: {len(q)} maps, min={result.min():.2f}, max={result.max():.2f}"
     )
     return result
 
