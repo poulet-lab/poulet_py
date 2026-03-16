@@ -154,6 +154,7 @@ def load_mask_json(mask_path: Path) -> dict[str, float] | None:
         LOGGER.exception(f"Error loading mask: {mask_path}")
         return None
 
+
 """
 Motion correction for widefield imaging data.
 
@@ -168,8 +169,6 @@ import imageio
 import numpy as np
 from scipy.fft import fftfreq, fftn, ifftn
 from scipy.ndimage import fourier_shift
-
-from poulet_py import LOGGER
 
 
 def _upsampled_dft(
@@ -1155,9 +1154,6 @@ threshold metrics for activity quantification.
 """
 
 import numpy as np
-from scipy.ndimage import gaussian_filter
-
-from poulet_py import LOGGER
 
 
 def calculate_percentile_movie(
@@ -1252,9 +1248,7 @@ def calculate_percentile_movie(
             )
             baseline_end = T
         if baseline_start >= baseline_end:
-            LOGGER.error(
-                f"Invalid baseline window: start={baseline_start}, end={baseline_end}"
-            )
+            LOGGER.error(f"Invalid baseline window: start={baseline_start}, end={baseline_end}")
             return None
         window_data = data[baseline_start:baseline_end]
         window_info = f"frames [{baseline_start}:{baseline_end}] ({len(window_data)} frames)"
@@ -1275,8 +1269,7 @@ def calculate_percentile_movie(
         )
         return result[0]
     LOGGER.info(
-        f"Percentiles calculated: {len(q)} maps, "
-        f"min={result.min():.2f}, max={result.max():.2f}"
+        f"Percentiles calculated: {len(q)} maps, min={result.min():.2f}, max={result.max():.2f}"
     )
     return result
 
@@ -1445,9 +1438,7 @@ def downscale_movie(
                 f"({factor_H:.2f}, {factor_W:.2f}). "
                 f"Padding ({pad_H}, {pad_W}) pixels."
             )
-            mov = np.pad(
-                mov, ((0, 0), (0, pad_H), (0, pad_W)), mode="constant", constant_values=0
-            )
+            mov = np.pad(mov, ((0, 0), (0, pad_H), (0, pad_W)), mode="constant", constant_values=0)
             T, H, W = mov.shape
             factor_H = factor_H_int
             factor_W = factor_W_int
@@ -1471,9 +1462,7 @@ def downscale_movie(
                 f"Dimensions ({H}, {W}) not divisible by factor {factor}. "
                 f"Padding ({pad_H}, {pad_W}) pixels."
             )
-            mov = np.pad(
-                mov, ((0, 0), (0, pad_H), (0, pad_W)), mode="constant", constant_values=0
-            )
+            mov = np.pad(mov, ((0, 0), (0, pad_H), (0, pad_W)), mode="constant", constant_values=0)
             T, H, W = mov.shape
         mov = mov.reshape(T, H // factor, factor, W // factor, factor).mean(4).mean(2)
 
@@ -1590,7 +1579,6 @@ associated with widefield imaging trials, including TIFF stacks,
 timestamps, and sensor data from HDF5 files.
 """
 
-import json
 import re
 from pathlib import Path
 from typing import Any
@@ -1599,8 +1587,6 @@ import h5py
 import numpy as np
 import pandas as pd
 from skimage import io as skio
-
-from poulet_py import LOGGER
 
 
 def load_imaging(imaging_path: Path) -> np.ndarray:
