@@ -113,7 +113,7 @@ class ExperimentRuntime(BaseModel):
                     )
 
                     for st in stimuli:
-                        st.isi = isi
+                        st._isi = isi
 
                     futures = []
                     for source in self.sources:

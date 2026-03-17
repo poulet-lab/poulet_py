@@ -37,9 +37,6 @@ Missing 'stim' module. Install options:
 
 
 class NIAnalogBaseStimulus(BaseStimulus):
-    duration: int = Field(..., ge=1)
-    pre_delay: int = Field(default=0, ge=0)
-    post_delay: int = Field(default=0, ge=0)
     offset: float = Field(default=0.0)
 
     def build(self, rate: float) -> NDArray[float64]:
