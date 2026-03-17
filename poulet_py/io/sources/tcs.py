@@ -42,8 +42,8 @@ class TCSSource(BaseSource, TCS):
             self.trigger(st)
             self._stimulus_done.wait()
 
-            if st.isi:
-                sleep(st.isi / 1000.0)
+            if st._isi:
+                sleep(st._isi / 1000.0)
 
         return True
 
@@ -63,10 +63,10 @@ class TCSSource(BaseSource, TCS):
             return False
 
         start = self._last_timestamp
-        end = self._samples_buffer["timestamp"][self._sampling_idx - 1]
+        end = self._samples_buffer["timestamp"][self._sampling_idx]
 
         mask = (self._samples_buffer["timestamp"] > start) & (
-            self._samples_buffer["timestamp"] <= end
+            self._samples_buffer["timestamp"] < end
         )
         chunk = self._samples_buffer[mask]
 
@@ -87,9 +87,8 @@ class TCSSource(BaseSource, TCS):
 
         total_ms = 0
         for st in stimuli:
-            if not isinstance(st, TCSStimulus):
-                continue
-            total_ms += st.duration + (st.isi or 0)
+            if isinstance(st, TCSStimulus):
+                total_ms += st.duration + st._isi
 
         start = self._last_timestamp - self.pre_ms * 1_000_000
         end = self._last_timestamp + total_ms * 1_000_000

@@ -2,7 +2,7 @@ try:
     from abc import ABC, abstractmethod
     from typing import Any
 
-    from pydantic import BaseModel, Field
+    from pydantic import BaseModel, Field, PrivateAttr
 except ImportError as e:
     msg = """
 Missing 'stim' module. Install options:
@@ -14,7 +14,10 @@ Missing 'stim' module. Install options:
 
 class BaseStimulus(BaseModel, ABC):
     name: str | None = Field(default=None, description="Optional name of the stimulus")
-    isi: int | None = Field(default=None)
+    duration: int = Field(..., ge=1)
+    pre_delay: int = Field(default=0, ge=0)
+    post_delay: int = Field(default=0, ge=0)
+    _isi: int = PrivateAttr(default=0)
 
     @abstractmethod
     def build(self, *args, **kwargs) -> Any: ...
