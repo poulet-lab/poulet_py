@@ -83,7 +83,6 @@ class OpenEphysSource(BaseSource):
         """
         print(info)
 
-
         # Store spike event in buffer if needed
         # Spike data includes amplitude values for up to 4 channels
         spike_data = zeros(self.num_channels)

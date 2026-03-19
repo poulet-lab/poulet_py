@@ -7,7 +7,7 @@ try:
     from pydantic import BaseModel, Field, PrivateAttr, model_validator
     from tqdm.auto import tqdm
 
-    from poulet_py import BaseSink, BaseSource, BaseStimulus, BaseTrigger, EventBus, repeat, LOGGER
+    from poulet_py import LOGGER, BaseSink, BaseSource, BaseStimulus, BaseTrigger, EventBus, repeat
 
 except ImportError as e:
     msg = """
@@ -98,7 +98,6 @@ class ExperimentRuntime(BaseModel):
                 for j, trial in enumerate(
                     tqdm(block.trials, desc="Trial", smoothing=True, position=1, leave=False)
                 ):
-
                     if block.trigger and not block.trigger.wait():
                         msg = "Trigger failed"
                         raise RuntimeError(msg)
