@@ -9,7 +9,9 @@ try:
         NIAnalogCompositeStimulus,
         NIDaQ,
         NIDigitalBaseStimulus,
+        NIDigitalCompositeStimulus,
         SinkEvent,
+        precise_sleep,
     )
 except ImportError as e:
     msg = """
@@ -37,7 +39,13 @@ class NIDaQSource(BaseSource, NIDaQ):
             st
             for st in stimuli
             if isinstance(
-                st, (NIAnalogCompositeStimulus, NIAnalogBaseStimulus, NIDigitalBaseStimulus)
+                st,
+                (
+                    NIAnalogCompositeStimulus,
+                    NIDigitalCompositeStimulus,
+                    NIAnalogBaseStimulus,
+                    NIDigitalBaseStimulus,
+                ),
             )
         ]
 
@@ -47,7 +55,13 @@ class NIDaQSource(BaseSource, NIDaQ):
 
         for st in stimuli:
             if isinstance(
-                st, (NIAnalogCompositeStimulus, NIAnalogBaseStimulus, NIDigitalBaseStimulus)
+                st,
+                (
+                    NIAnalogCompositeStimulus,
+                    NIDigitalCompositeStimulus,
+                    NIAnalogBaseStimulus,
+                    NIDigitalBaseStimulus,
+                ),
             ):
                 self.write(st)
 
@@ -59,7 +73,6 @@ class NIDaQSource(BaseSource, NIDaQ):
     def _publish(self, stimuli: Sequence[BaseStimulus]) -> bool:
         if not stimuli and self.acquisition_type == AcquisitionType.FINITE:
             return False
-
         data = self.read(-1, -1)
         if data:
             self.publish(
@@ -70,5 +83,20 @@ class NIDaQSource(BaseSource, NIDaQ):
 
         if self.acquisition_type == AcquisitionType.FINITE:
             self.stop()
+
+        isi = 0
+        for st in stimuli:
+            if isinstance(
+                st,
+                (
+                    NIAnalogCompositeStimulus,
+                    NIDigitalCompositeStimulus,
+                    NIAnalogBaseStimulus,
+                    NIDigitalBaseStimulus,
+                ),
+            ):
+                isi = max(isi, st._isi)
+
+        precise_sleep(isi / 1000.0)
 
         return True

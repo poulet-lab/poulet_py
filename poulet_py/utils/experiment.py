@@ -7,7 +7,7 @@ try:
     from pydantic import BaseModel, Field, PrivateAttr, model_validator
     from tqdm.auto import tqdm
 
-    from poulet_py import BaseSink, BaseSource, BaseStimulus, BaseTrigger, EventBus, repeat
+    from poulet_py import BaseSink, BaseSource, BaseStimulus, BaseTrigger, EventBus, repeat, LOGGER
 
 except ImportError as e:
     msg = """
@@ -86,23 +86,19 @@ class ExperimentRuntime(BaseModel):
             msg = "Experiment Runtime should open first"
             raise RuntimeError(msg)
 
+        blocks: Sequence[ExperimentBlock] = repeat(
+            self.blocks, self.block_repetitions, mode=self.block_order
+        )
+
+        for block in blocks:
+            block.trials = repeat(block.trials, block.trial_repetitions, mode=block.trial_order)
+
         with ThreadPoolExecutor(max_workers=len(self.sources)) as executor:
-            blocks: Sequence[ExperimentBlock] = repeat(
-                self.blocks, self.block_repetitions, mode=self.block_order
-            )
-            n_blocks = len(blocks)
-
-            for blk_idx, block in tqdm(
-                enumerate(blocks), total=n_blocks, desc="Block", smoothing=True
-            ):
-                trials: Sequence[ExperimentTrial] = repeat(
-                    block.trials, block.trial_repetitions, mode=block.trial_order
-                )
-                n_trials = len(trials)
-
-                for trial_idx, trial in tqdm(
-                    enumerate(trials), total=n_trials, desc="Trial", smoothing=True, leave=False
+            for i, block in enumerate(tqdm(blocks, desc="Block", smoothing=True, position=0)):
+                for j, trial in enumerate(
+                    tqdm(block.trials, desc="Trial", smoothing=True, position=1, leave=False)
                 ):
+
                     if block.trigger and not block.trigger.wait():
                         msg = "Trigger failed"
                         raise RuntimeError(msg)

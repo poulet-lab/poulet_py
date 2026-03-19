@@ -1,10 +1,9 @@
 try:
     from collections.abc import Sequence
-    from time import sleep
 
     from pydantic import Field, PrivateAttr
 
-    from poulet_py import TCS, AcquisitionType, BaseSource, BaseStimulus, SinkEvent, TCSStimulus
+    from poulet_py import TCS, AcquisitionType, BaseSource, BaseStimulus, SinkEvent, TCSStimulus, precise_sleep
 except ImportError as e:
     msg = """
 Missing 'sources' module. Install options:
@@ -17,7 +16,6 @@ Missing 'sources' module. Install options:
 
 class TCSSource(BaseSource, TCS):
     name: str = Field("trial", description="Name of the trial source")
-    pre_ms: int = Field(default=0)
 
     _last_sent_idx: int = PrivateAttr(0)
     _last_timestamp: int = PrivateAttr(0)
@@ -33,22 +31,23 @@ class TCSSource(BaseSource, TCS):
         return [st for st in stimuli if isinstance(st, TCSStimulus)]
 
     def _fire(self, stimuli: Sequence[BaseStimulus]) -> bool:
-        if self._samples_buffer is not None and self.acquisition_type == AcquisitionType.FINITE:
-            self._last_timestamp = self._samples_buffer["timestamp"][self._sampling_idx - 1]
+        if self._buffer is not None and self.acquisition_type == AcquisitionType.FINITE:
+            self._last_timestamp = self._buffer["timestamp"][
+                (self._buffer_idx % self.buffer_size) - 1
+            ]
 
         for st in stimuli:
-            if not isinstance(st, TCSStimulus):
-                continue
-            self.trigger(st)
-            self._stimulus_done.wait()
+            if isinstance(st, TCSStimulus):
+                precise_sleep(st.pre_delay / 1000.0)
+                self.trigger(st)
+                self._stimulus_done.wait()
 
-            if st._isi:
-                sleep(st._isi / 1000.0)
+                precise_sleep((st._isi + st.post_delay) / 1000.0)
 
         return True
 
     def _publish(self, stimuli: Sequence[BaseStimulus]) -> bool:
-        if self._samples_buffer is None:
+        if self._buffer is None:
             return False
 
         if self.acquisition_type == AcquisitionType.CONTINUOUS:
@@ -59,17 +58,14 @@ class TCSSource(BaseSource, TCS):
         return False
 
     def _publish_continuous(self, stimuli: Sequence[BaseStimulus]) -> bool:
-        if self._samples_buffer is None:
+        if self._buffer is None:
             return False
 
         start = self._last_timestamp
-        end = self._samples_buffer["timestamp"][self._sampling_idx]
+        end = self._buffer["timestamp"][(self._buffer_idx % self.buffer_size) - 1]
 
-        mask = (self._samples_buffer["timestamp"] > start) & (
-            self._samples_buffer["timestamp"] < end
-        )
-        chunk = self._samples_buffer[mask]
-
+        mask = (self._buffer["timestamp"] > start) & (self._buffer["timestamp"] < end)
+        chunk = self._buffer[mask]
         if chunk.size == 0:
             return False
 
@@ -82,31 +78,25 @@ class TCSSource(BaseSource, TCS):
         return True
 
     def _publish_finite(self, stimuli: Sequence[BaseStimulus]) -> bool:
-        if self._samples_buffer is None or not stimuli:
+        if self._buffer is None or not stimuli:
             return False
 
         total_ms = 0
         for st in stimuli:
             if isinstance(st, TCSStimulus):
-                total_ms += st.duration + st._isi
+                total_ms += st.pre_delay + st.duration + st.post_delay + st._isi
 
-        start = self._last_timestamp - self.pre_ms * 1_000_000
+        start = self._last_timestamp
         end = self._last_timestamp + total_ms * 1_000_000
 
-        mask = (self._samples_buffer["timestamp"] > start) & (
-            self._samples_buffer["timestamp"] <= end
-        )
-        chunk = self._samples_buffer[mask]
+        mask = (self._buffer["timestamp"] > start) & (self._buffer["timestamp"] <= end)
+        chunk = self._buffer[mask]
 
         if chunk.size == 0:
             return False
 
         self.publish(
-            SinkEvent(
-                name=self.name,
-                payload={"tcs": chunk},
-                meta={"acquisition": "finite", "pre_ms": self.pre_ms},
-            )
+            SinkEvent(name=self.name, payload={"tcs": chunk}, meta={"acquisition": "finite"})
         )
 
         self._last_timestamp = end

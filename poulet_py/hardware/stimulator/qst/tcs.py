@@ -2,14 +2,14 @@ try:
     from collections import deque
     from re import Match, Pattern, compile, search
     from threading import Condition, Event, Thread
-    from time import monotonic_ns, sleep
+    from time import perf_counter_ns
 
     from numpy import empty, ndarray
     from numpy.typing import ArrayLike
     from pydantic import BaseModel, Field, PrivateAttr
     from serial import Serial
 
-    from poulet_py import LOGGER, BaseTrigger, TCSCommand, TCSStimulus
+    from poulet_py import LOGGER, BaseTrigger, TCSCommand, TCSStimulus, precise_sleep
 
 
 except ImportError as e:
@@ -52,12 +52,7 @@ class TCS(BaseModel, validate_assignment=True):
         description="Serial port to which the TCS device is connected",
         pattern=r"^(COM\d+|(/dev/)tty(USB\d+|\.usb[a-zA-Z0-9]+))$",
     )
-    buffer_size: int = Field(
-        default=1000,
-        description="Size of the internal sampling queue",
-        ge=1,
-        le=10000,
-    )
+    buffer_size: int = Field(default=1000, description="Size of the internal sampling queue", ge=1)
     maximum_temperature: float = Field(
         default=40.0, description="Maximum allowed temperature in °C"
     )
@@ -78,8 +73,8 @@ class TCS(BaseModel, validate_assignment=True):
     _serial: Serial = PrivateAttr()
     _is_open: bool = PrivateAttr(default=False)
 
-    _sampling_idx: int = PrivateAttr(0)
-    _samples_buffer: ndarray | None = PrivateAttr(None)
+    _buffer_idx: int = PrivateAttr(0)
+    _buffer: ndarray | None = PrivateAttr(None)
     _sampling_thread: Thread | None = PrivateAttr(None)
     _sampling_stop_event: Event = PrivateAttr(default_factory=Event)
     _sampling_cond: Condition = PrivateAttr(default_factory=Condition)
@@ -115,20 +110,17 @@ class TCS(BaseModel, validate_assignment=True):
 
     def _stimulus_timer(self, duration_ms: int):
         try:
-            sleep(duration_ms / 1000.0)
+            precise_sleep(duration_ms / 1000.0)
         finally:
             self._stimulus_done.set()
 
     def _start_streaming(self):
-        if self._samples_buffer is None:
-            self._samples_buffer = empty(
+        if self._buffer is None:
+            self._buffer = empty(
                 self.buffer_size,
-                dtype=[
-                    ("timestamp", "uint64"),
-                    ("temperature", "float32", (5,)),
-                ],
+                dtype=[("timestamp", "uint64"), *((f"s{i}", "float64") for i in range(5))],
             )
-            self._sampling_idx = 0
+            self._buffer_idx = 0
 
         if self._sampling_thread is None or not self._sampling_thread.is_alive():
             self.execute_command(TCSCommand.DISPLAY_TEMPERATURES_DURING_STIMULATION)
@@ -149,7 +141,7 @@ class TCS(BaseModel, validate_assignment=True):
 
     def _streaming_loop(self):
         try:
-            if self._samples_buffer is None:
+            if self._buffer is None:
                 msg = "Samples buffer is not initialized"
                 raise RuntimeError(msg)
 
@@ -162,18 +154,18 @@ class TCS(BaseModel, validate_assignment=True):
                         request = self._serial_search_queue[0]
                         if request.pattern is not None:
                             if match := search(request.pattern, line):
-                                request.result = (monotonic_ns(), match)
+                                request.result = (perf_counter_ns(), match)
                                 request.event.set()
                                 self._serial_search_queue.popleft()
 
                 if match := search(self._temperature_line_pattern, line):
-                    idx = self._sampling_idx % self.buffer_size
-                    timestamp = monotonic_ns()
+                    idx = self._buffer_idx % self.buffer_size
+                    timestamp = perf_counter_ns()
                     values = tuple(map(float, match.groups()))
-                    self._samples_buffer[idx] = (timestamp, values)
+                    self._buffer[idx] = (timestamp, *values)
 
                     with self._sampling_cond:
-                        self._sampling_idx += 1
+                        self._buffer_idx += 1
                         self._sampling_cond.notify_all()
 
         except Exception as e:
@@ -373,20 +365,20 @@ class TCS(BaseModel, validate_assignment=True):
         LOGGER.info("Reset successfully")
 
     def read_last_sample(self) -> ArrayLike:
-        if not self._is_open or self._samples_buffer is None:
+        if not self._is_open or self._buffer is None:
             msg = "use open() first"
             raise RuntimeError(msg)
 
         with self._sampling_cond:
-            if self._sampling_idx == 0:
+            if self._buffer_idx == 0:
                 msg = "No samples collected yet"
                 raise RuntimeError(msg)
 
-            idx = (self._sampling_idx - 1) % self.buffer_size
-            return self._samples_buffer[idx]
+            idx = (self._buffer_idx - 1) % self.buffer_size
+            return self._buffer[idx]
 
     def read_many_sample(self, data: ndarray, n: int, timeout: float = 10.0) -> int:
-        if not self._is_open or self._samples_buffer is None:
+        if not self._is_open or self._buffer is None:
             msg = "use open() first"
             raise RuntimeError(msg)
 
@@ -394,16 +386,16 @@ class TCS(BaseModel, validate_assignment=True):
             msg = f"Provided array has {data.shape[0]} rows, need at least {n}"
             raise ValueError(msg)
 
-        deadline = monotonic_ns() + timeout
+        deadline = perf_counter_ns() + timeout
 
         with self._sampling_cond:
-            while self._sampling_idx == 0:
-                remaining = deadline - monotonic_ns()
+            while self._buffer_idx == 0:
+                remaining = deadline - perf_counter_ns()
                 if remaining <= 0:
                     return 0
                 self._sampling_cond.wait(timeout=remaining)
 
-            total_samples = self._sampling_idx
+            total_samples = self._buffer_idx
             available = min(total_samples, self.buffer_size)
             count = min(n, available)
 
@@ -411,10 +403,10 @@ class TCS(BaseModel, validate_assignment=True):
             first_chunk = min(self.buffer_size - start_idx, count)
             second_chunk = count - first_chunk
 
-            data[0:first_chunk] = self._samples_buffer[start_idx : start_idx + first_chunk]
+            data[0:first_chunk] = self._buffer[start_idx : start_idx + first_chunk]
 
             if second_chunk > 0:
-                data[first_chunk:count] = self._samples_buffer[0:second_chunk]
+                data[first_chunk:count] = self._buffer[0:second_chunk]
 
             return count
 
