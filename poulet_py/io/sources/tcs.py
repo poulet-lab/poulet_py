@@ -3,7 +3,15 @@ try:
 
     from pydantic import Field, PrivateAttr
 
-    from poulet_py import TCS, AcquisitionType, BaseSource, BaseStimulus, SinkEvent, TCSStimulus, precise_sleep
+    from poulet_py import (
+        TCS,
+        AcquisitionType,
+        BaseSource,
+        BaseStimulus,
+        SinkEvent,
+        TCSStimulus,
+        precise_sleep,
+    )
 except ImportError as e:
     msg = """
 Missing 'sources' module. Install options:

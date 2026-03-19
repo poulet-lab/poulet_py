@@ -15,9 +15,9 @@ try:
         ones_like,
         pi,
         sin,
-        uint32,
         stack,
         tile,
+        uint32,
         zeros,
         zeros_like,
     )
