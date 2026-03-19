@@ -24,7 +24,7 @@ try:
     from abc import ABC, abstractmethod
     from collections.abc import Sequence
     from concurrent.futures import ThreadPoolExecutor, as_completed
-    from time import monotonic_ns
+    from time import perf_counter_ns
     from typing import Self
 
     from nidaqmx import Task
@@ -49,6 +49,7 @@ try:
         NIAnalogBaseStimulus,
         NIAnalogCompositeStimulus,
         NIDigitalBaseStimulus,
+        NIDigitalCompositeStimulus,
     )
 except ImportError as e:
     msg = """
@@ -377,7 +378,7 @@ class NIAnalogInputTask(NIBaseTask):
 
             self._buffer = empty(
                 new_capacity,
-                dtype=[("timestamp", uint64), ("ai", float64, (len(self.channels),))],
+                dtype=[("timestamp", uint64), *((ch.name, float64) for ch in self.channels)],
             )
 
     def _open(self) -> None:
@@ -407,7 +408,7 @@ class NIAnalogInputTask(NIBaseTask):
         )
         self._buffer = empty(
             self._clock_handle.samps_per_chan,
-            dtype=[("timestamp", uint64), ("ai", float64, (len(self.channels),))],
+            dtype=[("timestamp", uint64), *((ch.name, float64) for ch in self.channels)],
         )
         self._reader = AnalogMultiChannelReader(self._task.in_stream)
 
@@ -445,9 +446,10 @@ class NIAnalogInputTask(NIBaseTask):
 
         if n > 0:
             data = self._ai_buffer[:, :n]
-            self._buffer["ai"][:n] = data.T
+            for idx, col in enumerate(self._buffer.dtype.names[1:]):
+                self._buffer[col][:n] = data[idx]
 
-            t_read = monotonic_ns()
+            t_read = perf_counter_ns()
             dt = uint64(1e9 / self._clock_handle.rate)
             t0 = t_read - (n - 1) * dt
 
@@ -560,7 +562,7 @@ class NIDigitalInputTask(NIBaseTask):
 
             self._buffer = empty(
                 new_capacity,
-                dtype=[("timestamp", uint64), ("di", uint32, (len(self.channels),))],
+                dtype=[("timestamp", uint64), *((ch.name, float64) for ch in self.channels)],
             )
 
     def _open(self) -> None:
@@ -588,7 +590,7 @@ class NIDigitalInputTask(NIBaseTask):
         )
         self._buffer = empty(
             self._clock_handle.samps_per_chan,
-            dtype=[("timestamp", uint64), ("di", uint32, (len(self.channels),))],
+            dtype=[("timestamp", uint64), *((ch.name, float64) for ch in self.channels)],
         )
 
         self._reader = DigitalMultiChannelReader(self._task.in_stream)
@@ -628,9 +630,10 @@ class NIDigitalInputTask(NIBaseTask):
 
         if n > 0:
             data = self._di_buffer[:, :n]
-            self._buffer["di"][:n] = data.T
+            for idx, col in enumerate(self._buffer.dtype.names[1:]):
+                self._buffer[col][:n] = data[idx]
 
-            t_read = monotonic_ns()
+            t_read = perf_counter_ns()
             dt = uint64(1e9 / self._clock_handle.rate)
             t0 = t_read - (n - 1) * dt
 
@@ -684,8 +687,6 @@ class NIDigitalOutputTask(NIBaseTask):
         self._writer = DigitalMultiChannelWriter(self._task.out_stream, auto_start=False)
         self._task = self._task
         self._is_open = True
-
-        self.write(zeros((len(self.channels), 1)))
 
     def write(self, data: ndarray, timeout: float = 10.0):
         """
@@ -765,7 +766,11 @@ class NIDaQ(BaseModel):
         return self
 
     def write(
-        self, stimulus: NIAnalogCompositeStimulus | NIAnalogBaseStimulus | NIDigitalBaseStimulus
+        self,
+        stimulus: NIDigitalCompositeStimulus
+        | NIAnalogCompositeStimulus
+        | NIAnalogBaseStimulus
+        | NIDigitalBaseStimulus,
     ):
         if not self._is_open or not self._clock_task:
             msg = "NIDaQ must be first opened"
@@ -773,7 +778,7 @@ class NIDaQ(BaseModel):
 
         for task in self._write_tasks:
             if isinstance(task, NIDigitalOutputTask) and isinstance(
-                stimulus, NIDigitalBaseStimulus
+                stimulus, (NIDigitalBaseStimulus, NIDigitalCompositeStimulus)
             ):
                 task.write(stimulus.build(task._clock_handle.rate))
             elif isinstance(task, NIAnalogOutputTask) and isinstance(

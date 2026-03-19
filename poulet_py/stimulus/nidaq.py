@@ -15,6 +15,7 @@ try:
         ones_like,
         pi,
         sin,
+        uint32,
         stack,
         tile,
         zeros,
@@ -209,7 +210,7 @@ class NIDigitalBaseStimulus(BaseStimulus, ABC):
         post_samples = int(self.post_delay * rate / 1000)
 
         total_samples = pre_samples + active_samples + post_samples
-        signal = zeros(total_samples, dtype=bool)
+        signal = zeros(total_samples, dtype=uint32)
 
         active = self._generate(active_samples, rate)
         signal[pre_samples : pre_samples + active_samples] = active
@@ -221,7 +222,7 @@ class NIDigitalBaseStimulus(BaseStimulus, ABC):
 
 class NIConstantDigitalStimulus(NIDigitalBaseStimulus):
     def _generate(self, samples: int, rate: float) -> NDArray[bool_]:
-        return ones(samples, dtype=bool)
+        return ones(samples, dtype=uint32)
 
 
 class NIPulseDigitalStimulus(NIDigitalBaseStimulus):
@@ -229,7 +230,7 @@ class NIPulseDigitalStimulus(NIDigitalBaseStimulus):
 
     def _generate(self, samples: int, rate: float) -> NDArray[bool_]:
         width_samples = int(self.pulse_width * rate / 1000)
-        y = zeros(samples, dtype=bool)
+        y = zeros(samples, dtype=uint32)
         y[:width_samples] = True
         return y
 
@@ -244,3 +245,17 @@ class NIPulseTrainDigitalStimulus(NIDigitalBaseStimulus):
         period = width_samples + interval_samples
         idx = arange(samples)
         return (idx % period) < width_samples
+
+
+class NIDigitalCompositeStimulus(BaseStimulus):
+    stimuli: Sequence[NIDigitalBaseStimulus] = Field(...)
+
+    def build(self, rate: float) -> NDArray[float64]:
+        if rate <= 0:
+            msg = "Sampling rate must be positive"
+            raise ValueError(msg)
+
+        build = []
+        for stim in self.stimuli:
+            build.append(stim.build(rate))
+        return stack(build).squeeze()

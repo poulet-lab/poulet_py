@@ -1,14 +1,21 @@
 try:
     from collections.abc import Sequence
     from threading import Thread
-    from time import monotonic_ns, sleep
+    from time import perf_counter_ns
 
-    from numpy import any, dtype, float64, ndarray, uint64, zeros
+    from numpy import dtype, float64, ndarray, uint64, zeros
     from open_ephys.control import OpenEphysHTTPServer
     from open_ephys.streaming import EventListener
     from pydantic import Field, IPvAnyAddress, PrivateAttr
 
-    from poulet_py import AcquisitionType, BaseSource, BaseStimulus, EmptyStimulus, SinkEvent
+    from poulet_py import (
+        AcquisitionType,
+        BaseSource,
+        BaseStimulus,
+        EmptyStimulus,
+        SinkEvent,
+        precise_sleep,
+    )
 except ImportError as e:
     msg = """
 Missing 'sources' module. Install options:
@@ -19,7 +26,7 @@ Missing 'sources' module. Install options:
     raise ImportError(msg) from e
 
 
-class NIDaQSource(BaseSource):
+class OpenEphysSource(BaseSource):
     address: IPvAnyAddress = Field(default="127.0.0.1")
     port: int = Field(default=5557)
     buffer_size: int = Field(1000)
@@ -67,7 +74,7 @@ class NIDaQSource(BaseSource):
         self._thread.join()
 
     def ttl_callback(self, info: dict):
-        return
+        print(info)
 
     def spike_callback(self, info: dict):
         """
@@ -76,11 +83,8 @@ class NIDaQSource(BaseSource):
         Args:
             info: Dictionary containing spike event information
         """
-        print(
-            f"Spike detected on electrode {info.get('electrode')} "
-            f"at sample {info.get('sample_number')} "
-            f"(sorted_id: {info.get('sorted_id')})"
-        )
+        print(info)
+
 
         # Store spike event in buffer if needed
         # Spike data includes amplitude values for up to 4 channels
@@ -91,7 +95,7 @@ class NIDaQSource(BaseSource):
                 spike_data[i] = info[amp_key]
 
         self._store_sample(
-            timestamp=monotonic_ns(),
+            timestamp=perf_counter_ns(),
             channel_data=spike_data,
         )
 
@@ -120,7 +124,7 @@ class NIDaQSource(BaseSource):
         for st in stimuli:
             if isinstance(st, EmptyStimulus) and self.acquisition_type == AcquisitionType.FINITE:
                 self._control.acquire()
-                sleep((st.pre_delay + st.duration + st.post_delay + st._isi) / 1000)
+                precise_sleep((st.pre_delay + st.duration + st.post_delay + st._isi) / 1000.0)
                 self._control.idle()
 
         return True

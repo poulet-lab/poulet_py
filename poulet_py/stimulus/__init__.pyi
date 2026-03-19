@@ -18,12 +18,14 @@ from .nidaq import (
     NITriangleAnalogStimulus,
     NIWhiteNoiseAnalogStimulus,
     NIAnalogCompositeStimulus,
+    NIDigitalCompositeStimulus,
 )
 from .tcs import TCSStimulus
 
 __all__ = [
     "BaseStimulus",
     "NIAnalogCompositeStimulus",
+    "NIDigitalCompositeStimulus",
     "EmptyStimulus",
     "NIAnalogBaseStimulus",
     "NIArbitraryAnalogStimulus",

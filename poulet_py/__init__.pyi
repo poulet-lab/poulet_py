@@ -35,6 +35,7 @@ from .io import (
     EventHandler,
     HDFSink,
     NIDaQSource,
+    OpenEphysSource,
     SinkEvent,
     TCSSource,
 )
@@ -51,6 +52,7 @@ from .stimulus import (
     NIPulseDigitalStimulus,
     NIPulseTrainAnalogStimulus,
     NIAnalogCompositeStimulus,
+    NIDigitalCompositeStimulus,
     NIPulseTrainDigitalStimulus,
     NISawAnalogStimulus,
     NISineAnalogStimulus,
@@ -60,7 +62,7 @@ from .stimulus import (
     NIWhiteNoiseAnalogStimulus,
     TCSStimulus,
 )
-from .tools import go_to, json_serializer, repeat, sanitize_path
+from .tools import go_to, json_serializer, repeat, sanitize_path, precise_sleep
 from .utils import ExperimentBlock, ExperimentRuntime, ExperimentTrial, Oscilloscope
 
 __all__ = [
@@ -76,6 +78,7 @@ __all__ = [
     "BaseTrigger",
     "BaslerCamera",
     "CounterSource",
+    "OpenEphysSource",
     "EmptyStimulus",
     "EventBus",
     "EventHandler",
@@ -83,7 +86,9 @@ __all__ = [
     "ExperimentRuntime",
     "ExperimentTrial",
     "GPIOTrigger",
+    "precise_sleep",
     "NIAnalogCompositeStimulus",
+    "NIDigitalCompositeStimulus",
     "HDFSink",
     "HDFSink",
     "JulaboChiller",
