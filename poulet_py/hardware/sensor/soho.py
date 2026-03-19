@@ -15,6 +15,8 @@ Examples
 """
 
 try:
+    import platform
+    import sys
     from collections.abc import Callable
     from os.path import basename, exists, join
     from re import sub
@@ -44,6 +46,42 @@ Missing 'soho' module. Install options:
     raise ImportError(msg) from e
 
 console = Console()
+
+
+def _wait_for_space(prompt: str) -> None:
+    """
+    Wait for user to press Space before continuing.
+
+    Uses Space instead of Enter to avoid conflicts with Ponemah's connection
+    test. Only captures keystrokes when the terminal has focus.
+    """
+    console.print(prompt)
+    if platform.system() == "Windows":
+        import msvcrt
+
+        while msvcrt.kbhit():
+            msvcrt.getch()
+        while True:
+            if msvcrt.kbhit():
+                ch = msvcrt.getch()
+                if ch == b" " or (isinstance(ch, int) and ch == ord(" ")):
+                    break
+    else:
+        import termios
+        import tty
+
+        fd = sys.stdin.fileno()
+        termios.tcflush(fd, termios.TCIFLUSH)
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            while True:
+                ch = sys.stdin.read(1)
+                if ch == " ":
+                    break
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
 
 HOST = "localhost"
 PORT = 6732
@@ -404,9 +442,9 @@ class Soho(BaseModel):
         self._active = True
         self._stop = False
 
-        console.input(
+        _wait_for_space(
             "[bold yellow]\nWARNING: Ensure that the continuous sampling is "
-            "activated. Press Enter when you're ready to start recording."
+            "activated. Press Space when you're ready to start recording."
         )
 
         console.rule("[bold cyan]🟢 RECORDING WITH PONEMAH[/bold cyan]", style="bold cyan")
@@ -458,23 +496,23 @@ class Soho(BaseModel):
             self._collection_thread.join()
 
         console.print("[bold cyan]🔌 CONNECTION TEST[/bold cyan]")
-        console.input(
+        _wait_for_space(
             "Go to Ponemah 'Experiment Setup' and click 'Test' remote "
-            "connection. Press Enter when ready to test."
+            "connection. Press Space when ready to test."
         )
 
         test_ponemah_connection(self.host, self.port)
 
-        console.input(
-            "Close the remote connection test window by pressing 'OK'. Press Enter when done."
+        _wait_for_space(
+            "Close the remote connection test window by pressing 'OK'. Press Space when done."
         )
 
         confirm_resume = Confirm.ask("[yellow]Resume recording? (y/n)[/yellow]", default=True)
 
         if confirm_resume:
-            console.input(
+            _wait_for_space(
                 "[bold yellow]\nWARNING: Ensure that the continuous sampling is "
-                "activated. Press Enter when you're ready to start recording."
+                "activated. Press Space when you're ready to start recording."
             )
             self._stop = False
             self._collection_thread = Thread(target=self.collect)
