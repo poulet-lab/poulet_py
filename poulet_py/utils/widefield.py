@@ -16,7 +16,6 @@ from datetime import datetime
 
 from numpy import ndarray
 
-
 try:
     from collections.abc import Callable
     from pathlib import Path
@@ -24,10 +23,10 @@ try:
 
     import numpy as np
     import pandas as pd
+    from pydantic import BaseModel, Field, PrivateAttr
+    from skio import imread
 
     from poulet_py import LOGGER
-    from skio import imread
-    from pydantic import BaseModel, PrivateAttr, Field
 
 except ImportError as e:
     msg = """
