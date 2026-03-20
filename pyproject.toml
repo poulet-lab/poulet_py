@@ -74,7 +74,7 @@ julabo = ["pyserial==3.5.*"]
 qst = ["pandas==2.3.*", "tqdm==4.67.*", "pyserial==3.5.*"]
 triggers = ["poulet_py[gpio]"]
 gpio = ["gpiozero==2.0.*", "lgpio==0.2.*"]
-soho = ["pandas==2.3.*", "pynput==1.8.*"]
+soho = ["pandas==2.3.*", "prompt_toolkit>=3.0,<4"]
 # Tools
 
 # Utils
