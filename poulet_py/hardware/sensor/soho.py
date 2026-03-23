@@ -606,9 +606,7 @@ class Soho(BaseModel):
                     self.stop()
                 finally:
                     self._skip_keyboard_join = False
-                listener = get_app_or_none()
-                if listener is not None:
-                    listener.exit(result=None)
+
         elif c == "t":
             if await _ptk_yes_no_async("Pause recording to test connection? (y/n)", default=True):
                 await self._pause_and_test_connection_async()
