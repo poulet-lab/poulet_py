@@ -578,8 +578,11 @@ class Soho(BaseModel):
         def _(event: KeyPressEvent) -> None:
             event.app.create_background_task(self._handle_key_async("t"))
 
+        exit_requested: list[bool] = [False]  # list to allow assignment in closure
+
         def stop_if_inactive(app: Application) -> None:
-            if not self._active:
+            if not self._active and not exit_requested[0]:
+                exit_requested[0] = True
                 app.exit(result=None)
 
         app = Application(
