@@ -27,7 +27,7 @@ Missing 'sources' module. Install options:
 
 
 class OpenEphysSource(BaseSource):
-    address: IPvAnyAddress = Field(default="127.0.0.1")
+    address: IPvAnyAddress = Field(default="localhost")
     port: int = Field(default=5557)
     buffer_size: int = Field(1000)
     num_channels: int = Field(default=16, description="Number of recording channels")
@@ -35,7 +35,6 @@ class OpenEphysSource(BaseSource):
     _control: OpenEphysHTTPServer = PrivateAttr()
     _listener: EventListener = PrivateAttr()
     _thread: Thread = PrivateAttr()
-    _sample_rate: int = PrivateAttr()
     _buffer: ndarray = PrivateAttr()
     _buffer_idx: int = PrivateAttr(default=0)
     _last_timestamp: int = PrivateAttr(default=0)
@@ -54,7 +53,6 @@ class OpenEphysSource(BaseSource):
         self._last_timestamp = 0
 
         self._control = OpenEphysHTTPServer(str(self.address))
-        self._sample_rate = int(self._control.get_audio_settings("sample_rate"))
 
         if self.acquisition_type == AcquisitionType.CONTINUOUS:
             self._control.acquire()
