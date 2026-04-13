@@ -1,8 +1,8 @@
 """
 Widefield imaging data analysis module.
 
-This module provides a class-based interface for analyzing widefield
-imaging TIFF data from body core temperature experiments.
+This module provides a class-based interface for analysing widefield
+imaging data.
 
 A trial folder contains:
 - recording.tiff: Multi-page TIFF stack with imaging data
@@ -11,20 +11,18 @@ A trial folder contains:
 - green.tiff: Reference/green channel image
 """
 
-from abc import ABC, abstractmethod
 from datetime import datetime
-
-from numpy import ndarray
 
 try:
     from collections.abc import Callable
     from pathlib import Path
     from typing import Any
 
-    import numpy as np
-    import pandas as pd
-    from pydantic import BaseModel, Field, PrivateAttr
-    from skio import imread
+    import h5py
+    from numpy import array, ceil, load, ndarray, pad, save, savez_compressed, uint16
+    from pandas import DataFrame, read_csv
+    from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
+    from skimage.io import imread
 
     from poulet_py import LOGGER
 
@@ -40,195 +38,324 @@ Also ensure: h5py, numpy, pandas, scikit-image, imageio, matplotlib are installe
     raise ImportError(msg) from e
 
 
-class BaseData(BaseModel, ABC):
-    @abstractmethod
-    def _load(self): ...
+class BaseData(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
-class SeparatedData(BaseData):
-    # make restriction of tiff, npy only etc.
-    video: Path = Field(..., description="")
-    analog_output_data: Path = Field(...)
-    reference_image: Path | None = Field(default=None)
+class Trial(BaseData):
+    path: Path = Field(..., description="Path to trial folder")
+    imaging_path: Path | None = Field(default=None)
+    timestamps_path: Path | None = Field(default=None)
+    analog_output_data_path: Path | None = Field(default=None)
+    reference_image_path: Path | None = Field(default=None)
 
-    _video: ndarray = PrivateAttr()
-    _reference_image: ndarray = PrivateAttr()
-    _analog_output_data: ndarray = PrivateAttr()
+    imaging_data: ndarray[Any, Any] | None = Field(default=None)
+    green_reference: ndarray[Any, Any] | None = Field(default=None)
+    timestamps: DataFrame | None = Field(default=None)
+    analog_output_data: dict[str, ndarray[Any, Any]] = Field(default_factory=dict)
+    analog_output_data_attrs: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    analog_output_data_file_attrs: dict[str, Any] = Field(default_factory=dict)
+    condition: dict[str, Any] | None = Field(default=None)
+    roi: dict[str, Any] | None = Field(default=None)
 
-    self.timestamps: pd.DataFrame | None = None
-    self.sensor_data: dict[str, np.ndarray] = {}
-    self.sensor_attrs: dict[str, dict[str, Any]] = {}
-    self.file_attrs: dict[str, Any] = {}
-    self.condition: dict[str, Any] | None = None
-    self.roi: dict[str, Any] | None = None
+    def _resolve_paths(self) -> None:
+        if not self.path.exists():
+            msg = f"Trial path does not exist: {self.path}"
+            raise FileNotFoundError(msg)
+        if not self.path.is_dir():
+            msg = f"Trial path must be a directory: {self.path}"
+            raise ValueError(msg)
 
-    def _load(self):
-        self._load_video()
-        self._load_reference_image()
+        video_candidates = ["recording.tiff", "recording.tif", "recording.npy"]
+        self.imaging_path = None
+        for candidate in video_candidates:
+            candidate_path = self.path / candidate
+            if candidate_path.exists():
+                self.imaging_path = candidate_path
+                break
 
-    def _load_video(self) -> np.ndarray:
-        LOGGER.info(f"Loading imaging data from: {self.video.name}")
+        if self.imaging_path is None:
+            msg = f"recording.tiff/.tif/.npy not found in: {self.path}"
+            raise ValueError(msg)
 
-        if self.video.suffix.lower() == ".npy":
-            data = np.load(str(self.video))
-        elif self.video.suffix.lower() in (".tiff", ".tif"):
-            data = imread(str(self.video))
+        csv_path = self.path / "recording.csv"
+        h5_path = self.path / "data.h5"
+        green_path = self.path / "green.tiff"
+        self.timestamps_path = csv_path if csv_path.exists() else None
+        self.analog_output_data_path = h5_path if h5_path.exists() else None
+        self.reference_image_path = green_path if green_path.exists() else None
+
+    def load(self) -> None:
+        self._resolve_paths()
+        self.imaging_data = self._load_imaging()
+        self.green_reference = self._load_reference_image()
+        self.timestamps = self._load_timestamps()
+        (
+            self.analog_output_data,
+            self.analog_output_data_attrs,
+            self.analog_output_data_file_attrs,
+        ) = self._load_analog_output()
+
+    def _load_imaging(self) -> ndarray[Any, Any]:
+        if self.imaging_path is None:
+            raise ValueError("Imaging path is not set")
+        LOGGER.info(f"Loading imaging data from: {self.imaging_path.name}")
+
+        if self.imaging_path.suffix.lower() == ".npy":
+            data = load(str(self.imaging_path))
+        elif self.imaging_path.suffix.lower() in (".tiff", ".tif"):
+            data = imread(str(self.imaging_path))
         else:
-            msg = f"Unsupported imaging format: {self.video.suffix}"
+            msg = f"Unsupported imaging format: {self.imaging_path.suffix}"
             raise ValueError(msg)
 
         LOGGER.info(f"Loaded imaging stack: {data.shape}")
         return data
 
-    def _load_reference_image(self) -> None:
-        if isinstance(self.reference_image, Path) and not self.reference_image.exists():
-            LOGGER.warning(f"Green reference not found: {self.reference_image}")
+    def _load_reference_image(self) -> ndarray[Any, Any] | None:
+        if self.reference_image_path is None:
+            return None
+        if not self.reference_image_path.exists():
+            LOGGER.warning(f"Green reference not found: {self.reference_image_path}")
             return None
 
-        LOGGER.info(f"Loading green reference from: {self.reference_image.name}")
-        img = skio.imread(str(self.reference_image))
-        if img.ndim == 3:
-            img = img[0]
-        LOGGER.info(f"Loaded green reference: {img.shape}")
-        return img
+        LOGGER.info(f"Loading green reference from: {self.reference_image_path.name}")
+        image = imread(str(self.reference_image_path))
+        if image.ndim == 3:
+            image = image[0]
+        LOGGER.info(f"Loaded green reference: {image.shape}")
+        return image
 
+    def _load_timestamps(self) -> DataFrame | None:
+        """
+        Load frame timestamps from a CSV file.
 
-class Trial(BaseData):
-    # make restriction of tiff, npy only etc.
-    path: Path = Field(..., description="")
-    data: BaseData = Field(...)
+        Reads the semicolon-separated CSV file containing timing
+        information for each frame in the recording.
+        """
+        if self.timestamps_path is None or not self.timestamps_path.exists():
+            LOGGER.warning(f"Timestamps path not set or not found: {self.timestamps_path}")
+            return None
+        try:
+            timestamps = read_csv(self.timestamps_path, sep=";")
+            timestamps = timestamps.loc[:, ~timestamps.columns.str.contains("^Unnamed")]
+            LOGGER.info(f"Loaded timestamps: {len(timestamps)} rows")
+        except Exception:
+            LOGGER.exception(f"Error loading timestamps: {self.timestamps_path}")
+            return None
+        return timestamps
 
-    def load_trial(self):
-        self.data._load()
+    def _load_analog_output(
+        self,
+    ) -> tuple[dict[str, ndarray[Any, Any]], dict[str, dict[str, Any]], dict[str, Any]]:
+        """
+        Load sensor data from an HDF5 file.
+
+        Returns empty dictionaries if the file does not exist.
+        """
+
+        analog_output_data: dict[str, ndarray[Any, Any]] = {}
+        analog_output_data_attrs: dict[str, dict[str, Any]] = {}
+        analog_output_data_file_attrs: dict[str, Any] = {}
+
+        if self.analog_output_data_path is None or not self.analog_output_data_path.exists():
+            LOGGER.warning(f"Analog output data path not set or not found: {self.analog_output_data_path}")
+            return {}, {}, {}
+        try:
+            with h5py.File(self.analog_output_data_path, "r") as f:
+                analog_output_data_file_attrs = dict(f.attrs)
+                def _visit_datasets(name: str, obj: Any) -> None:
+                    if isinstance(obj, h5py.Dataset):
+                        analog_output_data[name] = array(obj)
+                        analog_output_data_attrs[name] = dict(obj.attrs)
+                f.visititems(_visit_datasets)
+        except Exception:
+            LOGGER.exception(f"Error loading H5: {self.analog_output_data_path}")
+            return {}, {}, {}
+        return analog_output_data, analog_output_data_attrs, analog_output_data_file_attrs
+
+    def close(self) -> None:
+        self.imaging_data = None
+        self.green_reference = None
+        self.timestamps = None
+        self.analog_output_data = {}
+        self.analog_output_data_attrs = {}
+        self.analog_output_data_file_attrs = {}
+
+    def summary(self) -> str:
+        """Return a human-readable summary of this trial."""
+        lines = ["=" * 60, f"Trial: {self.path.name}", "=" * 60]
+
+        if self.imaging_data is not None:
+            n_frames, height, width = self.imaging_data.shape
+            lines.extend(
+                [
+                    "Imaging data:",
+                    f"  Shape: {self.imaging_data.shape}",
+                    f"  Frames: {n_frames}",
+                    f"  Resolution: {width} x {height}",
+                    f"  Dtype: {self.imaging_data.dtype}",
+                    (
+                        "  Value range: "
+                        f"[{self.imaging_data.min()}, {self.imaging_data.max()}]"
+                    ),
+                ]
+            )
+            size_mb = self.imaging_data.nbytes / (1024 * 1024)
+            lines.append(f"  Memory: {size_mb:.1f} MB")
+
+        if self.timestamps is not None:
+            lines.extend(
+                [
+                    "Timestamps:",
+                    f"  Rows: {len(self.timestamps)}",
+                    f"  Columns: {list(self.timestamps.columns)}",
+                ]
+            )
+
+        if self.analog_output_data:
+            lines.append("Analog output data:")
+            for name, data in self.analog_output_data.items():
+                attrs = self.analog_output_data_attrs.get(name, {})
+                sr = attrs.get("sr", "unknown")
+                lines.append(f"  {name}: shape={data.shape}, sr={sr} Hz")
+
+        if self.analog_output_data_file_attrs:
+            mouse_id = self.analog_output_data_file_attrs.get("mouse_id", "unknown")
+            protocol = self.analog_output_data_file_attrs.get("protocol_name", "unknown")
+            comment = self.analog_output_data_file_attrs.get("comment", "")
+            lines.extend(["Metadata:", f"  Mouse: {mouse_id}", f"  Protocol: {protocol}"])
+            if comment:
+                lines.append(f"  Comment: {comment}")
+
+        lines.append("=" * 60)
+        return "\n".join(lines)
+
+    def __str__(self) -> str:
+        return self.summary()   
 
 
 class Session(BaseModel):
-    path: Path = Field(..., description="")
+    path: Path = Field(..., description="Path to the session folder")
     start: datetime = Field()
     end: datetime = Field()
 
-    _trials: list[Trial] = PrivateAttr()
+    _trials: list[Trial] = PrivateAttr(default_factory=list)
+
+    @property
+    def trials(self) -> list[Trial]:
+        return self._trials
+
+    def add_trial(self, trial: Trial) -> None:
+        self._trials.append(trial)
+
+    def close(self) -> None:
+        for trial in self._trials:
+            trial.close()
 
 
 class WidefieldAnalysis(BaseModel):
     session: Session = Field(..., description="")
+    _active_trial_idx: int = PrivateAttr(default=0)
 
-    def _validate(self) -> None:
+    @property
+    def active_trial(self) -> Trial:
+        if not self.session.trials:
+            msg = "Session has no trials configured"
+            raise ValueError(msg)
+        return self.session.trials[self._active_trial_idx]
+
+    @staticmethod
+    def _is_trial_folder(path: Path) -> bool:
+        if not path.is_dir():
+            return False
+        return any((path / name).exists() for name in ("recording.tiff", "recording.tif", "recording.npy"))
+
+    @classmethod
+    def from_trial_path(cls, path: Path | str, load: bool = True) -> "WidefieldAnalysis":
+        path = Path(path)
+        now = datetime.now()
+        session = Session(path=path.parent, start=now, end=now)
+        wf = cls(session=session)
+        if load:
+            wf.load(path)
+        else:
+            wf.session.add_trial(Trial(path=path))
+        return wf
+
+    @classmethod
+    def from_session_path(cls, path: Path | str, load: bool = True) -> "WidefieldAnalysis":
+        path = Path(path)
+        now = datetime.now()
+        session = Session(path=path, start=now, end=now)
+        wf = cls(session=session)
+        if load:
+            wf.load(path)
+        elif path.exists() and path.is_dir():
+            for child in sorted(path.iterdir()):
+                if cls._is_trial_folder(child):
+                    wf.session.add_trial(Trial(path=child))
+        return wf
+
+    def load(self, path: Path | str | None = None) -> None:
         """
-        Validate the trial path and locate required files.
+        Load trial data using a single entrypoint.
 
-        Raises:
-            FileNotFoundError: If trial path does not exist.
-            ValueError: If recording.tiff is missing.
+        Behavior:
+        - path is a trial folder: add/select that trial and load it.
+        - path is a session folder: discover all trial folders and load them.
+        - path is None:
+          - if trials already exist, load active trial when there is one trial,
+            or load all registered trials when there are multiple.
+          - if no trials exist, infer from self.session.path (trial vs session folder).
         """
-        if not self.trial_path.exists():
-            msg = f"Trial path does not exist: {self.trial_path}"
-            raise FileNotFoundError(msg)
+        target = Path(path) if path is not None else self.session.path
 
-        if not self.trial_path.is_dir():
-            msg = f"Trial path must be a directory: {self.trial_path}"
+        if self._is_trial_folder(target):
+            for idx, trial in enumerate(self.session.trials):
+                if trial.path == target:
+                    self._active_trial_idx = idx
+                    trial.load()
+                    LOGGER.info(str(trial))
+                    return
+            trial = Trial(path=target)
+            self.session.add_trial(trial)
+            self._active_trial_idx = len(self.session.trials) - 1
+            trial.load()
+            LOGGER.info(str(trial))
+            return
+
+        if not target.exists() or not target.is_dir():
+            msg = f"Path does not exist or is not a directory: {target}"
             raise ValueError(msg)
 
-        self.video_path = self.trial_path / "recording.tiff"
-        self.csv_path = self.trial_path / "recording.csv"
-        self.h5_path = self.trial_path / "data.h5"
-        self.green_path = self.trial_path / "green.tiff"
+        if path is None and self.session.trials:
+            if len(self.session.trials) == 1:
+                self.active_trial.load()
+                LOGGER.info(str(self.active_trial))
+                return
+            for trial in self.session.trials:
+                trial.load()
+            return
 
-        if not self.video_path.exists():
-            msg = f"recording.tiff not found in: {self.trial_path}"
+        discovered_trials = [child for child in sorted(target.iterdir()) if self._is_trial_folder(child)]
+        if not discovered_trials:
+            msg = f"No trial folders found in: {target}"
             raise ValueError(msg)
 
-    def load_session(self) -> None:
-        """
-        Load all data files from the trial folder.
+        for trial_path in discovered_trials:
+            existing = next((t for t in self.session.trials if t.path == trial_path), None)
+            trial = existing if existing is not None else Trial(path=trial_path)
+            if existing is None:
+                self.session.add_trial(trial)
+            trial.load()
 
-        Loads the TIFF imaging stack, green reference image,
-        timestamps CSV, and sensor data from the H5 file.
-        After loading, prints a summary of the loaded data.
-        """
-        self._load_video()
-        self._load_reference_image()
-        self._load_timestamps()
-        self._load_sensors()
-        self._print_info()
-
-    def _load_timestamps(self) -> None:
-        """
-        Load frame timestamps from CSV.
-
-        Logs but does not raise exceptions on failure.
-        """
-        try:
-            self.timestamps = wf_io.load_timestamps(self.csv_path)
-        except Exception:
-            LOGGER.exception(f"Error loading CSV: {self.csv_path}")
-
-    def _load_sensors(self) -> None:
-        """
-        Load sensor data from HDF5 file.
-
-        Logs but does not raise exceptions on failure.
-        """
-        try:
-            (
-                self.sensor_data,
-                self.sensor_attrs,
-                self.file_attrs,
-            ) = wf_io.load_sensors(self.h5_path)
-        except Exception:
-            LOGGER.exception(f"Error loading H5: {self.h5_path}")
-
-    def _print_info(self) -> None:
-        """
-        Print a summary of loaded data to the logger.
-
-        Displays information about imaging data dimensions,
-        timestamps, sensor traces, and file metadata.
-        """
-        LOGGER.info("=" * 60)
-        LOGGER.info(f"Trial: {self.trial_path.name}")
-        LOGGER.info("=" * 60)
-
-        if self.imaging_data is not None:
-            n_frames, height, width = self.imaging_data.shape
-            LOGGER.info("Imaging data:")
-            LOGGER.info(f"  Shape: {self.imaging_data.shape}")
-            LOGGER.info(f"  Frames: {n_frames}")
-            LOGGER.info(f"  Resolution: {width} x {height}")
-            LOGGER.info(f"  Dtype: {self.imaging_data.dtype}")
-            LOGGER.info(f"  Value range: [{self.imaging_data.min()}, {self.imaging_data.max()}]")
-            size_mb = self.imaging_data.nbytes / (1024 * 1024)
-            LOGGER.info(f"  Memory: {size_mb:.1f} MB")
-
-        if self.timestamps is not None:
-            LOGGER.info("Timestamps:")
-            LOGGER.info(f"  Rows: {len(self.timestamps)}")
-            LOGGER.info(f"  Columns: {list(self.timestamps.columns)}")
-
-        if self.sensor_data:
-            LOGGER.info("Sensor data:")
-            for name, data in self.sensor_data.items():
-                attrs = self.sensor_attrs.get(name, {})
-                sr = attrs.get("sr", "unknown")
-                LOGGER.info(f"  {name}: shape={data.shape}, sr={sr} Hz")
-
-        if self.file_attrs:
-            mouse_id = self.file_attrs.get("mouse_id", "unknown")
-            protocol = self.file_attrs.get("protocol_name", "unknown")
-            comment = self.file_attrs.get("comment", "")
-            LOGGER.info("Metadata:")
-            LOGGER.info(f"  Mouse: {mouse_id}")
-            LOGGER.info(f"  Protocol: {protocol}")
-            if comment:
-                LOGGER.info(f"  Comment: {comment}")
-
-        LOGGER.info("=" * 60)
-
+###### TO INTEGRATE WITH THE NEW CODEBASE ######
     def downscale(
         self,
         target_resolution: tuple[int, int] | None = None,
         factor: int | None = None,
-    ) -> np.ndarray | None:
+    ) -> ndarray[Any, Any] | None:
         """
         Downscale the imaging data by averaging pixels.
 
@@ -266,8 +393,8 @@ class WidefieldAnalysis(BaseModel):
             factor_W = W / target_W
 
             if not factor_H.is_integer() or not factor_W.is_integer():
-                factor_H_int = int(np.ceil(factor_H))
-                factor_W_int = int(np.ceil(factor_W))
+                factor_H_int = int(ceil(factor_H))
+                factor_W_int = int(ceil(factor_W))
                 new_H = target_H * factor_H_int
                 new_W = target_W * factor_W_int
                 pad_H = new_H - H
@@ -278,7 +405,7 @@ class WidefieldAnalysis(BaseModel):
                     f"Padding ({pad_H}, {pad_W}) pixels to use factors "
                     f"({factor_H_int}, {factor_W_int})."
                 )
-                mov = np.pad(
+                mov = pad(
                     mov, ((0, 0), (0, pad_H), (0, pad_W)), mode="constant", constant_values=0
                 )
                 T, H, W = mov.shape
@@ -304,20 +431,20 @@ class WidefieldAnalysis(BaseModel):
                     f"Dimensions ({H}, {W}) not divisible by factor {factor}. "
                     f"Padding ({pad_H}, {pad_W}) pixels."
                 )
-                mov = np.pad(
+                mov = pad(
                     mov, ((0, 0), (0, pad_H), (0, pad_W)), mode="constant", constant_values=0
                 )
                 T, H, W = mov.shape
 
             mov = mov.reshape(T, H // factor, factor, W // factor, factor).mean(4).mean(2)
 
-        result = mov.astype(np.uint16)
+        result = mov.astype(uint16)
         LOGGER.info(f"Downscaled from {self.imaging_data.shape} to {result.shape}")
         return result
 
     def _view_frame(
         self,
-        frame: np.ndarray,
+        frame: ndarray[Any, Any],
         title: str = "Frame",
         cmap: str = "gray",
     ) -> None:
@@ -351,8 +478,8 @@ class WidefieldAnalysis(BaseModel):
         Returns:
             Frame rate in Hz, or None if not available.
         """
-        if "camera_fps" in self.file_attrs:
-            fps = float(self.file_attrs["camera_fps"])
+        if "camera_fps" in self.analog_output_data_file_attrs:
+            fps = float(self.analog_output_data_file_attrs["camera_fps"])
             LOGGER.info(f"Found camera_fps: {fps} Hz")
             return fps
 
@@ -399,7 +526,7 @@ class WidefieldAnalysis(BaseModel):
         """
         return wf_paths.get_trial_processed_folder(self.trial_path)
 
-    def save_array(self, data: np.ndarray, name: str, file_format: str = "npy") -> Path | None:
+    def save_array(self, data: ndarray[Any, Any], name: str, file_format: str = "npy") -> Path | None:
         """
         Save a numpy array to the processed folder.
 
@@ -418,10 +545,10 @@ class WidefieldAnalysis(BaseModel):
         try:
             if file_format == "npy":
                 output_path = processed_folder / f"{name}.npy"
-                np.save(str(output_path), data)
+                save(str(output_path), data)
             elif file_format == "npz":
                 output_path = processed_folder / f"{name}.npz"
-                np.savez_compressed(str(output_path), data=data)
+                savez_compressed(str(output_path), data=data)
             else:
                 LOGGER.error(f"Unsupported file format: {file_format}")
                 return None
@@ -434,7 +561,9 @@ class WidefieldAnalysis(BaseModel):
             LOGGER.exception("Error saving array")
             return None
 
-    def to_numpy(self, source: str | Path | np.ndarray | None = None) -> np.ndarray | None:
+    def to_numpy(
+        self, source: str | Path | ndarray[Any, Any] | None = None
+    ) -> ndarray[Any, Any] | None:
         """
         Convert a source to a numpy array.
 
@@ -455,7 +584,7 @@ class WidefieldAnalysis(BaseModel):
 
     def create_movie(
         self,
-        data: str | Path | np.ndarray | None = None,
+        data: str | Path | ndarray[Any, Any] | None = None,
         output_path: Path | None = None,
         fps: int = 10,
         cmap: str = "gray",
@@ -579,10 +708,10 @@ class WidefieldAnalysis(BaseModel):
 
     def apply_mask(
         self,
-        data: np.ndarray | None = None,
+        data: ndarray[Any, Any] | None = None,
         mask_data: dict[str, float] | None = None,
         mask_name: str = "mask",
-    ) -> np.ndarray | None:
+    ) -> ndarray[Any, Any] | None:
         """
         Apply a circular mask to imaging data.
 
@@ -616,12 +745,12 @@ class WidefieldAnalysis(BaseModel):
 
     def calculate_percentile(
         self,
-        data: np.ndarray | None = None,
+        data: ndarray[Any, Any] | None = None,
         percentile: float = 15.0,
         stimulus_start_frame: int | None = None,
         baseline_ms: float | None = None,
         fps: float | None = None,
-    ) -> np.ndarray | None:
+    ) -> ndarray[Any, Any] | None:
         """
         Calculate percentile projection for baseline (F0).
 
@@ -657,8 +786,8 @@ class WidefieldAnalysis(BaseModel):
         )
 
     def calculate_deltaff(
-        self, data: np.ndarray | None = None, baseline: np.ndarray | None = None
-    ) -> np.ndarray | None:
+        self, data: ndarray[Any, Any] | None = None, baseline: ndarray[Any, Any] | None = None
+    ) -> ndarray[Any, Any] | None:
         """
         Calculate delta F/F (relative fluorescence change).
 
@@ -685,11 +814,11 @@ class WidefieldAnalysis(BaseModel):
 
     def calculate_baseline(
         self,
-        data: np.ndarray | None = None,
+        data: ndarray[Any, Any] | None = None,
         stimulus_start_frame: int = 0,
         baseline_ms: float = 500.0,
         fps: float | None = None,
-    ) -> np.ndarray | None:
+    ) -> ndarray[Any, Any] | None:
         """
         Calculate mean baseline image from pre-stimulus period.
 
@@ -757,7 +886,7 @@ class WidefieldAnalysis(BaseModel):
         LOGGER.info(f"ROI set: center=({center[0]}, {center[1]})")
 
     def calculate_percentile_centroid_roi(
-        self, data: np.ndarray, percentile: float = 95.0
+        self, data: ndarray[Any, Any], percentile: float = 95.0
     ) -> tuple[int, int]:
         """
         Find ROI center from high-intensity pixels.
@@ -776,10 +905,10 @@ class WidefieldAnalysis(BaseModel):
 
     def calculate_trace_within_roi(
         self,
-        data: np.ndarray | None = None,
+        data: ndarray[Any, Any] | None = None,
         roi: tuple[int, int] | dict[str, Any] | None = None,
         diameter: float = 50.0,
-    ) -> np.ndarray | None:
+    ) -> ndarray[Any, Any] | None:
         """
         Extract mean fluorescence trace from circular ROI.
 
@@ -820,15 +949,3 @@ class WidefieldAnalysis(BaseModel):
 
         return wf_roi.trace_within_circular_roi(data, center, diameter)
 
-    def close(self) -> None:
-        """
-        Release resources and clear loaded data.
-
-        Sets imaging_data, green_reference, timestamps, and
-        sensor_data to None/empty to free memory.
-        """
-        self.imaging_data = None
-        self.green_reference = None
-        self.timestamps = None
-        self.sensor_data = {}
-        LOGGER.debug("Resources cleaned up")
