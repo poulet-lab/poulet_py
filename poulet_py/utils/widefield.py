@@ -159,15 +159,19 @@ class Trial(BaseData):
         analog_output_data_file_attrs: dict[str, Any] = {}
 
         if self.analog_output_data_path is None or not self.analog_output_data_path.exists():
-            LOGGER.warning(f"Analog output data path not set or not found: {self.analog_output_data_path}")
+            LOGGER.warning(
+                f"Analog output data path not set or not found: {self.analog_output_data_path}"
+            )
             return {}, {}, {}
         try:
             with h5py.File(self.analog_output_data_path, "r") as f:
                 analog_output_data_file_attrs = dict(f.attrs)
+
                 def _visit_datasets(name: str, obj: Any) -> None:
                     if isinstance(obj, h5py.Dataset):
                         analog_output_data[name] = array(obj)
                         analog_output_data_attrs[name] = dict(obj.attrs)
+
                 f.visititems(_visit_datasets)
         except Exception:
             LOGGER.exception(f"Error loading H5: {self.analog_output_data_path}")
@@ -195,10 +199,7 @@ class Trial(BaseData):
                     f"  Frames: {n_frames}",
                     f"  Resolution: {width} x {height}",
                     f"  Dtype: {self.imaging_data.dtype}",
-                    (
-                        "  Value range: "
-                        f"[{self.imaging_data.min()}, {self.imaging_data.max()}]"
-                    ),
+                    (f"  Value range: [{self.imaging_data.min()}, {self.imaging_data.max()}]"),
                 ]
             )
             size_mb = self.imaging_data.nbytes / (1024 * 1024)
@@ -232,7 +233,7 @@ class Trial(BaseData):
         return "\n".join(lines)
 
     def __str__(self) -> str:
-        return self.summary()   
+        return self.summary()
 
 
 class Session(BaseModel):
@@ -269,7 +270,9 @@ class WidefieldAnalysis(BaseModel):
     def _is_trial_folder(path: Path) -> bool:
         if not path.is_dir():
             return False
-        return any((path / name).exists() for name in ("recording.tiff", "recording.tif", "recording.npy"))
+        return any(
+            (path / name).exists() for name in ("recording.tiff", "recording.tif", "recording.npy")
+        )
 
     @classmethod
     def from_trial_path(cls, path: Path | str, load: bool = True) -> "WidefieldAnalysis":
@@ -338,7 +341,9 @@ class WidefieldAnalysis(BaseModel):
                 trial.load()
             return
 
-        discovered_trials = [child for child in sorted(target.iterdir()) if self._is_trial_folder(child)]
+        discovered_trials = [
+            child for child in sorted(target.iterdir()) if self._is_trial_folder(child)
+        ]
         if not discovered_trials:
             msg = f"No trial folders found in: {target}"
             raise ValueError(msg)
@@ -350,7 +355,7 @@ class WidefieldAnalysis(BaseModel):
                 self.session.add_trial(trial)
             trial.load()
 
-###### TO INTEGRATE WITH THE NEW CODEBASE ######
+    ###### TO INTEGRATE WITH THE NEW CODEBASE ######
     def downscale(
         self,
         target_resolution: tuple[int, int] | None = None,
@@ -405,9 +410,7 @@ class WidefieldAnalysis(BaseModel):
                     f"Padding ({pad_H}, {pad_W}) pixels to use factors "
                     f"({factor_H_int}, {factor_W_int})."
                 )
-                mov = pad(
-                    mov, ((0, 0), (0, pad_H), (0, pad_W)), mode="constant", constant_values=0
-                )
+                mov = pad(mov, ((0, 0), (0, pad_H), (0, pad_W)), mode="constant", constant_values=0)
                 T, H, W = mov.shape
                 factor_H = factor_H_int
                 factor_W = factor_W_int
@@ -431,9 +434,7 @@ class WidefieldAnalysis(BaseModel):
                     f"Dimensions ({H}, {W}) not divisible by factor {factor}. "
                     f"Padding ({pad_H}, {pad_W}) pixels."
                 )
-                mov = pad(
-                    mov, ((0, 0), (0, pad_H), (0, pad_W)), mode="constant", constant_values=0
-                )
+                mov = pad(mov, ((0, 0), (0, pad_H), (0, pad_W)), mode="constant", constant_values=0)
                 T, H, W = mov.shape
 
             mov = mov.reshape(T, H // factor, factor, W // factor, factor).mean(4).mean(2)
@@ -526,7 +527,9 @@ class WidefieldAnalysis(BaseModel):
         """
         return wf_paths.get_trial_processed_folder(self.trial_path)
 
-    def save_array(self, data: ndarray[Any, Any], name: str, file_format: str = "npy") -> Path | None:
+    def save_array(
+        self, data: ndarray[Any, Any], name: str, file_format: str = "npy"
+    ) -> Path | None:
         """
         Save a numpy array to the processed folder.
 
@@ -948,4 +951,3 @@ class WidefieldAnalysis(BaseModel):
             return None
 
         return wf_roi.trace_within_circular_roi(data, center, diameter)
-
