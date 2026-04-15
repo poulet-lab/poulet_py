@@ -1,4 +1,3 @@
-
 from datetime import datetime
 
 try:
@@ -29,6 +28,7 @@ Also ensure: h5py, numpy, pandas, scikit-image, imageio, matplotlib are installe
 class BaseData(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
+
 # TODO maybe better name
 class SepartedData(BaseData):
     path: Path = Field(..., description="Path to trial folder")
@@ -36,7 +36,6 @@ class SepartedData(BaseData):
     timestamps_path: Path | None = Field(default=None)
     analog_output_data_path: Path | None = Field(default=None)
     reference_image_path: Path | None = Field(default=None)
-
 
     # TODO similar to all private attrs
     _imaging_data: ndarray[Any, Any] | None = PrivateAttr(default=None)
@@ -48,10 +47,9 @@ class SepartedData(BaseData):
     condition: dict[str, Any] | None = Field(default=None)
     roi: dict[str, Any] | None = Field(default=None)
 
-    def should_open(start:datetime|int,end:datetime|int)->bool:
-    #TODO filter path based on datetime or trial number and if it is between the range return true
+    def should_open(start: datetime | int, end: datetime | int) -> bool:
+        # TODO filter path based on datetime or trial number and if it is between the range return true
         return False
-    
 
     # TODO similar to all private attrs if access is needed
     @property
@@ -84,7 +82,7 @@ class SepartedData(BaseData):
         self.timestamps_path = csv_path if csv_path.exists() else None
         self.analog_output_data_path = h5_path if h5_path.exists() else None
         self.reference_image_path = green_path if green_path.exists() else None
-    
+
     # TODO change load to open
     def load(self) -> None:
         self._resolve_paths()
@@ -96,7 +94,8 @@ class SepartedData(BaseData):
             self.analog_output_data_attrs,
             self.analog_output_data_file_attrs,
         ) = self._load_analog_output()
-    #TODO move all these to separated data or whatever u wannt calla it check commit 4031c9e
+
+    # TODO move all these to separated data or whatever u wannt calla it check commit 4031c9e
     def _load_imaging(self) -> ndarray[Any, Any]:
         if self.imaging_path is None:
             raise ValueError("Imaging path is not set")
@@ -248,7 +247,7 @@ class Trial(BaseData):
 
 class Session(BaseModel):
     path: Path = Field(..., description="Path to the session folder")
-    start: datetime | int = Field() #TODO time or trial number and we see further
+    start: datetime | int = Field()  # TODO time or trial number and we see further
     end: datetime | int = Field()
 
     _trials: list[Trial] = PrivateAttr(default_factory=list)
@@ -263,9 +262,9 @@ class Session(BaseModel):
     def open():
         # TODO open trials, and also filer using start:end
         for trial in self._trials:
-            if trial.shou3ld_open(start,end):
+            if trial.shou3ld_open(start, end):
                 trial.open()
-        
+
     def close(self) -> None:
         for trial in self._trials:
             trial.close()
