@@ -41,7 +41,7 @@ try:
     from nidaqmx.stream_writers import AnalogMultiChannelWriter, DigitalMultiChannelWriter
     from nidaqmx.system import System
     from nidaqmx.utils import flatten_channel_string
-    from numpy import arange, empty, float64, ndarray, uint32, uint64, zeros
+    from numpy import arange, empty, float64, ndarray, uint32, uint64
     from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
     from poulet_py import (
