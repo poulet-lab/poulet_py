@@ -3,6 +3,9 @@ try:
     from threading import Lock, Thread
     from time import time_ns
 
+    from adafruit_max31856 import MAX31856, ThermocoupleType
+    from busio import SPI
+    from digitalio import DigitalInOut, Direction
     from numpy import empty, ndarray
     from pydantic import Field, PrivateAttr
 
@@ -14,9 +17,6 @@ try:
         SinkEvent,
         precise_sleep,
     )
-    from adafruit_max31856 import MAX31856, ThermocoupleType
-    from busio import SPI
-    from digitalio import DigitalInOut, Direction
 except ImportError as e:
     msg = """
 Missing 'sources' module. Install options:
