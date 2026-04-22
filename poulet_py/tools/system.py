@@ -1,5 +1,5 @@
 try:
-    from time import time_ns, sleep
+    from time import sleep, time_ns
 except ImportError as e:
     msg = """
 Missing 'tools' module. Install options:
