@@ -1,6 +1,6 @@
 try:
     from collections.abc import Sequence
-    from time import perf_counter_ns
+    from time import time_ns
 
     from numpy import array
     from pydantic import Field, PrivateAttr
@@ -42,7 +42,7 @@ class CounterSource(BaseSource):
             return False
 
         counter = array(
-            [(perf_counter_ns(), self._counter)],
+            [(time_ns(), self._counter)],
             dtype=[("timestamp", "uint64"), ("counter", "uint64")],
         )
 
