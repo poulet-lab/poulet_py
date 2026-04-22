@@ -1,7 +1,7 @@
 try:
     from collections.abc import Sequence
     from threading import Thread
-    from time import perf_counter_ns
+    from time import time_ns
 
     from numpy import dtype, float64, ndarray, uint64, zeros
     from open_ephys.control import OpenEphysHTTPServer
@@ -92,7 +92,7 @@ class OpenEphysSource(BaseSource):
                 spike_data[i] = info[amp_key]
 
         self._store_sample(
-            timestamp=perf_counter_ns(),
+            timestamp=time_ns(),
             channel_data=spike_data,
         )
 

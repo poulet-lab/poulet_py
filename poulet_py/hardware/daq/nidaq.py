@@ -24,7 +24,7 @@ try:
     from abc import ABC, abstractmethod
     from collections.abc import Sequence
     from concurrent.futures import ThreadPoolExecutor, as_completed
-    from time import perf_counter_ns
+    from time import time_ns
     from typing import Self
 
     from nidaqmx import Task
@@ -449,7 +449,7 @@ class NIAnalogInputTask(NIBaseTask):
             for idx, col in enumerate(self._buffer.dtype.names[1:]):
                 self._buffer[col][:n] = data[idx]
 
-            t_read = perf_counter_ns()
+            t_read = time_ns()
             dt = uint64(1e9 / self._clock_handle.rate)
             t0 = t_read - (n - 1) * dt
 
@@ -633,7 +633,7 @@ class NIDigitalInputTask(NIBaseTask):
             for idx, col in enumerate(self._buffer.dtype.names[1:]):
                 self._buffer[col][:n] = data[idx]
 
-            t_read = perf_counter_ns()
+            t_read = time_ns()
             dt = uint64(1e9 / self._clock_handle.rate)
             t0 = t_read - (n - 1) * dt
 

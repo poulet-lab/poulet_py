@@ -1,5 +1,5 @@
 try:
-    from time import perf_counter_ns, sleep
+    from time import time_ns, sleep
 except ImportError as e:
     msg = """
 Missing 'tools' module. Install options:
@@ -11,11 +11,11 @@ Missing 'tools' module. Install options:
 
 def precise_sleep(t: float, precision: float = 0.0001):
     duration_ns = int(t * 1e9)
-    end = perf_counter_ns() + duration_ns
+    end = time_ns() + duration_ns
     precision_ns = int(precision * 1e9)
 
     while True:
-        now = perf_counter_ns()
+        now = time_ns()
         remaining = end - now
 
         if remaining <= 0:
@@ -24,6 +24,6 @@ def precise_sleep(t: float, precision: float = 0.0001):
         if remaining > precision_ns:
             sleep(precision)
         else:
-            while perf_counter_ns() < end:
+            while time_ns() < end:
                 pass
             break

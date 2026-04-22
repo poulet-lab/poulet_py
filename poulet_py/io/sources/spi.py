@@ -1,7 +1,7 @@
 try:
     from collections.abc import Sequence
     from threading import Lock, Thread
-    from time import perf_counter_ns
+    from time import time_ns
 
     import spidev
     from numpy import empty, ndarray
@@ -113,13 +113,8 @@ class SPISource(BaseSource):
         """Background thread for continuous SPI data acquisition."""
         while not self._stop_acquisition and self._is_open:
             try:
-                # Read bytes from SPI (returns list of ints)
-                start = perf_counter_ns()
                 data = self._spi.readbytes(self.read_size)  # Returns List[int]
-                end = perf_counter_ns()
-
-                # Single timestamp for the entire read operation
-                timestamp = (start + end) // 2  # Midpoint timestamp
+                timestamp = time_ns()
 
                 with self._lock:
                     idx = self._buffer_idx % self.buffer_size
@@ -162,7 +157,7 @@ class SPISource(BaseSource):
 
                     # Read response if in finite mode (store in buffer)
                     data = self._spi.readbytes(self.read_size)
-                    timestamp = perf_counter_ns()
+                    timestamp = time_ns()
 
         return True
 
