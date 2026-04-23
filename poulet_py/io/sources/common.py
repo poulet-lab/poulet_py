@@ -2,10 +2,14 @@ try:
     from abc import ABC, abstractmethod
     from collections.abc import Sequence
     from enum import Enum
+    from threading import Lock
+    from typing import Literal
 
-    from pydantic import BaseModel, Field
+    from numpy import empty, ndarray
+    from numpy.typing import DTypeLike
+    from pydantic import BaseModel, Field, PrivateAttr
 
-    from poulet_py import BaseEvent, BaseStimulus, EventBus
+    from poulet_py import BaseEvent, BaseStimulus, EventBus, SinkEvent
 except ImportError as e:
     msg = """
 Missing 'sources' module. Install options:
@@ -25,27 +29,78 @@ class AcquisitionType(str, Enum):
 class BaseSource(BaseModel, ABC):
     name: str = Field(..., description="Name of the data source")
     acquisition_type: AcquisitionType = Field(default=AcquisitionType.FINITE, description="")
+    fire_on: Literal["all"] | list[BaseStimulus] = Field(default="all")
+    buffer_size: int = Field(default=4000, description="Size of the circular buffer")
     bus: EventBus | None = Field(default=None)
 
+    _stimuli: Sequence[BaseStimulus] = PrivateAttr(default_factory=list)
+    _max_stimulus_duration_ms: int = PrivateAttr(0)
+    _is_open: bool = PrivateAttr(default=False)
+
+    _lock: Lock = PrivateAttr(default_factory=Lock)
+    _buffer: ndarray = PrivateAttr()
+    _buffer_idx: int = PrivateAttr(default=0)
+    _buffer_dtype: DTypeLike = PrivateAttr()
+    _last_timestamp: int = PrivateAttr(default=0)
+
     @abstractmethod
-    def _init(self): ...
+    def _open(self): ...
+
+    @abstractmethod
+    def _set_buffer_dtype(self): ...
 
     @abstractmethod
     def _close(self): ...
 
     @abstractmethod
-    def _supports(self, stimuli: Sequence[BaseStimulus]) -> Sequence[BaseStimulus]: ...
+    def _fire(self) -> bool: ...
 
-    @abstractmethod
-    def _fire(self, stimuli: Sequence[BaseStimulus]) -> bool: ...
+    def assert_open(self):
+        if not self._is_open:
+            msg = f"{type(self)} need to be opened first"
+            raise RuntimeError(msg)
 
-    @abstractmethod
-    def _publish(self, stimuli: Sequence[BaseStimulus]) -> bool: ...
+    def open(self, bus: EventBus | None = None):
+        if self._is_open:
+            return
+
+        if not bus and not self.bus:
+            msg = "Event bus must be defined"
+            raise RuntimeError(msg)
+
+        if bus and not self.bus:
+            self.bus = bus
+
+        self._open()
+        self._set_buffer()
+        self._is_open = True
+
+    def close(self):
+        if not self._is_open:
+            return
+
+        self._close()
+        self._is_open = False
 
     def fire(self, stimuli: Sequence[BaseStimulus]) -> bool:
-        st = self._supports(stimuli)
-        self._fire(st)
-        self._publish(st)
+        self.assert_open()
+
+        self._stimuli = stimuli
+        self._supports()
+
+        if not self._stimuli and self.acquisition_type == AcquisitionType.FINITE:
+            return False
+
+        self._calculate_stimulus_duration()
+
+        if self.acquisition_type == AcquisitionType.FINITE:
+            with self._lock:
+                self._last_timestamp = self._buffer["timestamp"][
+                    (self._buffer_idx % self.buffer_size) - 1
+                ]
+
+        self._fire()
+        self._publish()
 
         return True
 
@@ -56,18 +111,82 @@ class BaseSource(BaseModel, ABC):
 
         self.bus.emit(event)
 
-    def open(self, bus: EventBus | None = None):
-        if not bus and not self.bus:
-            msg = "Event bus must be defined"
-            raise RuntimeError(msg)
+    def _set_buffer(self):
+        self._set_buffer_dtype()
 
-        if bus and not self.bus:
-            self.bus = bus
+        if not ("timestamp", "uint64") in self._buffer_dtype:
+            self._buffer_dtype = [("timestamp", "uint64"), *self._buffer_dtype]
 
-        self._init()
+        self._buffer = empty(self.buffer_size, dtype=self._buffer_dtype)
+        self._last_timestamp = 0
+        self._buffer_idx = 0
 
-    def close(self):
-        self._close()
+    def _supports(self):
+        if self.fire_on == "all":
+            return
+        self._stimuli = [st for st in self._stimuli if st in self.fire_on]
+
+    def _calculate_stimulus_duration(self):
+        pre_delay = 0
+        duration = 0
+        post_delay = 0
+        isi = 0
+
+        for st in self._stimuli:
+            pre_delay = max(pre_delay, st.pre_delay)
+            duration = max(duration, st.duration)
+            post_delay = max(post_delay, st.post_delay)
+            isi = max(isi, st._isi)
+
+        self._max_stimulus_duration_ms = pre_delay + duration + post_delay + isi
+
+    def _publish(self) -> bool:
+        if self.acquisition_type == AcquisitionType.CONTINUOUS:
+            return self._publish_continuous()
+        elif self.acquisition_type == AcquisitionType.FINITE:
+            return self._publish_finite()
+
+        return False
+
+    def _publish_continuous(self) -> bool:
+        with self._lock:
+            start = self._last_timestamp
+            end = self._buffer["timestamp"][(self._buffer_idx % self.buffer_size) - 1]
+            self._last_timestamp = end
+
+        mask = (self._buffer["timestamp"] > start) & (self._buffer["timestamp"] < end)
+        chunk = self._buffer[mask].copy()
+        if chunk.size == 0:
+            return False
+
+        self.publish(
+            SinkEvent(
+                name=self.name, payload={self.name: chunk}, meta={"acquisition": "continuous"}
+            )
+        )
+
+        return True
+
+    def _publish_finite(self) -> bool:
+        with self._lock:
+            start = self._last_timestamp
+
+        end = self._last_timestamp + self._max_stimulus_duration_ms * 1_000_000
+
+        mask = (self._buffer["timestamp"] > start) & (self._buffer["timestamp"] <= end)
+        chunk = self._buffer[mask].copy()
+
+        if chunk.size == 0:
+            return False
+
+        self.publish(
+            SinkEvent(name=self.name, payload={self.name: chunk}, meta={"acquisition": "finite"})
+        )
+
+        with self._lock:
+            self._last_timestamp = end
+
+        return True
 
     def __enter__(self, bus: EventBus | None = None):
         self.open(bus=bus)

@@ -1,21 +1,11 @@
 try:
-    from collections.abc import Sequence
-    from threading import Lock, Thread
+    from threading import Thread
     from time import time_ns
 
     import spidev
-    from numpy import empty, ndarray
     from pydantic import Field, PrivateAttr
 
-    from poulet_py import (
-        LOGGER,
-        AcquisitionType,
-        BaseSource,
-        BaseStimulus,
-        SinkEvent,
-        SPIStimulus,
-        precise_sleep,
-    )
+    from poulet_py import LOGGER, BaseSource, SPIStimulus, precise_sleep
 except ImportError as e:
     msg = """
 Missing 'sources' module. Install options:
@@ -40,23 +30,16 @@ class SPISource(BaseSource):
     three_wire: bool = Field(default=False, description="Three-wire mode enabled")
     read0: bool = Field(default=False, description="Read 0 after transfer")
     mosi_idle_low: bool = Field(default=False, description="MOSI idle low")
-    buffer_size: int = Field(default=1000, description="Size of the circular buffer")
     read_size: int = Field(default=100, description="Number of bytes to read per acquisition")
 
     _spi: spidev.SpiDev = PrivateAttr()
-    _buffer: ndarray = PrivateAttr()
-    _buffer_idx: int = PrivateAttr(default=0)
-    _last_timestamp: int = PrivateAttr(default=0)
-    _is_open: bool = PrivateAttr(default=False)
     _acquisition_thread: Thread | None = PrivateAttr(default=None)
     _stop_acquisition: bool = PrivateAttr(default=False)
-    _lock: Lock = PrivateAttr(default_factory=Lock)
 
-    def _init(self):
-        """Initialize the SPI device and start acquisition if in CONTINUOUS mode."""
-        if self._is_open:
-            return
+    def _set_buffer_dtype(self):
+        self._buffer_dtype = [("timestamp", "uint64"), ("data", "uint8", self.read_size)]
 
+    def _open(self):
         try:
             self._spi = spidev.SpiDev(self.spi_bus, self.spi_cs)
             self._spi.bits_per_word = self.bits_per_word
@@ -73,14 +56,7 @@ class SPISource(BaseSource):
             msg = f"Failed to initialize SPI device {self.spi_bus}:{self.spi_cs}: {e}"
             raise RuntimeError(msg) from e
 
-        self._buffer = empty(
-            self.buffer_size, dtype=[("timestamp", "uint64"), ("data", "uint8", self.read_size)]
-        )
-        self._buffer_idx = 0
-        self._last_timestamp = 0
-        self._is_open = True
         self._stop_acquisition = False
-
         self._start_acquisition_thread()
 
     def _close(self):
@@ -126,25 +102,8 @@ class SPISource(BaseSource):
                 LOGGER.error(f"SPI acquisition error: {e}")
                 break
 
-    def _supports(self, stimuli: Sequence[BaseStimulus]) -> Sequence[BaseStimulus]:
-        if not self._is_open:
-            msg = "SPISource need to me opened first"
-            raise RuntimeError(msg)
-        return [st for st in stimuli if isinstance(st, SPIStimulus)]
-
-    def _fire(self, stimuli: Sequence[BaseStimulus]) -> bool:
-        """Execute SPI stimuli with precise timing."""
-        if not self._is_open:
-            msg = "SPISource needs to be opened first"
-            raise RuntimeError(msg)
-
-        if self.acquisition_type == AcquisitionType.FINITE:
-            with self._lock:
-                self._last_timestamp = self._buffer["timestamp"][
-                    (self._buffer_idx % self.buffer_size) - 1
-                ]
-
-        for st in stimuli:
+    def _fire(self) -> bool:
+        for st in self._stimuli:
             if isinstance(st, SPIStimulus):
                 if st.pre_delay > 0:
                     precise_sleep(st.pre_delay / 1000.0)
@@ -158,63 +117,5 @@ class SPISource(BaseSource):
                     # Read response if in finite mode (store in buffer)
                     data = self._spi.readbytes(self.read_size)
                     timestamp = time_ns()
-
-        return True
-
-    def _publish(self, stimuli: Sequence[BaseStimulus]) -> bool:
-        """Publish acquired SPI data based on acquisition type."""
-        if not self._is_open:
-            raise RuntimeError("SPISource needs to be opened first")
-
-        with self._lock:
-            if self.acquisition_type == AcquisitionType.CONTINUOUS:
-                return self._publish_continuous(stimuli)
-            elif self.acquisition_type == AcquisitionType.FINITE:
-                return self._publish_finite(stimuli)
-
-        return False
-
-    def _publish_continuous(self, stimuli: Sequence[BaseStimulus]) -> bool:
-        with self._lock:
-            start = self._last_timestamp
-            end = self._buffer["timestamp"][(self._buffer_idx % self.buffer_size) - 1]
-
-        mask = (self._buffer["timestamp"] > start) & (self._buffer["timestamp"] < end)
-        chunk = self._buffer[mask]
-        if chunk.size == 0:
-            return False
-
-        self.publish(
-            SinkEvent(name=self.name, payload={"spi": chunk}, meta={"acquisition": "continuous"})
-        )
-
-        with self._lock:
-            self._last_timestamp = end
-
-        return True
-
-    def _publish_finite(self, stimuli: Sequence[BaseStimulus]) -> bool:
-        total_ms = 0
-        for st in stimuli:
-            if isinstance(st, SPIStimulus):
-                total_ms += st.pre_delay + st.duration + st.post_delay + st._isi
-
-        with self._lock:
-            start = self._last_timestamp
-
-        end = self._last_timestamp + total_ms * 1_000_000
-
-        mask = (self._buffer["timestamp"] > start) & (self._buffer["timestamp"] <= end)
-        chunk = self._buffer[mask]
-
-        if chunk.size == 0:
-            return False
-
-        self.publish(
-            SinkEvent(name=self.name, payload={"spi": chunk}, meta={"acquisition": "finite"})
-        )
-
-        with self._lock:
-            self._last_timestamp = end
 
         return True

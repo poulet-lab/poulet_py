@@ -74,7 +74,7 @@ class TCS(BaseModel, validate_assignment=True):
     _is_open: bool = PrivateAttr(default=False)
 
     _buffer_idx: int = PrivateAttr(0)
-    _buffer: ndarray | None = PrivateAttr(None)
+    _buffer: ndarray = PrivateAttr()
     _sampling_thread: Thread | None = PrivateAttr(None)
     _sampling_stop_event: Event = PrivateAttr(default_factory=Event)
     _sampling_cond: Condition = PrivateAttr(default_factory=Condition)
@@ -115,13 +115,6 @@ class TCS(BaseModel, validate_assignment=True):
             self._stimulus_done.set()
 
     def _start_streaming(self):
-        if self._buffer is None:
-            self._buffer = empty(
-                self.buffer_size,
-                dtype=[("timestamp", "uint64"), *((f"s{i}", "float64") for i in range(5))],
-            )
-            self._buffer_idx = 0
-
         if self._sampling_thread is None or not self._sampling_thread.is_alive():
             self.execute_command(TCSCommand.DISPLAY_TEMPERATURES_DURING_STIMULATION)
 
@@ -141,10 +134,6 @@ class TCS(BaseModel, validate_assignment=True):
 
     def _streaming_loop(self):
         try:
-            if self._buffer is None:
-                msg = "Samples buffer is not initialized"
-                raise RuntimeError(msg)
-
             while not self._sampling_stop_event.is_set():
                 line = self._serial.read_until(b"\n")
                 LOGGER.debug(f"Read line: {line}")
@@ -174,12 +163,10 @@ class TCS(BaseModel, validate_assignment=True):
             self._sampling_stop_event.set()
 
     def open(self):
-        try:
-            if self._is_open:
-                self.close()
-                msg = "Device already open"
-                raise RuntimeError(msg)
+        if self._is_open:
+            return
 
+        try:
             self._serial = Serial(
                 port=self.port,
                 baudrate=115200,
@@ -189,7 +176,14 @@ class TCS(BaseModel, validate_assignment=True):
                 timeout=self.read_timeout,
                 write_timeout=2,
             )
+
             self._is_open = True
+
+            self._buffer = empty(
+                self.buffer_size,
+                dtype=[("timestamp", "uint64"), *((f"s{i}", "float64") for i in range(5))],
+            )
+            self._buffer_idx = 0
 
             self._start_streaming()
             self.execute_command(TCSCommand.SET_MAX_TEMPERATURE, int(self.maximum_temperature * 10))

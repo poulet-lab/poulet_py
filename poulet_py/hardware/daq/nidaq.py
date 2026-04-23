@@ -793,14 +793,15 @@ class NIDaQ(BaseModel):
 
         ret: dict[str, ndarray] = {}
 
-        future_map = {
-            self._executor.submit(task.read, samples=samples, timeout=timeout): task
-            for task in self._read_tasks
-        }
+        if self._read_tasks:
+            future_map = {
+                self._executor.submit(task.read, samples=samples, timeout=timeout): task
+                for task in self._read_tasks
+            }
 
-        for future in as_completed(future_map):
-            task = future_map[future]
-            ret[task.name] = future.result()
+            for future in as_completed(future_map):
+                task = future_map[future]
+                ret[task.name] = future.result()
 
         return ret
 

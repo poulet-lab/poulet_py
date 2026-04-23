@@ -33,7 +33,7 @@ class HDFSink(BaseSink):
     _h5file: File | None = PrivateAttr(default=None)
     _sources: dict = PrivateAttr(default_factory=dict)
 
-    def _init(self):
+    def _open(self):
         path = Path(self.file)
 
         if path.exists():
