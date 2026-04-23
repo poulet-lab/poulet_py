@@ -22,7 +22,7 @@ Missing 'sources' module. Install options:
 
 class NIDaQSource(BaseSource, NIDaQ):
     def _set_buffer_dtype(self):
-        self._buffer_dtype = [] #TODO
+        self._buffer_dtype = []  # TODO
 
     def _open(self):
         NIDaQ.open(self)
@@ -54,7 +54,7 @@ class NIDaQSource(BaseSource, NIDaQ):
         data = self.read(-1, -1)
 
         if data:
-            #TODO to buffer
+            # TODO to buffer
             self.publish(
                 SinkEvent(
                     name=self.name, payload=data, meta={"acquisition": self.acquisition_type.value}

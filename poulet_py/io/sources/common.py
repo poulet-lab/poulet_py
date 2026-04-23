@@ -114,7 +114,7 @@ class BaseSource(BaseModel, ABC):
     def _set_buffer(self):
         self._set_buffer_dtype()
 
-        if not ("timestamp", "uint64") in self._buffer_dtype:
+        if ("timestamp", "uint64") not in self._buffer_dtype:
             self._buffer_dtype = [("timestamp", "uint64"), *self._buffer_dtype]
 
         self._buffer = empty(self.buffer_size, dtype=self._buffer_dtype)

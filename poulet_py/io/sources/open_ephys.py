@@ -26,13 +26,12 @@ class OpenEphysSource(BaseSource):
     _control: OpenEphysHTTPServer = PrivateAttr()
     _listener: EventListener = PrivateAttr()
     _thread: Thread = PrivateAttr()
-   
+
     def _set_buffer_dtype(self):
         self._buffer_dtype = [
-                    ("timestamp", uint64),
-                    ("channel_data", float64, (self.num_channels,)),
-                ]
-
+            ("timestamp", uint64),
+            ("channel_data", float64, (self.num_channels,)),
+        ]
 
     def _open(self):
         self._control = OpenEphysHTTPServer(str(self.address))
