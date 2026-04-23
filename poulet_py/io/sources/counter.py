@@ -1,11 +1,9 @@
 try:
-    from collections.abc import Sequence
     from time import time_ns
 
-    from numpy import array
-    from pydantic import Field, PrivateAttr
+    from pydantic import PrivateAttr
 
-    from poulet_py import BaseSource, BaseStimulus, SinkEvent
+    from poulet_py import BaseSource
 except ImportError as e:
     msg = """
 Missing 'sources' module. Install options:
@@ -17,39 +15,25 @@ Missing 'sources' module. Install options:
 
 
 class CounterSource(BaseSource):
-    name: str = Field("trial", description="Name of the trial source")
     _counter: int = PrivateAttr(default=0)
 
-    def _init(self):
+    def _set_buffer_dtype(self):
+        self._buffer_dtype = [("timestamp", "uint64"), ("counter", "uint64")]
+
+    def _open(self):
         self._counter = 0
 
     def _close(self):
         pass
 
-    def _supports(self, stimuli: Sequence[BaseStimulus]) -> Sequence[BaseStimulus]:
-        return stimuli
-
-    def _fire(self, stimuli: Sequence[BaseStimulus]) -> bool:
-        if not stimuli:
-            return False
-
+    def _fire(self) -> bool:
+        timestamp = time_ns()
         self._counter += 1
 
-        return True
-
-    def _publish(self, stimuli: Sequence[BaseStimulus]) -> bool:
-        if not stimuli:
-            return False
-
-        counter = array(
-            [(time_ns(), self._counter)],
-            dtype=[("timestamp", "uint64"), ("counter", "uint64")],
-        )
-
-        self.publish(
-            SinkEvent(
-                name=self.name, payload={"counter": counter}, meta={"description": "Counter data"}
-            )
-        )
+        with self._lock:
+            idx = self._buffer_idx % self.buffer_size
+            self._buffer[idx]["timestamp"] = timestamp
+            self._buffer[idx]["counter"] = self._counter
+            self._buffer_idx += 1
 
         return True

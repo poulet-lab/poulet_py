@@ -1,10 +1,7 @@
 try:
-    from collections.abc import Sequence
-
     from poulet_py import (
         AcquisitionType,
         BaseSource,
-        BaseStimulus,
         NIAnalogBaseStimulus,
         NIAnalogCompositeStimulus,
         NIDaQ,
@@ -24,7 +21,10 @@ Missing 'sources' module. Install options:
 
 
 class NIDaQSource(BaseSource, NIDaQ):
-    def _init(self):
+    def _set_buffer_dtype(self):
+        self._buffer_dtype = [] #TODO
+
+    def _open(self):
         NIDaQ.open(self)
         if self.acquisition_type == AcquisitionType.CONTINUOUS:
             self.start()
@@ -32,28 +32,11 @@ class NIDaQSource(BaseSource, NIDaQ):
     def _close(self):
         if self.acquisition_type == AcquisitionType.CONTINUOUS:
             self.stop()
+
         NIDaQ.close(self)
 
-    def _supports(self, stimuli: Sequence[BaseStimulus]) -> Sequence[BaseStimulus]:
-        return [
-            st
-            for st in stimuli
-            if isinstance(
-                st,
-                (
-                    NIAnalogCompositeStimulus,
-                    NIDigitalCompositeStimulus,
-                    NIAnalogBaseStimulus,
-                    NIDigitalBaseStimulus,
-                ),
-            )
-        ]
-
-    def _fire(self, stimuli: Sequence[BaseStimulus]) -> bool:
-        if not stimuli:
-            return False
-
-        for st in stimuli:
+    def _fire(self) -> bool:
+        for st in self._stimuli:
             if isinstance(
                 st,
                 (
@@ -68,13 +51,10 @@ class NIDaQSource(BaseSource, NIDaQ):
         if self.acquisition_type == AcquisitionType.FINITE:
             self.start()
 
-        return True
-
-    def _publish(self, stimuli: Sequence[BaseStimulus]) -> bool:
-        if not stimuli and self.acquisition_type == AcquisitionType.FINITE:
-            return False
         data = self.read(-1, -1)
+
         if data:
+            #TODO to buffer
             self.publish(
                 SinkEvent(
                     name=self.name, payload=data, meta={"acquisition": self.acquisition_type.value}
@@ -85,7 +65,7 @@ class NIDaQSource(BaseSource, NIDaQ):
             self.stop()
 
         isi = 0
-        for st in stimuli:
+        for st in self._stimuli:
             if isinstance(
                 st,
                 (

@@ -1,22 +1,18 @@
 try:
-    from collections.abc import Sequence
-    from threading import Lock, Thread
+    from enum import Enum
+    from threading import Thread
     from time import time_ns
+    from typing import Literal
 
-    from adafruit_max31856 import MAX31856, ThermocoupleType
+    from adafruit_blinka.microcontroller.generic_linux.rpi_gpio_pin import Pin
+    from adafruit_max31856 import _MAX31856_FAULT_CJRANGE, _MAX31856_SR_REG, MAX31856
+    from adafruit_max31856 import ThermocoupleType as ThType
+    from board import MISO, MOSI, SCLK
     from busio import SPI
     from digitalio import DigitalInOut, Direction
-    from numpy import empty, ndarray
     from pydantic import Field, PrivateAttr
 
-    from poulet_py import (
-        LOGGER,
-        AcquisitionType,
-        BaseSource,
-        BaseStimulus,
-        SinkEvent,
-        precise_sleep,
-    )
+    from poulet_py import LOGGER, BaseSource, precise_sleep
 except ImportError as e:
     msg = """
 Missing 'sources' module. Install options:
@@ -27,34 +23,57 @@ Missing 'sources' module. Install options:
     raise ImportError(msg) from e
 
 
+class ThermocoupleType(Enum, int):
+    B = ThType.B
+    E = ThType.E
+    J = ThType.J
+    K = ThType.K
+    N = ThType.N
+    R = ThType.R
+    S = ThType.S
+    T = ThType.T
+    G8 = ThType.G8
+    G32 = ThType.G32
+
+
 class Max31856Source(BaseSource):
-    name: str = Field(..., description="Name of the SPI source")
-    cs_pin: int | None = Field(default=None, description="SPI chip select pin")
     thermocouple_type: ThermocoupleType = Field(
         default=ThermocoupleType.K, description="Type of thermocouple"
     )
-    baudrate: int = Field(default=12_500_000, description="SPI clock speed in Hz")
-    buffer_size: int = Field(default=1000, description="Size of the circular buffer")
-    read_size: int = Field(default=4, description="Number of bytes to read per acquisition")
+    baud_rate: int = Field(default=500_000, description="SPI clock speed in Hz")
+    cs_pin: Pin | None = Field(default=None, description="SPI chip select pin")
+    sclk: Pin | None = Field(default=SCLK, description="SPI SCLK pin")
+    miso: Pin | None = Field(default=MISO, description="SPI MISO pin")
+    mosi: Pin | None = Field(default=MOSI, description="SPI MOSI pin")
+    averaging: Literal[1, 2, 4, 8, 16] = Field(
+        default=1,
+        description="Number of samples averaged together in each result. No averaging by default",
+    )
+    temperature_thresholds: tuple[float, float] = Field(
+        default=(-2.0, 40.0), description="Thermocouple low/high fault threshold."
+    )
+    reference_temperature_thresholds: tuple[float, float] = Field(
+        default=(-2.0, 40.0), description="Cold junction low/high fault threshold."
+    )
 
     _spi: SPI | None = PrivateAttr(None)
     _cs: DigitalInOut = PrivateAttr()
     _max31856: MAX31856 = PrivateAttr()
-    _buffer: ndarray = PrivateAttr()
-    _buffer_idx: int = PrivateAttr(default=0)
-    _last_timestamp: int = PrivateAttr(default=0)
-    _is_open: bool = PrivateAttr(default=False)
+
     _acquisition_thread: Thread | None = PrivateAttr(default=None)
     _stop_acquisition: bool = PrivateAttr(default=False)
-    _lock: Lock = PrivateAttr(default_factory=Lock)
 
-    def _init(self):
-        """Initialize the SPI device and start acquisition if in CONTINUOUS mode."""
-        if self._is_open:
-            return
+    def _set_buffer_dtype(self):
+        self._buffer_dtype = [
+            ("timestamp", "uint64"),
+            ("temperature", "float32"),
+            ("reference", "float32"),
+            ("faults", "uint8"),
+        ]
 
+    def _open(self):
         try:
-            self._spi = SPI()
+            self._spi = SPI(self.sclk, self.mosi, self.miso)
 
             if self.cs_pin:
                 self._cs = DigitalInOut(self.cs_pin)
@@ -64,21 +83,16 @@ class Max31856Source(BaseSource):
                 self._spi,
                 self._cs,
                 thermocouple_type=self.thermocouple_type,
-                baudrate=self.baudrate,
+                baudrate=self.baud_rate,
             )
+            self._max31856.temperature_thresholds = self.temperature_thresholds
+            self._max31856.reference_temperature_thresholds = self.reference_temperature_thresholds
 
         except Exception as e:
-            msg = f"Failed to initialize SPI device {self.spi_bus}:{self.spi_cs}: {e}"
+            msg = f"Failed to initialize MAX31856: {e}"
             raise RuntimeError(msg) from e
 
-        self._buffer = empty(
-            self.buffer_size, dtype=[("timestamp", "uint64"), ("data", "uint8", self.read_size)]
-        )
-        self._buffer_idx = 0
-        self._last_timestamp = 0
-        self._is_open = True
         self._stop_acquisition = False
-
         self._start_acquisition_thread()
 
     def _close(self):
@@ -88,7 +102,11 @@ class Max31856Source(BaseSource):
         if self._acquisition_thread and self._acquisition_thread.is_alive():
             self._acquisition_thread.join(timeout=1.0)
 
-        self._is_open = False
+        if self._spi:
+            self._spi.deinit()
+        if hasattr(self, "_cs"):
+            self._cs.deinit()
+
         self._acquisition_thread = None
 
     def _start_acquisition_thread(self):
@@ -107,43 +125,33 @@ class Max31856Source(BaseSource):
         """Background thread for continuous SPI data acquisition."""
         while not self._stop_acquisition and self._is_open:
             try:
+                faults = self._max31856._read_register(_MAX31856_SR_REG, 1)[0]
+                self._max31856._perform_one_shot_measurement()
                 timestamp = time_ns()
+                temperature = self._max31856.read_high_res_temp()
+                reference = self._max31856.unpack_reference_temperature()
+
+                if faults:
+                    msg = "Faults found in the following: "
+                    if faults & _MAX31856_FAULT_CJRANGE:
+                        msg += "cj_range"
+                    # TODO add all faults
+
+                    LOGGER.warning(msg)
 
                 with self._lock:
                     idx = self._buffer_idx % self.buffer_size
                     self._buffer[idx]["timestamp"] = timestamp
-                    self._buffer[idx]["data"] = data  # Store the list of ints
+                    self._buffer[idx]["temperature"] = temperature
+                    self._buffer[idx]["reference"] = reference
+                    self._buffer[idx]["faults"] = faults
                     self._buffer_idx += 1
 
             except Exception as e:
-                LOGGER.error(f"SPI acquisition error: {e}")
+                LOGGER.error(f"MAX31856 acquisition error: {e}")
                 break
 
-    def _supports(self, stimuli: Sequence[BaseStimulus]) -> Sequence[BaseStimulus]:
-        return []
-
-    def _fire(self, stimuli: Sequence[BaseStimulus]) -> bool:
-
-        return True
-
-    def _publish(self, stimuli: Sequence[BaseStimulus]) -> bool:
-        """Publish acquired SPI data based on acquisition type."""
-        if not self._is_open:
-            msg = "MAX31856Source needs to be opened first"
-            raise RuntimeError(msg)
-
-        with self._lock:
-            if self.acquisition_type == AcquisitionType.CONTINUOUS:
-                return self._publish_continuous(stimuli)
-            elif self.acquisition_type == AcquisitionType.FINITE:
-                return self._publish_finite(stimuli)
-
-        return False
-
-    def _publish_continuous(self, stimuli: Sequence[BaseStimulus]) -> bool:
-
-        return True
-
-    def _publish_finite(self, stimuli: Sequence[BaseStimulus]) -> bool:
+    def _fire(self) -> bool:
+        precise_sleep(self._max_stimulus_duration_ms / 1000.0)
 
         return True

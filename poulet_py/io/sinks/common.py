@@ -29,7 +29,7 @@ class BaseSink(EventHandler):
     _running: bool = PrivateAttr(default=False)
 
     @abstractmethod
-    def _init(self): ...
+    def _open(self): ...
 
     @abstractmethod
     def _close(self): ...
@@ -79,7 +79,7 @@ class BaseSink(EventHandler):
         self._queue = Queue(maxsize=self.queue_size)
         self._running = True
 
-        self._init()
+        self._open()
 
         self._thread = Thread(target=self._run, daemon=False)
         self._thread.start()
