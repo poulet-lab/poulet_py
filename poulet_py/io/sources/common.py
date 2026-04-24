@@ -39,7 +39,9 @@ class BaseSource(BaseModel, ABC):
     _lock: Lock = PrivateAttr(default_factory=Lock)
     _buffer: ndarray = PrivateAttr()
     _buffer_idx: int = PrivateAttr(default=0)
-    _buffer_dtype: Sequence[tuple[str, dtype | str | Sequence[tuple[str, dtype | str]]]] = PrivateAttr()
+    _buffer_dtype: Sequence[tuple[str, dtype | str | Sequence[tuple[str, dtype | str]]]] = (
+        PrivateAttr()
+    )
     _last_timestamp: int = PrivateAttr(default=0)
 
     @abstractmethod
