@@ -77,7 +77,7 @@ class TCSSerialSearchRequest(BaseModel):
 
 
 class TCS(BaseModel, validate_assignment=True):
-    """
+    r"""
     Temperature Control System (TCS) main interface class.
 
     This class provides comprehensive control over TCS devices including
