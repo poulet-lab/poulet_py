@@ -26,7 +26,7 @@ class BaseSink(EventHandler):
 
     _queue: Queue = PrivateAttr()
     _thread: Thread = PrivateAttr()
-    _running: bool = PrivateAttr(default=False)
+    _is_open: bool = PrivateAttr(default=False)
 
     @abstractmethod
     def _open(self): ...
@@ -37,25 +37,8 @@ class BaseSink(EventHandler):
     @abstractmethod
     def _on_event(self, event: BaseEvent): ...
 
-    def _run(self):
-        while True:
-            event = self._queue.get()
-
-            if event is None:  # sentinel
-                break
-
-            try:
-                self._on_event(event)
-            except Exception as e:
-                LOGGER.exception("Error while writing packet: %s", e)
-
-            finally:
-                self._queue.task_done()
-
     def on_event(self, event: BaseEvent):
-        if not self._running:
-            msg = "Sink not initialized. Call 'open()' first."
-            raise RuntimeError(msg)
+        self._assert_open()
 
         try:
             self._queue.put_nowait(event)
@@ -63,8 +46,7 @@ class BaseSink(EventHandler):
             LOGGER.warning("Sink queue full — dropping packet")
 
     def open(self, bus: EventBus | None = None):
-        if self._running:
-            LOGGER.warning("Sink already running.")
+        if self._is_open:
             return
 
         if bus and not self.bus:
@@ -77,21 +59,41 @@ class BaseSink(EventHandler):
         self.bus.subscribe(self)
 
         self._queue = Queue(maxsize=self.queue_size)
-        self._running = True
 
         self._open()
 
-        self._thread = Thread(target=self._run, daemon=False)
+        self._thread = Thread(target=self._run, name=f"{type(self).__name__}Thread", daemon=True)
         self._thread.start()
 
+        self._is_open = True
+
     def close(self):
-        if not self._running:
+        if not self._is_open:
             return
 
-        self._running = False
+        self._is_open = False
         self._queue.put(None)
         self._thread.join()
         self._close()
+
+    def _run(self):
+        while True:
+            event = self._queue.get()
+
+            if event is None:  # sentinel
+                break
+
+            try:
+                self._on_event(event)
+            except Exception as e:
+                LOGGER.exception("Error while writing packet: %s", e)
+            finally:
+                self._queue.task_done()
+
+    def _assert_open(self):
+        if not self._is_open:
+            msg = f"{type(self)} need to be opened first"
+            raise RuntimeError(msg)
 
     def __enter__(self, bus: EventBus | None = None):
         self.open(bus=bus)
