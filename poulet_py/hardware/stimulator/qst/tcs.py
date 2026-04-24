@@ -9,9 +9,7 @@ try:
     from pydantic import BaseModel, Field, PrivateAttr
     from serial import Serial
 
-    from poulet_py import LOGGER, BaseTrigger, TCSCommand, TCSStimulus, precise_sleep
-
-
+    from poulet_py import LOGGER, TCSCommand, TCSStimulus, precise_sleep
 except ImportError as e:
     msg = """
 Missing 'qst' module. Install options:
@@ -66,20 +64,15 @@ class TCS(BaseModel, validate_assignment=True):
     response_timeout: float = Field(
         default=2.0, description="Timeout for device responses in seconds"
     )
-    stimulus_trigger: BaseTrigger | None = Field(
-        default=None,
-        description="A Trigger found in poulet_py/hardware/triggers to trigger the next stimulus",
-    )
-    _serial: Serial = PrivateAttr()
+
+    _serial: Serial = PrivateAttr(default_factory=Serial)
     _is_open: bool = PrivateAttr(default=False)
 
     _buffer_idx: int = PrivateAttr(0)
     _buffer: ndarray = PrivateAttr()
-    _sampling_thread: Thread | None = PrivateAttr(None)
-    _sampling_stop_event: Event = PrivateAttr(default_factory=Event)
+    _acquisition_thread: Thread = PrivateAttr()
+    _stop_acquisition_event: Event = PrivateAttr(default_factory=Event)
     _sampling_cond: Condition = PrivateAttr(default_factory=Condition)
-
-    _stimulus_thread: Thread | None = PrivateAttr(None)
     _stimulus_done: Event = PrivateAttr(default_factory=Event)
 
     _temperature_line_pattern: Pattern[bytes] = PrivateAttr(
@@ -89,134 +82,38 @@ class TCS(BaseModel, validate_assignment=True):
     )
     _serial_search_queue: deque[TCSSerialSearchRequest] = PrivateAttr(default_factory=deque)
 
-    def _validate_stimulus(self, stimulus: TCSStimulus) -> None:
-        if not isinstance(stimulus, TCSStimulus):
-            msg = f"Stimulus must be a TCSStimulus instance, got {type(stimulus)}"
-            raise ValueError(msg)
-
-        if stimulus.target > self.maximum_temperature:
-            msg = (
-                f"Target temperature {stimulus.target} exceeds "
-                f"maximum temperature {self.maximum_temperature}"
-            )
-            raise ValueError(msg)
-
-        if stimulus.baseline > self.maximum_temperature:
-            msg = (
-                f"Baseline temperature {stimulus.baseline} exceeds "
-                f"maximum temperature {self.maximum_temperature}"
-            )
-            raise ValueError(msg)
-
-    def _stimulus_timer(self, duration_ms: int):
-        try:
-            precise_sleep(duration_ms / 1000.0)
-        finally:
-            self._stimulus_done.set()
-
-    def _start_streaming(self):
-        if self._sampling_thread is None or not self._sampling_thread.is_alive():
-            self.execute_command(TCSCommand.DISPLAY_TEMPERATURES_DURING_STIMULATION)
-
-            self._sampling_thread = Thread(
-                target=self._streaming_loop, name="TCS Temperature Streamer"
-            )
-            self._sampling_thread.start()
-
-    def _stop_streaming(self):
-        if self._sampling_thread and self._sampling_thread.is_alive():
-            self._sampling_stop_event.set()
-            self._sampling_thread.join(timeout=5)
-            if self._sampling_thread.is_alive():
-                LOGGER.warning("Streaming thread did not stop gracefully")
-            self._sampling_thread = None
-        self._sampling_stop_event.clear()
-
-    def _streaming_loop(self):
-        try:
-            while not self._sampling_stop_event.is_set():
-                line = self._serial.read_until(b"\n")
-                LOGGER.debug(f"Read line: {line}")
-
-                with self._sampling_cond:
-                    if self._serial_search_queue:
-                        request = self._serial_search_queue[0]
-                        if request.pattern is not None:
-                            if match := search(request.pattern, line):
-                                request.result = (time_ns(), match)
-                                request.event.set()
-                                self._serial_search_queue.popleft()
-
-                if match := search(self._temperature_line_pattern, line):
-                    idx = self._buffer_idx % self.buffer_size
-                    timestamp = time_ns()
-                    values = tuple(map(float, match.groups()))
-                    self._buffer[idx] = (timestamp, *values)
-
-                    with self._sampling_cond:
-                        self._buffer_idx += 1
-                        self._sampling_cond.notify_all()
-
-        except Exception as e:
-            msg = f"Read loop failed: {e}"
-            LOGGER.exception(msg)
-            self._sampling_stop_event.set()
-
     def open(self):
         if self._is_open:
             return
 
-        try:
-            self._serial = Serial(
-                port=self.port,
-                baudrate=115200,
-                bytesize=8,
-                parity="N",
-                stopbits=1,
-                timeout=self.read_timeout,
-                write_timeout=2,
-            )
+        self._open_serial()
+        self._set_buffer()
+        self._start_acquisition_thread()
 
-            self._is_open = True
+        self.execute_command(TCSCommand.SET_MAX_TEMPERATURE, int(self.maximum_temperature * 10))
 
-            self._buffer = empty(
-                self.buffer_size,
-                dtype=[("timestamp", "uint64"), *((f"s{i}", "float64") for i in range(5))],
-            )
-            self._buffer_idx = 0
+        info = self.info()
+        match = search(compile(r"Firmware:(.*)\nProbe ID:(.*)\nProbe TYPE:(.*)\n"), info)
+        battery_info = self.battery_info()
 
-            self._start_streaming()
-            self.execute_command(TCSCommand.SET_MAX_TEMPERATURE, int(self.maximum_temperature * 10))
+        LOGGER.info(
+            "Hardware info:\n"
+            f"\tFirmware: {match.group(1).strip() if match else 'Unknown'}\n"
+            f"\tProbe ID: {match.group(2).strip() if match else 'Unknown'}\n"
+            f"\tProbe TYPE: {match.group(3).strip() if match else 'Unknown'}\n\n"
+            "Battery:\n"
+            f"\tVoltage: {battery_info['voltage']}\n"
+            f"\tPercentage: {battery_info['percentage']}\n\n"
+            "Initialized successfully\n"
+        )
 
-            info = self.info()
-            match = search(compile(r"Firmware:(.*)\nProbe ID:(.*)\nProbe TYPE:(.*)\n"), info)
-            battery_info = self.battery_info()
-
-            LOGGER.info(
-                "Hardware info:\n"
-                f"\tFirmware: {match.group(1).strip() if match else 'Unknown'}\n"
-                f"\tProbe ID: {match.group(2).strip() if match else 'Unknown'}\n"
-                f"\tProbe TYPE: {match.group(3).strip() if match else 'Unknown'}\n\n"
-                "Battery:\n"
-                f"\tVoltage: {battery_info['voltage']}\n"
-                f"\tPercentage: {battery_info['percentage']}\n\n"
-                "Initialized successfully\n"
-            )
-        except Exception as e:
-            self.close()
-            msg = "TCS initialization failed"
-            raise RuntimeError(msg) from e
+        self._is_open = True
 
     def close(self):
-        try:
-            self._stop_streaming()
-            self._serial.reset_input_buffer()
-            self._serial.reset_output_buffer()
-            self._serial.close()
-            self._is_open = False
-        except Exception as e:
-            msg = "Error closing TCS connection"
-            raise RuntimeError(msg) from e
+        self._stop_acquisition_thread()
+        self._close_serial()
+        self._delete_buffer()
+        self._is_open = False
 
     def info(self) -> str:
         result = self.execute_command(
@@ -255,15 +152,15 @@ class TCS(BaseModel, validate_assignment=True):
         }
 
     def write(self, command: bytes) -> int | None:
-        if not self._is_open:
-            msg = "use open() first"
-            raise RuntimeError(msg)
+        self._assert_open()
 
         self._serial.flush()
         LOGGER.debug(f"Sending command: {command}")
+
         bytes_written = self._serial.write(command)
         if bytes_written != len(command):
             LOGGER.warning(f"Partial write: {bytes_written}/{len(command)} bytes")
+
         return bytes_written
 
     def execute_command(
@@ -273,9 +170,7 @@ class TCS(BaseModel, validate_assignment=True):
         expected_pattern: Pattern | None = None,
         timeout: float | None = None,
     ) -> tuple[int, Match[bytes] | None] | None:
-        if not self._is_open:
-            msg = "use open() first"
-            raise RuntimeError(msg)
+        self._assert_open()
 
         request = TCSSerialSearchRequest(pattern=expected_pattern)
         event = request.event
@@ -297,25 +192,19 @@ class TCS(BaseModel, validate_assignment=True):
         return request.result
 
     def trigger(self, stimulus: TCSStimulus):
-        if not self._is_open:
-            msg = "use open() first"
-            raise RuntimeError(msg)
+        self._assert_open()
 
         self._validate_stimulus(stimulus)
 
         for command in stimulus.build():
             self.write(command)
 
-        if self.stimulus_trigger is not None:
-            if not self.stimulus_trigger.wait():
-                msg = "Trigger Failed, canceling stimulation"
-                raise RuntimeError(msg)
-
         self.execute_command(TCSCommand.TRIGGER_STIMULATION)
 
         self._stimulus_done.clear()
+
         Thread(
-            target=self._stimulus_timer, args=(stimulus.duration,), name="TCS Stimulus Timer"
+            target=self._stimulus_timer, args=(stimulus.duration,), name="TCS-stimulus-timer"
         ).start()
 
         if self.beep:
@@ -328,9 +217,7 @@ class TCS(BaseModel, validate_assignment=True):
         )
 
     def calibration(self, timeout: float = 30.0) -> float:
-        if not self._is_open:
-            msg = "use open() first"
-            raise RuntimeError(msg)
+        self._assert_open()
 
         match = self.execute_command(
             command=TCSCommand.AUTOMATIC_CALIBRATION,
@@ -351,17 +238,13 @@ class TCS(BaseModel, validate_assignment=True):
         return neutral_raw / 10.0
 
     def reset(self):
-        if not self._is_open:
-            msg = "use open() first"
-            raise RuntimeError(msg)
+        self._assert_open()
 
         self.execute_command(TCSCommand.RESET)
         LOGGER.info("Reset successfully")
 
     def read_last_sample(self) -> ArrayLike:
-        if not self._is_open or self._buffer is None:
-            msg = "use open() first"
-            raise RuntimeError(msg)
+        self._assert_open()
 
         with self._sampling_cond:
             if self._buffer_idx == 0:
@@ -372,9 +255,7 @@ class TCS(BaseModel, validate_assignment=True):
             return self._buffer[idx]
 
     def read_many_sample(self, data: ndarray, n: int, timeout: float = 10.0) -> int:
-        if not self._is_open or self._buffer is None:
-            msg = "use open() first"
-            raise RuntimeError(msg)
+        self._assert_open()
 
         if data.shape[0] < n:
             msg = f"Provided array has {data.shape[0]} rows, need at least {n}"
@@ -387,7 +268,7 @@ class TCS(BaseModel, validate_assignment=True):
                 remaining = deadline - time_ns()
                 if remaining <= 0:
                     return 0
-                self._sampling_cond.wait(timeout=remaining)
+                self._sampling_cond.wait(timeout=remaining / 1e9)
 
             total_samples = self._buffer_idx
             available = min(total_samples, self.buffer_size)
@@ -403,6 +284,123 @@ class TCS(BaseModel, validate_assignment=True):
                 data[first_chunk:count] = self._buffer[0:second_chunk]
 
             return count
+
+    def _validate_stimulus(self, stimulus: TCSStimulus) -> None:
+        if not isinstance(stimulus, TCSStimulus):
+            msg = f"Stimulus must be a TCSStimulus instance, got {type(stimulus)}"
+            raise ValueError(msg)
+
+        if stimulus.target > self.maximum_temperature:
+            msg = (
+                f"Target temperature {stimulus.target} exceeds "
+                f"maximum temperature {self.maximum_temperature}"
+            )
+            raise ValueError(msg)
+
+        if stimulus.baseline > self.maximum_temperature:
+            msg = (
+                f"Baseline temperature {stimulus.baseline} exceeds "
+                f"maximum temperature {self.maximum_temperature}"
+            )
+            raise ValueError(msg)
+
+    def _stimulus_timer(self, duration_ms: int):
+        try:
+            precise_sleep(duration_ms / 1000.0)
+        finally:
+            self._stimulus_done.set()
+
+    def _assert_open(self):
+        if not self._serial.is_open:
+            msg = "TCS serial connection is not open. Call open() first."
+            raise RuntimeError(msg)
+
+    def _open_serial(self):
+        try:
+            self._serial = Serial(
+                port=self.port,
+                baudrate=115200,
+                bytesize=8,
+                parity="N",
+                stopbits=1,
+                timeout=self.read_timeout,
+                write_timeout=2,
+            )
+        except Exception as e:
+            self.close()
+            msg = "Serial initialization failed"
+            raise RuntimeError(msg) from e
+
+    def _close_serial(self):
+        try:
+            if self._serial.is_open:
+                self._serial.reset_input_buffer()
+                self._serial.reset_output_buffer()
+                self._serial.close()
+        except Exception as e:
+            msg = "Error closing serial connection"
+            raise RuntimeError(msg) from e
+
+    def _set_buffer(self):
+        self._buffer = empty(
+            self.buffer_size,
+            dtype=[("timestamp", "uint64"), *((f"s{i}", "float64") for i in range(5))],
+        )
+        self._buffer_idx = 0
+
+    def _delete_buffer(self):
+        del self._buffer
+        self._buffer_idx = 0
+
+    def _start_acquisition_thread(self):
+        self.execute_command(TCSCommand.DISPLAY_TEMPERATURES_DURING_STIMULATION)
+
+        self._acquisition_thread = Thread(
+            target=self._acquisition_thread_func, name="TCS Acquisition Thread", daemon=True
+        )
+        self._acquisition_thread.start()
+
+    def _stop_acquisition_thread(self):
+        self._stop_acquisition_event.set()
+        self._acquisition_thread.join(timeout=5)
+
+        if self._acquisition_thread.is_alive():
+            LOGGER.warning("Streaming thread did not stop gracefully")
+
+        del self._acquisition_thread
+
+        self._stop_acquisition_event.clear()
+
+    def _acquisition_thread_func(self):
+        try:
+            while not self._stop_acquisition_event.is_set():
+                line = self._serial.read_until(b"\n")
+                LOGGER.debug(f"Read line: {line}")
+
+                with self._sampling_cond:
+                    if self._serial_search_queue:
+                        request = self._serial_search_queue[0]
+
+                        if request.pattern is not None:
+                            if match := search(request.pattern, line):
+                                request.result = (time_ns(), match)
+                                request.event.set()
+                                self._serial_search_queue.popleft()
+
+                if match := search(self._temperature_line_pattern, line):
+                    idx = self._buffer_idx % self.buffer_size
+                    timestamp = time_ns()
+                    values = tuple(map(float, match.groups()))
+                    self._buffer[idx] = (timestamp, *values)
+
+                    with self._sampling_cond:
+                        self._buffer_idx += 1
+                        self._sampling_cond.notify_all()
+
+        except Exception as e:
+            msg = f"Read loop failed: {e}"
+            LOGGER.exception(msg)
+            self._stop_acquisition_event.set()
 
     def __enter__(self):
         self.open()

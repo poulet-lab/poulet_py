@@ -30,7 +30,7 @@ class BaseSource(BaseModel, ABC):
     name: str = Field(..., description="Name of the data source")
     acquisition_type: AcquisitionType = Field(default=AcquisitionType.FINITE, description="")
     fire_on: Literal["all"] | list[BaseStimulus] = Field(default="all")
-    buffer_size: int = Field(default=4000, description="Size of the circular buffer")
+    buffer_size: int = Field(default=500, description="Size of the circular buffer", ge=1)
     bus: EventBus | None = Field(default=None)
 
     _stimuli: Sequence[BaseStimulus] = PrivateAttr(default_factory=list)
