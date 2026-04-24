@@ -12,7 +12,7 @@ try:
     from threading import Condition, Event, Thread
     from time import time_ns
 
-    from numpy import empty, ndarray
+    from numpy import ndarray, zeros
     from numpy.typing import ArrayLike
     from pydantic import BaseModel, Field, PrivateAttr
     from serial import Serial
@@ -662,7 +662,7 @@ class TCS(BaseModel, validate_assignment=True):
     def _set_buffer(self):
         """Initialize the circular buffer for temperature samples."""
         try:
-            self._buffer = empty(
+            self._buffer = zeros(
                 self.buffer_size,
                 dtype=[("timestamp", "uint64"), *((f"s{i}", "float64") for i in range(5))],
             )

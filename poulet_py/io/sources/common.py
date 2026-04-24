@@ -5,8 +5,7 @@ try:
     from threading import Lock
     from typing import Literal
 
-    from numpy import empty, ndarray
-    from numpy.typing import DTypeLike
+    from numpy import dtype, ndarray, zeros
     from pydantic import BaseModel, Field, PrivateAttr
 
     from poulet_py import BaseEvent, BaseStimulus, EventBus, SinkEvent
@@ -40,7 +39,7 @@ class BaseSource(BaseModel, ABC):
     _lock: Lock = PrivateAttr(default_factory=Lock)
     _buffer: ndarray = PrivateAttr()
     _buffer_idx: int = PrivateAttr(default=0)
-    _buffer_dtype: DTypeLike = PrivateAttr()
+    _buffer_dtype: Sequence[tuple[str, dtype | str | Sequence[tuple[str, dtype | str]]]] = PrivateAttr()
     _last_timestamp: int = PrivateAttr(default=0)
 
     @abstractmethod
@@ -76,9 +75,6 @@ class BaseSource(BaseModel, ABC):
         self._is_open = True
 
     def close(self):
-        if not self._is_open:
-            return
-
         self._close()
         self._is_open = False
 
@@ -117,7 +113,7 @@ class BaseSource(BaseModel, ABC):
         if ("timestamp", "uint64") not in self._buffer_dtype:
             self._buffer_dtype = [("timestamp", "uint64"), *self._buffer_dtype]
 
-        self._buffer = empty(self.buffer_size, dtype=self._buffer_dtype)
+        self._buffer = zeros(self.buffer_size, dtype=self._buffer_dtype)
         self._last_timestamp = 0
         self._buffer_idx = 0
 
@@ -170,8 +166,8 @@ class BaseSource(BaseModel, ABC):
     def _publish_finite(self) -> bool:
         with self._lock:
             start = self._last_timestamp
-
-        end = self._last_timestamp + self._max_stimulus_duration_ms * 1_000_000
+            end = start + self._max_stimulus_duration_ms * 1_000_000
+            self._last_timestamp = end
 
         mask = (self._buffer["timestamp"] > start) & (self._buffer["timestamp"] <= end)
         chunk = self._buffer[mask].copy()
@@ -183,13 +179,10 @@ class BaseSource(BaseModel, ABC):
             SinkEvent(name=self.name, payload={self.name: chunk}, meta={"acquisition": "finite"})
         )
 
-        with self._lock:
-            self._last_timestamp = end
-
         return True
 
-    def __enter__(self, bus: EventBus | None = None):
-        self.open(bus=bus)
+    def __enter__(self):
+        self.open(bus=self.bus)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):

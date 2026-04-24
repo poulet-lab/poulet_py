@@ -1,5 +1,5 @@
 from nidaqmx.constants import AcquisitionType
-from numpy import empty
+from numpy import zeros
 
 from poulet_py import (
     CounterSource,
@@ -43,7 +43,7 @@ tasks = [
 
 nidac_source = NIDaQSource(name="nidaq", device=device_name, tasks=tasks)
 
-ai_data = empty((len(ai_channels), samps_per_chan))
+ai_data = zeros((len(ai_channels), samps_per_chan))
 
 sinks = [HDFSink(file="./temp.h5")]
 sources = [CounterSource(name="trial_source"), TCSSource(name="trial_source", port="/dev/ssf")]

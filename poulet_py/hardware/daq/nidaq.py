@@ -41,7 +41,7 @@ try:
     from nidaqmx.stream_writers import AnalogMultiChannelWriter, DigitalMultiChannelWriter
     from nidaqmx.system import System
     from nidaqmx.utils import flatten_channel_string
-    from numpy import arange, empty, float64, ndarray, uint32, uint64
+    from numpy import arange, ndarray, uint64, zeros
     from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
     from poulet_py import (
@@ -374,11 +374,11 @@ class NIAnalogInputTask(NIBaseTask):
         if samples > capacity:
             new_capacity = max(samples, capacity * 2)
 
-            self._ai_buffer = empty((len(self.channels), new_capacity), dtype=float64)
+            self._ai_buffer = zeros((len(self.channels), new_capacity), dtype="float64")
 
-            self._buffer = empty(
+            self._buffer = zeros(
                 new_capacity,
-                dtype=[("timestamp", uint64), *((ch.name, float64) for ch in self.channels)],
+                dtype=[("timestamp", "uint64"), *((ch.name, "float64") for ch in self.channels)],
             )
 
     def _open(self) -> None:
@@ -403,12 +403,12 @@ class NIAnalogInputTask(NIBaseTask):
             samps_per_chan=self._clock_handle.samps_per_chan,
         )
 
-        self._ai_buffer = empty(
-            (len(self.channels), self._clock_handle.samps_per_chan), dtype=float64
+        self._ai_buffer = zeros(
+            (len(self.channels), self._clock_handle.samps_per_chan), dtype="float64"
         )
-        self._buffer = empty(
+        self._buffer = zeros(
             self._clock_handle.samps_per_chan,
-            dtype=[("timestamp", uint64), *((ch.name, float64) for ch in self.channels)],
+            dtype=[("timestamp", "uint64"), *((ch.name, "float64") for ch in self.channels)],
         )
         self._reader = AnalogMultiChannelReader(self._task.in_stream)
 
@@ -455,7 +455,7 @@ class NIAnalogInputTask(NIBaseTask):
 
             timestamps = self._buffer["timestamp"][:n]
             timestamps[:] = t0
-            timestamps += dt * arange(n, dtype=uint64)
+            timestamps += dt * arange(n, dtype="uint64")
 
         return self._buffer[:n].copy()
 
@@ -558,11 +558,11 @@ class NIDigitalInputTask(NIBaseTask):
         if samples > capacity:
             new_capacity = max(samples, capacity * 2)
 
-            self._di_buffer = empty((len(self.channels), new_capacity), dtype=uint32)
+            self._di_buffer = zeros((len(self.channels), new_capacity), dtype="uint32")
 
-            self._buffer = empty(
+            self._buffer = zeros(
                 new_capacity,
-                dtype=[("timestamp", uint64), *((ch.name, float64) for ch in self.channels)],
+                dtype=[("timestamp", "uint64"), *((ch.name, "uint32") for ch in self.channels)],
             )
 
     def _open(self) -> None:
@@ -585,12 +585,12 @@ class NIDigitalInputTask(NIBaseTask):
             samps_per_chan=self._clock_handle.samps_per_chan,
         )
 
-        self._di_buffer = empty(
-            (len(self.channels), self._clock_handle.samps_per_chan), dtype=uint32
+        self._di_buffer = zeros(
+            (len(self.channels), self._clock_handle.samps_per_chan), dtype="uint32"
         )
-        self._buffer = empty(
+        self._buffer = zeros(
             self._clock_handle.samps_per_chan,
-            dtype=[("timestamp", uint64), *((ch.name, float64) for ch in self.channels)],
+            dtype=[("timestamp", "uint64"), *((ch.name, "uint32") for ch in self.channels)],
         )
 
         self._reader = DigitalMultiChannelReader(self._task.in_stream)
@@ -639,7 +639,7 @@ class NIDigitalInputTask(NIBaseTask):
 
             timestamps = self._buffer["timestamp"][:n]
             timestamps[:] = t0
-            timestamps += dt * arange(n, dtype=uint64)
+            timestamps += dt * arange(n, dtype="uint64")
 
         return self._buffer[:n].copy()
 

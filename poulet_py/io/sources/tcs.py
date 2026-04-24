@@ -1,6 +1,4 @@
 try:
-    from pydantic import Field, PrivateAttr
-
     from poulet_py import (
         TCS,
         BaseSource,
@@ -31,8 +29,11 @@ class TCSSource(BaseSource, TCS):
         for st in self._stimuli:
             if isinstance(st, TCSStimulus):
                 precise_sleep(st.pre_delay / 1000.0)
+
                 self.trigger(st)
-                self._stimulus_done.wait()
+
+                while self.stimulus_running:
+                    pass
 
                 precise_sleep((st._isi + st.post_delay) / 1000.0)
 

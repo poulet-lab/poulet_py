@@ -1,11 +1,22 @@
 try:
     from enum import Enum
-    from threading import Thread
+    from threading import Event, Thread
     from time import time_ns
     from typing import Literal
 
     from adafruit_blinka.microcontroller.generic_linux.rpi_gpio_pin import Pin
-    from adafruit_max31856 import _MAX31856_FAULT_CJRANGE, _MAX31856_SR_REG, MAX31856
+    from adafruit_max31856 import (
+        _MAX31856_FAULT_CJHIGH,
+        _MAX31856_FAULT_CJLOW,
+        _MAX31856_FAULT_CJRANGE,
+        _MAX31856_FAULT_OPEN,
+        _MAX31856_FAULT_OVUV,
+        _MAX31856_FAULT_TCHIGH,
+        _MAX31856_FAULT_TCLOW,
+        _MAX31856_FAULT_TCRANGE,
+        _MAX31856_SR_REG,
+        MAX31856,
+    )
     from adafruit_max31856 import ThermocoupleType as ThType
     from board import MISO, MOSI, SCLK
     from busio import SPI
@@ -61,7 +72,7 @@ class Max31856Source(BaseSource):
     _max31856: MAX31856 = PrivateAttr()
 
     _acquisition_thread: Thread | None = PrivateAttr(default=None)
-    _stop_acquisition: bool = PrivateAttr(default=False)
+    _stop_acquisition_event: Event = PrivateAttr(default_factory=Event)
 
     def _set_buffer_dtype(self):
         self._buffer_dtype = [
@@ -135,8 +146,20 @@ class Max31856Source(BaseSource):
                     msg = "Faults found in the following: "
                     if faults & _MAX31856_FAULT_CJRANGE:
                         msg += "cj_range"
-                    # TODO add all faults
-
+                    if faults & _MAX31856_FAULT_TCRANGE:
+                        msg += "tc_range"
+                    if faults & _MAX31856_FAULT_CJHIGH:
+                        msg += "cj_high"
+                    if faults & _MAX31856_FAULT_CJLOW:
+                        msg += "cj_low"
+                    if faults & _MAX31856_FAULT_TCHIGH:
+                        msg += "tc_high"
+                    if faults & _MAX31856_FAULT_TCLOW:
+                        msg += "tc_low"
+                    if faults & _MAX31856_FAULT_OVUV:
+                        msg += "voltage"
+                    if faults & _MAX31856_FAULT_OPEN:
+                        msg += "open_tc"
                     LOGGER.warning(msg)
 
                 with self._lock:
