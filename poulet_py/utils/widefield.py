@@ -1,5 +1,5 @@
-from abc import ABC, abstractmethod
 import re
+from abc import ABC, abstractmethod
 from datetime import datetime
 
 try:
@@ -50,7 +50,7 @@ class DataStructureV1(BaseData):
     _condition: dict[str, Any] | None = PrivateAttr(default=None)
     _roi: dict[str, Any] | None = PrivateAttr(default=None)
 
-    def trial_open_filter(self, start: datetime | int, end: datetime | int) -> bool: # CHECK
+    def trial_open_filter(self, start: datetime | int, end: datetime | int) -> bool:  # CHECK
         if isinstance(start, datetime) and isinstance(end, datetime):
             folder_time = self._folder_datetime()
             return folder_time is not None and start <= folder_time <= end
