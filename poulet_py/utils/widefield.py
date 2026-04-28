@@ -1,3 +1,5 @@
+from abc import ABC, abstractmethod
+import re
 from datetime import datetime
 
 try:
@@ -8,7 +10,7 @@ try:
     import h5py
     from numpy import array, ceil, load, ndarray, pad, save, savez_compressed, uint16
     from pandas import DataFrame, read_csv
-    from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
+    from pydantic import BaseModel, Field, PrivateAttr
     from skimage.io import imread
 
     from poulet_py import LOGGER
@@ -25,36 +27,87 @@ Also ensure: h5py, numpy, pandas, scikit-image, imageio, matplotlib are installe
     raise ImportError(msg) from e
 
 
-class BaseData(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+class BaseData(BaseModel, ABC):
+    @abstractmethod
+    def _open(self): ...
 
 
-# TODO maybe better name
-class SepartedData(BaseData):
+# find better name # CHECK
+class DataStructureV1(BaseData):
     path: Path = Field(..., description="Path to trial folder")
     imaging_path: Path | None = Field(default=None)
     timestamps_path: Path | None = Field(default=None)
     analog_output_data_path: Path | None = Field(default=None)
     reference_image_path: Path | None = Field(default=None)
 
-    # TODO similar to all private attrs
+    # similar to all private attrs # CHECK
     _imaging_data: ndarray[Any, Any] | None = PrivateAttr(default=None)
-    green_reference: ndarray[Any, Any] | None = Field(default=None)
-    timestamps: DataFrame | None = Field(default=None)
-    analog_output_data: dict[str, ndarray[Any, Any]] = Field(default_factory=dict)
-    analog_output_data_attrs: dict[str, dict[str, Any]] = Field(default_factory=dict)
-    analog_output_data_file_attrs: dict[str, Any] = Field(default_factory=dict)
-    condition: dict[str, Any] | None = Field(default=None)
-    roi: dict[str, Any] | None = Field(default=None)
+    _green_reference: ndarray[Any, Any] | None = PrivateAttr(default=None)
+    _timestamps: DataFrame | None = PrivateAttr(default=None)
+    _analog_output_data: dict[str, ndarray[Any, Any]] = PrivateAttr(default_factory=dict)
+    _analog_output_data_attrs: dict[str, dict[str, Any]] = PrivateAttr(default_factory=dict)
+    _analog_output_data_file_attrs: dict[str, Any] = PrivateAttr(default_factory=dict)
+    _condition: dict[str, Any] | None = PrivateAttr(default=None)
+    _roi: dict[str, Any] | None = PrivateAttr(default=None)
 
-    def should_open(start: datetime | int, end: datetime | int) -> bool:
-        # TODO filter path based on datetime or trial number and if it is between the range return true
-        return False
+    def trial_open_filter(self, start: datetime | int, end: datetime | int) -> bool: # CHECK
+        if isinstance(start, datetime) and isinstance(end, datetime):
+            folder_time = self._folder_datetime()
+            return folder_time is not None and start <= folder_time <= end
 
-    # TODO similar to all private attrs if access is needed
+        if isinstance(start, int) and isinstance(end, int):
+            trial_number = self._folder_trial_number()
+            return trial_number is not None and start <= trial_number <= end
+
+        msg = "start and end must both be datetime values or both be integer trial numbers"
+        raise TypeError(msg)
+
+    def _folder_datetime(self) -> datetime | None:
+        folder_name = self.path.name
+        for date_format in ("%y%m%d_%H%M%S", "%Y%m%d_%H%M%S"):
+            try:
+                return datetime.strptime(folder_name, date_format)
+            except ValueError:
+                continue
+        return None
+
+    def _folder_trial_number(self) -> int | None:
+        match = re.fullmatch(r"(?:trial[_-]?)?0*(\d+)", self.path.name, flags=re.IGNORECASE)
+        if match is None:
+            return None
+        return int(match.group(1))
+
     @property
     def imaging_data(self):
         return self._imaging_data
+
+    @property
+    def green_reference(self):
+        return self._green_reference
+
+    @property
+    def timestamps(self):
+        return self._timestamps
+
+    @property
+    def analog_output_data(self):
+        return self._analog_output_data
+
+    @property
+    def analog_output_data_attrs(self):
+        return self._analog_output_data_attrs
+
+    @property
+    def analog_output_data_file_attrs(self):
+        return self._analog_output_data_file_attrs
+
+    @property
+    def condition(self):
+        return self._condition
+
+    @property
+    def roi(self):
+        return self._roi
 
     def _resolve_paths(self) -> None:
         if not self.path.exists():
@@ -83,23 +136,22 @@ class SepartedData(BaseData):
         self.analog_output_data_path = h5_path if h5_path.exists() else None
         self.reference_image_path = green_path if green_path.exists() else None
 
-    # TODO change load to open
-    def load(self) -> None:
+    def open(self) -> None:
         self._resolve_paths()
-        self.imaging_data = self._load_imaging()
-        self.green_reference = self._load_reference_image()
-        self.timestamps = self._load_timestamps()
+        self._imaging_data = self._open_imaging()
+        self._green_reference = self._open_reference_image()
+        self._timestamps = self._open_timestamps()
         (
-            self.analog_output_data,
-            self.analog_output_data_attrs,
-            self.analog_output_data_file_attrs,
-        ) = self._load_analog_output()
+            self._analog_output_data,
+            self._analog_output_data_attrs,
+            self._analog_output_data_file_attrs,
+        ) = self._open_analog_output()
 
-    # TODO move all these to separated data or whatever u wannt calla it check commit 4031c9e
-    def _load_imaging(self) -> ndarray[Any, Any]:
+    # move all these to separated data or whatever u wannt calla it check commit 4031c9e # CHECK
+    def _open_imaging(self) -> ndarray[Any, Any]:
         if self.imaging_path is None:
             raise ValueError("Imaging path is not set")
-        LOGGER.info(f"Loading imaging data from: {self.imaging_path.name}")
+        LOGGER.info(f"Opening imaging data from: {self.imaging_path.name}")
 
         if self.imaging_path.suffix.lower() == ".npy":
             data = load(str(self.imaging_path))
@@ -109,26 +161,26 @@ class SepartedData(BaseData):
             msg = f"Unsupported imaging format: {self.imaging_path.suffix}"
             raise ValueError(msg)
 
-        LOGGER.info(f"Loaded imaging stack: {data.shape}")
+        LOGGER.info(f"Opened imaging stack: {data.shape}")
         return data
 
-    def _load_reference_image(self) -> ndarray[Any, Any] | None:
+    def _open_reference_image(self) -> ndarray[Any, Any] | None:
         if self.reference_image_path is None:
             return None
         if not self.reference_image_path.exists():
             LOGGER.warning(f"Green reference not found: {self.reference_image_path}")
             return None
 
-        LOGGER.info(f"Loading green reference from: {self.reference_image_path.name}")
+        LOGGER.info(f"Opening green reference from: {self.reference_image_path.name}")
         image = imread(str(self.reference_image_path))
         if image.ndim == 3:
             image = image[0]
-        LOGGER.info(f"Loaded green reference: {image.shape}")
+        LOGGER.info(f"Opened green reference: {image.shape}")
         return image
 
-    def _load_timestamps(self) -> DataFrame | None:
+    def _open_timestamps(self) -> DataFrame | None:
         """
-        Load frame timestamps from a CSV file.
+        Open frame timestamps from a CSV file.
 
         Reads the semicolon-separated CSV file containing timing
         information for each frame in the recording.
@@ -139,17 +191,17 @@ class SepartedData(BaseData):
         try:
             timestamps = read_csv(self.timestamps_path, sep=";")
             timestamps = timestamps.loc[:, ~timestamps.columns.str.contains("^Unnamed")]
-            LOGGER.info(f"Loaded timestamps: {len(timestamps)} rows")
+            LOGGER.info(f"Opened timestamps: {len(timestamps)} rows")
         except Exception:
             LOGGER.exception(f"Error loading timestamps: {self.timestamps_path}")
             return None
         return timestamps
 
-    def _load_analog_output(
+    def _open_analog_output(
         self,
     ) -> tuple[dict[str, ndarray[Any, Any]], dict[str, dict[str, Any]], dict[str, Any]]:
         """
-        Load sensor data from an HDF5 file.
+        Open sensor data from an HDF5 file.
 
         Returns empty dictionaries if the file does not exist.
         """
@@ -179,12 +231,12 @@ class SepartedData(BaseData):
         return analog_output_data, analog_output_data_attrs, analog_output_data_file_attrs
 
     def close(self) -> None:
-        self.imaging_data = None
-        self.green_reference = None
-        self.timestamps = None
-        self.analog_output_data = {}
-        self.analog_output_data_attrs = {}
-        self.analog_output_data_file_attrs = {}
+        self._imaging_data = None
+        self._green_reference = None
+        self._timestamps = None
+        self._analog_output_data = {}
+        self._analog_output_data_attrs = {}
+        self._analog_output_data_file_attrs = {}
 
     def summary(self) -> str:
         """Return a human-readable summary of this trial."""
@@ -236,18 +288,18 @@ class SepartedData(BaseData):
         return self.summary()
 
 
-class Trial(BaseData):
+class Trial(DataStructureV1):
     # make restriction of tiff, npy only etc.
-    path: Path = Field(..., description="")
+    path: Path = Field(..., description="Path to the trial folder")
     data: BaseData = Field(...)
 
-    def load_trial(self):
-        self.data._load()
+    def open(self) -> None:
+        self.data.open()
 
 
 class Session(BaseModel):
     path: Path = Field(..., description="Path to the session folder")
-    start: datetime | int = Field()  # TODO time or trial number and we see further
+    start: datetime | int = Field()  # time or trial number and we see further # CHECK
     end: datetime | int = Field()
 
     _trials: list[Trial] = PrivateAttr(default_factory=list)
@@ -259,10 +311,15 @@ class Session(BaseModel):
     def add_trial(self, trial: Trial) -> None:
         self._trials.append(trial)
 
-    def open():
-        # TODO open trials, and also filer using start:end
+    def open(
+        self,
+        start: datetime | int | None = None,
+        end: datetime | int | None = None,
+    ) -> None:
+        start = self.start if start is None else start
+        end = self.end if end is None else end
         for trial in self._trials:
-            if trial.shou3ld_open(start, end):
+            if trial.trial_open_filter(start, end):
                 trial.open()
 
     def close(self) -> None:
@@ -333,13 +390,13 @@ class WidefieldAnalysis(BaseModel):
             for idx, trial in enumerate(self.session.trials):
                 if trial.path == target:
                     self._active_trial_idx = idx
-                    trial.load()
+                    trial.open()
                     LOGGER.info(str(trial))
                     return
             trial = Trial(path=target)
             self.session.add_trial(trial)
             self._active_trial_idx = len(self.session.trials) - 1
-            trial.load()
+            trial.open()
             LOGGER.info(str(trial))
             return
 
@@ -349,11 +406,11 @@ class WidefieldAnalysis(BaseModel):
 
         if path is None and self.session.trials:
             if len(self.session.trials) == 1:
-                self.active_trial.load()
+                self.active_trial.open()
                 LOGGER.info(str(self.active_trial))
                 return
             for trial in self.session.trials:
-                trial.load()
+                trial.open()
             return
 
         discovered_trials = [
@@ -368,7 +425,7 @@ class WidefieldAnalysis(BaseModel):
             trial = existing if existing is not None else Trial(path=trial_path)
             if existing is None:
                 self.session.add_trial(trial)
-            trial.load()
+            trial.open()
 
     ###### TO INTEGRATE WITH THE NEW CODEBASE ######
     def downscale(
