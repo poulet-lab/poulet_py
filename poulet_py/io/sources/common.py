@@ -148,6 +148,10 @@ class BaseSource(BaseModel, ABC):
 
     def _publish_continuous(self) -> bool:
         with self._lock:
+            print(
+                f"{self.name} publish continuous: buffer_idx={self._buffer_idx}, buffer_size={self.buffer_size}"
+            )
+
             start = self._last_timestamp
             end = self._buffer["timestamp"][(self._buffer_idx % self.buffer_size) - 1]
             self._last_timestamp = end
