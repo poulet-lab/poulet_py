@@ -136,7 +136,9 @@ class Max31856Source(BaseSource):
 
     def _acquisition_thread_func(self):
         """Background thread for continuous SPI data acquisition."""
+        print(f"Starting MAX31856 acquisition thread for {self.name}")
         while not self._stop_acquisition and self._is_open:
+            print(f"Acquiring MAX31856 data for {self.name}")
             try:
                 faults = self._max31856._read_register(_MAX31856_SR_REG, 1)[0]
                 self._max31856._perform_one_shot_measurement()
