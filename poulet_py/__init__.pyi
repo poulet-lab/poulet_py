@@ -40,6 +40,7 @@ from .io import (
     TCSSource,
     Max31856Source,
     ThermocoupleType,
+    StimuliMetadataSource,
 )
 from .stimulus import (
     BaseStimulus,
@@ -71,6 +72,7 @@ __all__ = [
     "LOGGER",
     "SETTINGS",
     "TCS",
+    "StimuliMetadataSource",
     "AcquisitionType",
     "Arduino",
     "BaseEvent",

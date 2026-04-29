@@ -5,10 +5,12 @@ from .counter import CounterSource
 from .tcs import TCSSource
 from .open_ephys import OpenEphysSource
 from .max31856 import Max31856Source, ThermocoupleType
+from .stimuli_metadata import StimuliMetadataSource
 
 __all__ = [
     "BaseSource",
     "Max31856Source",
+    "StimuliMetadataSource",
     "ThermocoupleType",
     "NIDaQSource",
     "CounterSource",
