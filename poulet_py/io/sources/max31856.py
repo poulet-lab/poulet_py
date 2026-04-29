@@ -1,5 +1,3 @@
-from pydantic import ConfigDict
-
 try:
     from enum import Enum
     from threading import Event, Thread
@@ -23,7 +21,7 @@ try:
     from board import MISO, MOSI, SCLK
     from busio import SPI
     from digitalio import DigitalInOut, Direction
-    from pydantic import Field, PrivateAttr
+    from pydantic import ConfigDict, Field, PrivateAttr
 
     from poulet_py import LOGGER, BaseSource, precise_sleep
 except ImportError as e:

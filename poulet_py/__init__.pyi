@@ -39,6 +39,7 @@ from .io import (
     SinkEvent,
     TCSSource,
     Max31856Source,
+    ThermocoupleType,
 )
 from .stimulus import (
     BaseStimulus,
@@ -83,6 +84,7 @@ __all__ = [
     "OpenEphysSource",
     "EmptyStimulus",
     "EventBus",
+    "ThermocoupleType",
     "EventHandler",
     "ExperimentBlock",
     "ExperimentRuntime",
