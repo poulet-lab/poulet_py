@@ -67,8 +67,8 @@ class DataStructureVersion1(BaseData):
 
     def _folder_datetime(self) -> datetime | None:
         folder_name = self.path.name
-        for date_format in ("%y%m%d_%H%M%S", "%Y%m%d_%H%M%S"): 
-            # TODO: add just time not date 
+        for date_format in ("%y%m%d_%H%M%S", "%Y%m%d_%H%M%S"):
+            # TODO: add just time not date
             # TODO: also option to add internal time, so like u say the trials within the first 2 minutes
             try:
                 return datetime.strptime(folder_name, date_format)
@@ -308,7 +308,7 @@ class Trial(BaseModel):
 
 class Session(BaseModel):
     path: Path = Field(..., description="Path to the session folder")
-    start: datetime | int | None= Field(default=None)
+    start: datetime | int | None = Field(default=None)
     end: datetime | int | None = Field(default=None)
 
     _trials: list[Trial] = PrivateAttr(default_factory=list)
@@ -330,7 +330,7 @@ class Session(BaseModel):
         for trial in self._trials:
             if trial.trial_open_filter(start, end):
                 trial.open()
-    
+
     # TODO: function to index trials
 
     def close(self) -> None:
