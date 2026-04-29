@@ -148,18 +148,12 @@ class BaseSource(BaseModel, ABC):
 
     def _publish_continuous(self) -> bool:
         with self._lock:
-            print(
-                f"{self.name} publish continuous: buffer_idx={self._buffer_idx}, buffer_size={self.buffer_size}"
-            )
-
             start = self._last_timestamp
             end = self._buffer["timestamp"][(self._buffer_idx % self.buffer_size) - 1]
             self._last_timestamp = end
-            print(f"{self.name} publish continuous: start={start}, end={end}")
 
         mask = (self._buffer["timestamp"] > start) & (self._buffer["timestamp"] < end)
         chunk = self._buffer[mask].copy()
-        print(f"{self.name} publish continuous: chunk size={chunk.size}")
         if chunk.size == 0:
             return False
 

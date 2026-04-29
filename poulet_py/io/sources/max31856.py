@@ -136,7 +136,6 @@ class Max31856Source(BaseSource):
 
     def _acquisition_thread_func(self):
         """Background thread for continuous SPI data acquisition."""
-        print(f"Starting acquisition thread for {self.name}")
         while not self._stop_acquisition and self._is_open:
             try:
                 faults = self._max31856._read_register(_MAX31856_SR_REG, 1)[0]
@@ -144,9 +143,7 @@ class Max31856Source(BaseSource):
                 timestamp = time_ns()
                 temperature = self._max31856.read_high_res_temp()
                 reference = self._max31856.unpack_reference_temperature()
-                print(
-                    f"Acquired data - Timestamp: {timestamp}, Temperature: {temperature:.2f}°C, Reference: {reference:.2f}°C, Faults: {faults:#04x}"
-                )
+
                 if faults:
                     msg = "Faults found in the following: "
                     if faults & _MAX31856_FAULT_CJRANGE:
@@ -169,7 +166,6 @@ class Max31856Source(BaseSource):
 
                 with self._lock:
                     idx = self._buffer_idx % self.buffer_size
-                    print(f"Writing to buffer at index {idx}")
                     self._buffer[idx]["timestamp"] = timestamp
                     self._buffer[idx]["temperature"] = temperature
                     self._buffer[idx]["reference"] = reference
