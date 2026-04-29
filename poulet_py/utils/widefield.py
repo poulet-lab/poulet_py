@@ -31,16 +31,19 @@ class BaseData(BaseModel, ABC):
     @abstractmethod
     def _open(self): ...
 
+    @abstractmethod
+    def _close(self): ...
 
-# find better name # CHECK
-class DataStructureV1(BaseData):
+
+# TODO: README for version 1
+class DataStructureVersion1(BaseData):
     path: Path = Field(..., description="Path to trial folder")
+    # TODO: automatically set based on path and default names and move to private but not property
     imaging_path: Path | None = Field(default=None)
     timestamps_path: Path | None = Field(default=None)
     analog_output_data_path: Path | None = Field(default=None)
     reference_image_path: Path | None = Field(default=None)
 
-    # similar to all private attrs # CHECK
     _imaging_data: ndarray[Any, Any] | None = PrivateAttr(default=None)
     _green_reference: ndarray[Any, Any] | None = PrivateAttr(default=None)
     _timestamps: DataFrame | None = PrivateAttr(default=None)
@@ -50,7 +53,7 @@ class DataStructureV1(BaseData):
     _condition: dict[str, Any] | None = PrivateAttr(default=None)
     _roi: dict[str, Any] | None = PrivateAttr(default=None)
 
-    def trial_open_filter(self, start: datetime | int, end: datetime | int) -> bool: # CHECK
+    def trial_open_filter(self, start: datetime | int, end: datetime | int) -> bool:
         if isinstance(start, datetime) and isinstance(end, datetime):
             folder_time = self._folder_datetime()
             return folder_time is not None and start <= folder_time <= end
@@ -64,7 +67,9 @@ class DataStructureV1(BaseData):
 
     def _folder_datetime(self) -> datetime | None:
         folder_name = self.path.name
-        for date_format in ("%y%m%d_%H%M%S", "%Y%m%d_%H%M%S"):
+        for date_format in ("%y%m%d_%H%M%S", "%Y%m%d_%H%M%S"): 
+            # TODO: add just time not date 
+            # TODO: also option to add internal time, so like u say the trials within the first 2 minutes
             try:
                 return datetime.strptime(folder_name, date_format)
             except ValueError:
@@ -136,7 +141,7 @@ class DataStructureV1(BaseData):
         self.analog_output_data_path = h5_path if h5_path.exists() else None
         self.reference_image_path = green_path if green_path.exists() else None
 
-    def open(self) -> None:
+    def _open(self) -> None:
         self._resolve_paths()
         self._imaging_data = self._open_imaging()
         self._green_reference = self._open_reference_image()
@@ -147,7 +152,6 @@ class DataStructureV1(BaseData):
             self._analog_output_data_file_attrs,
         ) = self._open_analog_output()
 
-    # move all these to separated data or whatever u wannt calla it check commit 4031c9e # CHECK
     def _open_imaging(self) -> ndarray[Any, Any]:
         if self.imaging_path is None:
             raise ValueError("Imaging path is not set")
@@ -230,7 +234,7 @@ class DataStructureV1(BaseData):
             return {}, {}, {}
         return analog_output_data, analog_output_data_attrs, analog_output_data_file_attrs
 
-    def close(self) -> None:
+    def _close(self):
         self._imaging_data = None
         self._green_reference = None
         self._timestamps = None
@@ -287,20 +291,25 @@ class DataStructureV1(BaseData):
     def __str__(self) -> str:
         return self.summary()
 
+    # TODO: add metadata function to create dicitonary of all dictionary, then in summary use the function metadata in summary
 
-class Trial(DataStructureV1):
+
+class Trial(BaseModel):
     # make restriction of tiff, npy only etc.
     path: Path = Field(..., description="Path to the trial folder")
-    data: BaseData = Field(...)
+    _data: BaseData = PrivateAttr(default=None)
 
     def open(self) -> None:
-        self.data.open()
+        self._data._open()
+
+    def _close(self):
+        self._data._close()
 
 
 class Session(BaseModel):
     path: Path = Field(..., description="Path to the session folder")
-    start: datetime | int = Field()  # time or trial number and we see further # CHECK
-    end: datetime | int = Field()
+    start: datetime | int | None= Field(default=None)
+    end: datetime | int | None = Field(default=None)
 
     _trials: list[Trial] = PrivateAttr(default_factory=list)
 
@@ -321,10 +330,12 @@ class Session(BaseModel):
         for trial in self._trials:
             if trial.trial_open_filter(start, end):
                 trial.open()
+    
+    # TODO: function to index trials
 
     def close(self) -> None:
         for trial in self._trials:
-            trial.close()
+            trial._close()
 
 
 class WidefieldAnalysis(BaseModel):
