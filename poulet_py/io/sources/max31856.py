@@ -136,9 +136,7 @@ class Max31856Source(BaseSource):
 
     def _acquisition_thread_func(self):
         """Background thread for continuous SPI data acquisition."""
-        print(f"Starting MAX31856 acquisition thread for {self.name}")
         while not self._stop_acquisition and self._is_open:
-            print(f"Acquiring MAX31856 data for {self.name}")
             try:
                 faults = self._max31856._read_register(_MAX31856_SR_REG, 1)[0]
                 self._max31856._perform_one_shot_measurement()
@@ -168,14 +166,13 @@ class Max31856Source(BaseSource):
 
                 with self._lock:
                     idx = self._buffer_idx % self.buffer_size
-                    print(
-                        f"Writing MAX31856 data to buffer at index {idx}, timestamp {timestamp}, temperature {temperature:.2f}°C, reference {reference:.2f}°C, faults {faults:08b}"
-                    )
                     self._buffer[idx]["timestamp"] = timestamp
                     self._buffer[idx]["temperature"] = temperature
                     self._buffer[idx]["reference"] = reference
                     self._buffer[idx]["faults"] = faults
                     self._buffer_idx += 1
+
+                precise_sleep(0.1)  # Sleep briefly to avoid hogging CPU
 
             except Exception as e:
                 LOGGER.error(f"MAX31856 acquisition error: {e}")
