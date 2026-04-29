@@ -170,9 +170,13 @@ class BaseSource(BaseModel, ABC):
             start = self._last_timestamp
             end = start + self._max_stimulus_duration_ms * 1_000_000
             self._last_timestamp = end
+            print(f"Publishing finite data from timestamp {start} to {end}")
 
         mask = (self._buffer["timestamp"] > start) & (self._buffer["timestamp"] <= end)
         chunk = self._buffer[mask].copy()
+        print(
+            f"Chunk size: {chunk.size}, expected max duration: {self._max_stimulus_duration_ms} ms"
+        )
 
         if chunk.size == 0:
             return False
