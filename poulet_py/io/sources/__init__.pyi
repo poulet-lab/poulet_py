@@ -4,11 +4,12 @@ from .nidaq import NIDaQSource
 from .counter import CounterSource
 from .tcs import TCSSource
 from .open_ephys import OpenEphysSource
-from .max31856 import Max31856Source
+from .max31856 import Max31856Source, ThermocoupleType
 
 __all__ = [
     "BaseSource",
     "Max31856Source",
+    "ThermocoupleType",
     "NIDaQSource",
     "CounterSource",
     "TCSSource",

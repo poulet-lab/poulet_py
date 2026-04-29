@@ -9,12 +9,14 @@ from .sources import (
     TCSSource,
     OpenEphysSource,
     Max31856Source,
+    ThermocoupleType,
 )
 
 __all__ = [
     "AcquisitionType",
     "BaseEvent",
     "BaseSink",
+    "ThermocoupleType",
     "BaseSource",
     "CounterSource",
     "Max31856Source",
