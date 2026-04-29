@@ -84,14 +84,13 @@ class BaseSource(BaseModel, ABC):
         self.assert_open()
 
         self._stimuli = stimuli
-        print(f"Firing {self.name} with stimuli: {[st.name for st in self._stimuli]}")
         self._supports()
-        print(f"Supported stimuli for {self.name}: {[st.name for st in self._stimuli]}")
+
         if not self._stimuli and self.acquisition_type == AcquisitionType.FINITE:
             return False
 
         self._calculate_stimulus_duration()
-        print(f"Max stimulus duration for {self.name}: {self._max_stimulus_duration_ms} ms")
+
         if self.acquisition_type == AcquisitionType.FINITE:
             with self._lock:
                 self._last_timestamp = self._buffer["timestamp"][
@@ -99,9 +98,7 @@ class BaseSource(BaseModel, ABC):
                 ]
 
         self._fire()
-        print(f"Fired {self.name}")
         self._publish()
-        print(f"Published {self.name}")
 
         return True
 
