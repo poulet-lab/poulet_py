@@ -38,6 +38,7 @@ from .io import (
     OpenEphysSource,
     SinkEvent,
     TCSSource,
+    Max31856Source,
 )
 from .stimulus import (
     BaseStimulus,
@@ -77,6 +78,7 @@ __all__ = [
     "BaseStimulus",
     "BaseTrigger",
     "BaslerCamera",
+    "Max31856Source",
     "CounterSource",
     "OpenEphysSource",
     "EmptyStimulus",

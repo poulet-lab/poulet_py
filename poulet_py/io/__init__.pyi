@@ -8,6 +8,7 @@ from .sources import (
     NIDaQSource,
     TCSSource,
     OpenEphysSource,
+    Max31856Source,
 )
 
 __all__ = [
@@ -16,6 +17,7 @@ __all__ = [
     "BaseSink",
     "BaseSource",
     "CounterSource",
+    "Max31856Source",
     "EventBus",
     "EventHandler",
     "HDFSink",
