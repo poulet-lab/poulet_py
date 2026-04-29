@@ -34,7 +34,7 @@ Missing 'sources' module. Install options:
     raise ImportError(msg) from e
 
 
-class ThermocoupleType(Enum, int):
+class ThermocoupleType(int, Enum):
     B = ThType.B
     E = ThType.E
     J = ThType.J
