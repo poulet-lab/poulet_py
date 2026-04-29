@@ -1,6 +1,5 @@
 from pydantic import ConfigDict
 
-
 try:
     from enum import Enum
     from threading import Event, Thread
