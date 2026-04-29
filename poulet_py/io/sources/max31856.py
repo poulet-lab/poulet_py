@@ -166,6 +166,9 @@ class Max31856Source(BaseSource):
 
                 with self._lock:
                     idx = self._buffer_idx % self.buffer_size
+                    print(
+                        f"Writing MAX31856 data to buffer at index {idx}, timestamp {timestamp}, temperature {temperature:.2f}°C, reference {reference:.2f}°C, faults {faults:08b}"
+                    )
                     self._buffer[idx]["timestamp"] = timestamp
                     self._buffer[idx]["temperature"] = temperature
                     self._buffer[idx]["reference"] = reference
