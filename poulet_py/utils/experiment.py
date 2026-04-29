@@ -20,6 +20,7 @@ Missing 'experiment' module. Install options:
 
 
 class ExperimentTrial(BaseModel):
+    name: str = Field(...)
     stimuli: BaseStimulus | Sequence[BaseStimulus]
 
 
