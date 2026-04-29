@@ -1,3 +1,6 @@
+from pydantic import ConfigDict
+
+
 try:
     from enum import Enum
     from threading import Event, Thread
@@ -48,6 +51,8 @@ class ThermocoupleType(int, Enum):
 
 
 class Max31856Source(BaseSource):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     thermocouple_type: ThermocoupleType = Field(
         default=ThermocoupleType.K, description="Type of thermocouple"
     )
