@@ -41,6 +41,8 @@ from .io import (
     Max31856Source,
     ThermocoupleType,
     StimuliMetadataSource,
+    BaseData,
+    WidefieldData,
 )
 from .stimulus import (
     BaseStimulus,
@@ -79,6 +81,8 @@ __all__ = [
     "BaseSink",
     "BaseSource",
     "BaseStimulus",
+    "BaseData",
+    "WidefieldData",
     "BaseTrigger",
     "BaslerCamera",
     "Max31856Source",
