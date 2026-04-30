@@ -148,7 +148,6 @@ class BaseSource(BaseModel, ABC):
 
             self._last_timestamp = end
 
-
         mask = (self._buffer["timestamp"] >= start) & (self._buffer["timestamp"] <= end)
         chunk = self._buffer[mask].copy()
 
