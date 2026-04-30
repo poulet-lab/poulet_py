@@ -111,8 +111,6 @@ class SPISource(BaseSource):
                 # Write SPI data
                 self._spi.writebytes2(st.build())
 
-                if st._isi + st.post_delay > 0:
-                    precise_sleep((st._isi + st.post_delay) / 1000.0)
 
                     # Read response if in finite mode (store in buffer)
                     data = self._spi.readbytes(self.read_size)
