@@ -17,7 +17,6 @@ class BaseStimulus(BaseModel, ABC):
     duration: int = Field(..., ge=1)
     pre_delay: int = Field(default=0, ge=0)
     post_delay: int = Field(default=0, ge=0)
-    _isi: int = PrivateAttr(default=0)
 
     @abstractmethod
     def build(self, *args, **kwargs) -> Any: ...

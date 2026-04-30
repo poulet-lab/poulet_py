@@ -311,7 +311,7 @@ class TCS(BaseModel, validate_assignment=True):
         -----
         This method flushes the serial buffer before writing.
         """
-        self._assert_open()
+        self._ensure_open()
 
         self._serial.flush()
         LOGGER.debug(f"Sending command: {command}")
@@ -356,7 +356,7 @@ class TCS(BaseModel, validate_assignment=True):
         RuntimeError
             If serial connection is not open.
         """
-        self._assert_open()
+        self._ensure_open()
 
         request = TCSSerialSearchRequest(pattern=expected_pattern)
         event = request.event
@@ -398,7 +398,7 @@ class TCS(BaseModel, validate_assignment=True):
         This method starts a timer thread for stimulus duration and optionally
         activates buzzer and trigger output.
         """
-        self._assert_open()
+        self._ensure_open()
 
         self._validate_stimulus(stimulus)
 
@@ -440,7 +440,7 @@ class TCS(BaseModel, validate_assignment=True):
             If serial connection is not open, calibration fails, or
             response format is invalid.
         """
-        self._assert_open()
+        self._ensure_open()
 
         match = self.execute_command(
             command=TCSCommand.AUTOMATIC_CALIBRATION,
@@ -462,7 +462,7 @@ class TCS(BaseModel, validate_assignment=True):
 
     def reset(self):
         """Reset the TCS device to its initial state."""
-        self._assert_open()
+        self._ensure_open()
 
         self.execute_command(TCSCommand.RESET)
         LOGGER.info("Reset successfully")
@@ -487,7 +487,7 @@ class TCS(BaseModel, validate_assignment=True):
         The returned array has dtype with fields: 'timestamp' (uint64) and
         's0' through 's4' (float64) for the 5 temperature channels.
         """
-        self._assert_open()
+        self._ensure_open()
 
         with self._sampling_cond:
             if self._buffer_idx == 0:
@@ -529,7 +529,7 @@ class TCS(BaseModel, validate_assignment=True):
         This method reads the most recent samples from the circular buffer,
         returning them in chronological order (oldest to newest).
         """
-        self._assert_open()
+        self._ensure_open()
 
         if data.shape[0] < n:
             msg = f"Provided array has {data.shape[0]} rows, need at least {n}"
@@ -607,7 +607,7 @@ class TCS(BaseModel, validate_assignment=True):
         finally:
             self._stimulus_running = False
 
-    def _assert_open(self):
+    def _ensure_open(self):
         """
         Check if serial connection is open.
 

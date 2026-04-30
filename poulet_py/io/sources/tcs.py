@@ -35,6 +35,6 @@ class TCSSource(BaseSource, TCS):
                 while self.stimulus_running:
                     pass
 
-                precise_sleep((st._isi + st.post_delay) / 1000.0)
+                precise_sleep(st.post_delay / 1000.0)
 
         return True

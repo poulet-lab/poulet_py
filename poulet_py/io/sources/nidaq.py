@@ -111,19 +111,4 @@ class NIDaQSource(BaseSource, NIDaQ):
         if self.acquisition_type == AcquisitionType.FINITE:
             self.stop()
 
-        isi = 0
-        for st in self._stimuli:
-            if isinstance(
-                st,
-                (
-                    NIAnalogCompositeStimulus,
-                    NIDigitalCompositeStimulus,
-                    NIAnalogBaseStimulus,
-                    NIDigitalBaseStimulus,
-                ),
-            ):
-                isi = max(isi, st._isi)
-
-        precise_sleep(isi / 1000.0)
-
         return True

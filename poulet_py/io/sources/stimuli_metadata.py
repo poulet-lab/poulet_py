@@ -32,8 +32,8 @@ class StimuliMetadataSource(BaseSource):
         pass
 
     def _fire(self) -> bool:
-        meta = [st.model_dump(exclude_unset=True, exclude_none=True) for st in self._stimuli]
         timestamp = time_ns()
+        meta = [st.model_dump(exclude_unset=True, exclude_none=True) for st in self._stimuli]
 
         json_data = dumps(
             meta,

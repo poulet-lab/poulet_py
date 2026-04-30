@@ -2,7 +2,7 @@ try:
     from pathlib import Path
     from typing import Any, Literal
 
-    from h5py import File, Group
+    from h5py import Dataset, File, Group
     from numpy import ndarray
     from orjson import OPT_SERIALIZE_DATACLASS, OPT_SERIALIZE_NUMPY, OPT_SERIALIZE_UUID, dumps
     from pydantic import Field, PrivateAttr
@@ -26,11 +26,11 @@ class HDFSink(BaseSink):
     )
     compression_level: int = Field(default=4, description="Compression level for gzip (1-9)")
     grow_step: int = Field(
-        default=10_000,
+        default=500,
         description="Number of samples to grow the dataset by when capacity is exceeded",
     )
 
-    _h5file: File | None = PrivateAttr(default=None)
+    _h5file: File = PrivateAttr()
     _sources: dict = PrivateAttr(default_factory=dict)
 
     def _open(self):
@@ -45,17 +45,17 @@ class HDFSink(BaseSink):
     def _close(self):
         if self._h5file:
             for src in self._sources.values():
-                for dataset in src["datasets"].values():
-                    size = dataset["size"]
-                    dataset["data"].resize((size, *dataset["fixed_shape"]))
+                if src["dataset"]:
+                    size = src["size"]
+                    src["dataset"].resize((size, *src["fixed_shape"]))
 
             self._h5file.flush()
             self._h5file.close()
-            self._h5file = None
+            del self._h5file
 
         self._sources.clear()
 
-    def _write_meta(self, part: File | Group, meta: dict[str, Any]):
+    def _write_meta(self, part: File | Group | Dataset, meta: dict[str, Any]):
         for k, v in meta.items():
             part.attrs[k] = dumps(
                 v,
@@ -63,27 +63,23 @@ class HDFSink(BaseSink):
             ).decode("utf-8")
 
     def _init_source(self, event: SinkEvent):
-        if not self._h5file:
-            return
-
         name = event.name
         if name in self._sources:
             return
 
-        grp = self._h5file.require_group(name)
+        self._sources[name] = {
+            "dataset": None,
+            "size": 0,
+            "capacity": 0,
+            "fixed_shape": None,
+            "meta": event.meta,
+        }
 
-        if event.meta:
-            self._write_meta(grp, event.meta)
-
-        self._sources[name] = {"group": grp, "datasets": {}}
-
-    def _init_dataset(self, src_name: str, dataset_name: str, array: ndarray):
+    def _init_dataset(self, src_name: str, array: ndarray):
         src = self._sources[src_name]
 
-        if dataset_name in src["datasets"]:
+        if src["dataset"] is not None:
             return
-
-        grp = src["group"]
 
         append_dim = array.shape[0]
         fixed_shape = array.shape[1:]
@@ -93,8 +89,8 @@ class HDFSink(BaseSink):
         full_shape = (initial_capacity, *fixed_shape)
         maxshape = (None, *fixed_shape)
 
-        dset = grp.create_dataset(
-            dataset_name,
+        dset = self._h5file.create_dataset(
+            src_name,
             shape=full_shape,
             maxshape=maxshape,
             chunks=True,
@@ -103,54 +99,53 @@ class HDFSink(BaseSink):
             compression_opts=(self.compression_level if self.compression == "gzip" else None),
         )
 
-        src["datasets"][dataset_name] = {
-            "data": dset,
-            "size": 0,
-            "capacity": initial_capacity,
-            "fixed_shape": fixed_shape,
-        }
+        if src["meta"]:
+            self._write_meta(dset, src["meta"])
 
-    def _grow_if_needed(self, dataset, append_len):
-        required = dataset["size"] + append_len
-        if required <= dataset["capacity"]:
+        src["dataset"] = dset
+        src["capacity"] = initial_capacity
+        src["fixed_shape"] = fixed_shape
+
+    def _grow_if_needed(self, src, append_len):
+        required = src["size"] + append_len
+        if required <= src["capacity"]:
             return
 
         new_capacity = required + self.grow_step
-        new_shape = (new_capacity, *dataset["fixed_shape"])
+        new_shape = (new_capacity, *src["fixed_shape"])
 
-        dataset["data"].resize(new_shape)
-        dataset["capacity"] = new_capacity
+        src["dataset"].resize(new_shape)
+        src["capacity"] = new_capacity
 
     def _on_event(self, event: BaseEvent):
         if isinstance(event, SinkEvent):
             name = event.name
             self._init_source(event)
 
+            array = event.payload
+
+            if not isinstance(array, ndarray):
+                return
+
+            arr = array.reshape(1) if array.ndim == 0 else array
+
+            self._init_dataset(name, arr)
+
             src = self._sources[name]
 
-            for dataset_name, array in event.payload.items():
-                if not isinstance(array, ndarray):
-                    continue
+            if arr.shape[1:] != src["fixed_shape"]:
+                msg = (
+                    f"Shape mismatch for source '{name}'. "
+                    f"Expected (*, {src['fixed_shape']}), "
+                    f"got {arr.shape}"
+                )
+                raise ValueError(msg)
 
-                arr = array.reshape(1) if array.ndim == 0 else array
+            append_len = arr.shape[0]
+            self._grow_if_needed(src, append_len)
 
-                self._init_dataset(name, dataset_name, arr)
+            start = src["size"]
+            end = start + append_len
 
-                dataset = src["datasets"][dataset_name]
-
-                if arr.shape[1:] != dataset["fixed_shape"]:
-                    msg = (
-                        f"Shape mismatch for dataset '{dataset_name}'. "
-                        f"Expected (*, {dataset['fixed_shape']}), "
-                        f"got {arr.shape}"
-                    )
-                    raise ValueError(msg)
-
-                append_len = arr.shape[0]
-                self._grow_if_needed(dataset, append_len)
-
-                start = dataset["size"]
-                end = start + append_len
-
-                dataset["data"][start:end] = arr
-                dataset["size"] = end
+            src["dataset"][start:end] = arr
+            src["size"] = end

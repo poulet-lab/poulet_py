@@ -21,9 +21,7 @@ class BaseEvent(BaseModel):
 
 
 class SinkEvent(BaseEvent):
-    payload: dict[str, NDArray[Any, Any]] = Field(
-        ..., description="Data fields as a dictionary of numpy arrays"
-    )
+    payload: NDArray[Any, Any] = Field(..., description="Data as a numpy array")
     meta: dict[str, Any] | None = Field(
         default=None, description="Additional metadata for the data packet"
     )
