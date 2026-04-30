@@ -732,7 +732,7 @@ class NIDaQ(BaseModel):
         default_factory=list
     )
     _is_open: bool = PrivateAttr(default=False)
-    _executor: ThreadPoolExecutor | None = PrivateAttr(None)
+    _executor: ThreadPoolExecutor = PrivateAttr(None)
 
     @staticmethod
     def get_available_devices() -> Sequence:
@@ -772,7 +772,7 @@ class NIDaQ(BaseModel):
         | NIAnalogBaseStimulus
         | NIDigitalBaseStimulus,
     ):
-        if not self._is_open or not self._clock_task:
+        if not self._is_open:
             msg = "NIDaQ must be first opened"
             raise RuntimeError(msg)
 
@@ -787,7 +787,7 @@ class NIDaQ(BaseModel):
                 task.write(stimulus.build(task._clock_handle.rate))
 
     def read(self, samples: int = -1, timeout: float = 10.0) -> dict[str, ndarray]:
-        if not self._is_open or not self._executor:
+        if not self._is_open:
             msg = "NIDaQ must be first opened"
             raise RuntimeError(msg)
 
@@ -802,7 +802,8 @@ class NIDaQ(BaseModel):
             for future in as_completed(future_map):
                 task = future_map[future]
                 ret[task.name] = future.result()
-
+        else:
+            self._clock_task._task.wait_until_done(-1)
         return ret
 
     def wait(self, timeout: float = 10.0):

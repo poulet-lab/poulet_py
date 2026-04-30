@@ -48,9 +48,6 @@ class StimuliMetadataSource(BaseSource):
 
         with self._lock:
             idx = self._buffer_idx % self.buffer_size
-            print(
-                f"Writing metadata to buffer at index {idx}, timestamp {timestamp}, data length {len(json_data)} bytes"
-            )
             self._buffer[idx]["timestamp"] = timestamp
             self._buffer[idx]["metadata"] = json_data
             self._buffer_idx += 1
