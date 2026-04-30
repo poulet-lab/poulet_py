@@ -3,6 +3,7 @@ try:
     from collections.abc import Sequence
     from enum import Enum
     from threading import Lock
+    from time import time_ns
     from typing import Literal
 
     from numpy import dtype, ndarray, zeros
@@ -28,7 +29,7 @@ class AcquisitionType(str, Enum):
 class BaseSource(BaseModel, ABC):
     name: str = Field(..., description="Name of the data source")
     acquisition_type: AcquisitionType = Field(default=AcquisitionType.FINITE, description="")
-    fire_on: Literal["all"] | list[BaseStimulus] = Field(default="all")
+    fire_on: Literal["all"] | list[type] = Field(default="all")
     buffer_size: int = Field(default=500, description="Size of the circular buffer", ge=1)
     bus: EventBus | None = Field(default=None)
 
@@ -42,7 +43,7 @@ class BaseSource(BaseModel, ABC):
     _buffer_dtype: Sequence[tuple[str, dtype | str | Sequence[tuple[str, dtype | str]]]] = (
         PrivateAttr()
     )
-    _last_timestamp: int = PrivateAttr(default=0)
+    _last_timestamp: int = PrivateAttr(default=time_ns)
 
     @abstractmethod
     def _open(self): ...
@@ -93,9 +94,7 @@ class BaseSource(BaseModel, ABC):
 
         if self.acquisition_type == AcquisitionType.FINITE:
             with self._lock:
-                self._last_timestamp = self._buffer["timestamp"][
-                    (self._buffer_idx % self.buffer_size) - 1
-                ]
+                self._last_timestamp = time_ns()
 
         self._fire()
         self._publish()
@@ -116,13 +115,13 @@ class BaseSource(BaseModel, ABC):
             self._buffer_dtype = [("timestamp", "uint64"), *self._buffer_dtype]
 
         self._buffer = zeros(self.buffer_size, dtype=self._buffer_dtype)
-        self._last_timestamp = 0
         self._buffer_idx = 0
+        self._last_timestamp = time_ns()
 
     def _supports(self):
         if self.fire_on == "all":
             return
-        self._stimuli = [st for st in self._stimuli if st in self.fire_on]
+        self._stimuli = [st for st in self._stimuli if type(st) in self.fire_on]
 
     def _calculate_stimulus_duration(self):
         pre_delay = 0
@@ -139,50 +138,29 @@ class BaseSource(BaseModel, ABC):
         self._max_stimulus_duration_ms = pre_delay + duration + post_delay + isi
 
     def _publish(self) -> bool:
-        if self.acquisition_type == AcquisitionType.CONTINUOUS:
-            return self._publish_continuous()
-        elif self.acquisition_type == AcquisitionType.FINITE:
-            return self._publish_finite()
-
-        return False
-
-    def _publish_continuous(self) -> bool:
         with self._lock:
+            idx = self._buffer_idx % self.buffer_size
             start = self._last_timestamp
-            end = self._buffer["timestamp"][(self._buffer_idx % self.buffer_size) - 1]
+            end = self._buffer["timestamp"][idx - 1]
+
+            if end == 0:
+                end = self._buffer["timestamp"][idx]
+
             self._last_timestamp = end
 
-        mask = (self._buffer["timestamp"] > start) & (self._buffer["timestamp"] < end)
+
+        mask = (self._buffer["timestamp"] >= start) & (self._buffer["timestamp"] <= end)
         chunk = self._buffer[mask].copy()
+
         if chunk.size == 0:
             return False
 
         self.publish(
             SinkEvent(
-                name=self.name, payload={self.name: chunk}, meta={"acquisition": "continuous"}
+                name=self.name,
+                payload={self.name: chunk},
+                meta={"acquisition": self.acquisition_type.value},
             )
-        )
-
-        return True
-
-    def _publish_finite(self) -> bool:
-        with self._lock:
-            start = self._last_timestamp
-            end = start + self._max_stimulus_duration_ms * 1_000_000
-            self._last_timestamp = end
-            print(f"Publishing finite data from timestamp {start} to {end}")
-
-        mask = (self._buffer["timestamp"] > start) & (self._buffer["timestamp"] <= end)
-        chunk = self._buffer[mask].copy()
-        print(
-            f"Chunk size: {chunk.size}, expected max duration: {self._max_stimulus_duration_ms} ms"
-        )
-
-        if chunk.size == 0:
-            return False
-
-        self.publish(
-            SinkEvent(name=self.name, payload={self.name: chunk}, meta={"acquisition": "finite"})
         )
 
         return True
