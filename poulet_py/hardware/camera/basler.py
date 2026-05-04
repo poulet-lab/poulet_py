@@ -305,7 +305,9 @@ class BaslerCamera:
                     if record and camera_index in self.outs:
                         self.outs[camera_index].write(img_bgr)
                         elapsed_s = time.time() - self.start_time
-                        self.frame_numbers[camera_index] = self.frame_numbers.get(camera_index, 0) + 1
+                        self.frame_numbers[camera_index] = (
+                            self.frame_numbers.get(camera_index, 0) + 1
+                        )
                         self.save_timestamp(
                             camera_index,
                             elapsed_s,
@@ -354,8 +356,12 @@ class BaslerCamera:
             }
 
         diagnostics = {
-            "run_start_iso": datetime.datetime.fromtimestamp(run_start).isoformat(timespec="seconds"),
-            "run_end_iso": datetime.datetime.fromtimestamp(time.time()).isoformat(timespec="seconds"),
+            "run_start_iso": datetime.datetime.fromtimestamp(run_start).isoformat(
+                timespec="seconds"
+            ),
+            "run_end_iso": datetime.datetime.fromtimestamp(time.time()).isoformat(
+                timespec="seconds"
+            ),
             "duration_s": round(duration_actual_s, 3),
             "configured_fps": self.frames_per_second,
             "stop_requested_by_key": stop_requested_by_key,
@@ -406,7 +412,9 @@ class BaslerCamera:
                 "width": cam.Width.Value,
                 "height": cam.Height.Value,
                 "frame_rate_fps": self.frames_per_second,
-                "output_file": self.output_files.get(i, f"{base_file_name}_{extra_name}_cam{i}.mp4"),
+                "output_file": self.output_files.get(
+                    i, f"{base_file_name}_{extra_name}_cam{i}.mp4"
+                ),
                 "number_of_frames": self.frame_numbers.get(i, 0),
             }
             with open(metadata_path, "w") as f:
