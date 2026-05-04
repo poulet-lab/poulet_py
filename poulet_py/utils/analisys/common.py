@@ -75,7 +75,6 @@ class TrialCollection:
 
 
 class Session(BaseModel):
-    # TODO: function to index trials
 
     path: Path = Field(..., description="Path to the session folder")
     start: datetime | int | None = Field(default=None)
@@ -86,11 +85,101 @@ class Session(BaseModel):
 
     _trials: list[BaseData] = PrivateAttr()
     _is_open: bool = PrivateAttr(default=False)
+    _trial_index: slice | None = PrivateAttr(default=None)
+    _elapsed_seconds_end: int | None = PrivateAttr(default=None)
+    _elapsed_seconds_window: tuple[int, int] | None = PrivateAttr(default=None)
 
     @property
     def trials(self) -> "TrialCollection":
         self._ensure_open()
         return TrialCollection(self._trials)
+
+    @property
+    def trial_range(self) -> slice | None:
+        return self._trial_index
+
+    def set_trial_range(
+        self,
+        start: int | None,
+        end: int | None,
+        step: int | None = None,
+    ) -> None:
+        for name, value in (("start", start), ("end", end), ("step", step)):
+            if value is not None and not isinstance(value, int):
+                msg = f"{name} must be an integer or None"
+                raise TypeError(msg)
+        if step == 0:
+            msg = "step must not be zero"
+            raise ValueError(msg)
+
+        self._trial_index = slice(start, end, step)
+
+    def set_elapsed_seconds(self, start: Any, end: Any | None = None) -> None:
+        if not isinstance(start, int):
+            msg = "start must be an integer"
+            raise TypeError(msg)
+        if start < 0:
+            msg = "start must be >= 0"
+            raise ValueError(msg)
+
+        if end is None:
+            self._elapsed_seconds_end = start
+            self._elapsed_seconds_window = None
+            return
+
+        if not isinstance(end, int):
+            msg = "end must be an integer"
+            raise TypeError(msg)
+        if end < 0:
+            msg = "end must be >= 0"
+            raise ValueError(msg)
+        if start > end:
+            msg = "elapsed seconds window must be ordered as (start, end)"
+            raise ValueError(msg)
+
+        self._elapsed_seconds_end = None
+        self._elapsed_seconds_window = (start, end)
+
+    def clear_elapsed_seconds_filter(self) -> None:
+        self._elapsed_seconds_end = None
+        self._elapsed_seconds_window = None
+
+    def _is_elapsed_seconds_filter_enabled(self) -> bool:
+        return self._elapsed_seconds_end is not None or self._elapsed_seconds_window is not None
+
+    def _resolve_session_anchor_time(self, trial_paths: list[Path]) -> datetime:
+        parser = getattr(self.data_type, "_parse_folder_datetime", None)
+        if not callable(parser):
+            msg = (
+                f"{self.data_type} does not support elapsed-seconds filtering. "
+                "Expected a _parse_folder_datetime(folder_name) helper."
+            )
+            raise TypeError(msg)
+
+        first_trial_name = trial_paths[0].name
+        anchor_time = parser(first_trial_name)
+        if anchor_time is None:
+            msg = (
+                "Unable to compute session anchor time from first trial folder "
+                f"'{first_trial_name}'. Expected folder names in yyMMdd_HHmmss, "
+                "yyyyMMdd_HHmmss, or HHmmss format."
+            )
+            raise ValueError(msg)
+        return anchor_time
+
+    def _select_trial_paths(self, trial_paths: list[Path]) -> list[Path]:
+        if self._trial_index is None:
+            return trial_paths
+
+        selected_paths = trial_paths[self._trial_index]
+        if not selected_paths:
+            msg = (
+                f"Trial range {self._trial_index.start}:{self._trial_index.stop}:"
+                f"{self._trial_index.step} selected no trials out of "
+                f"{len(trial_paths)} discovered"
+            )
+            raise ValueError(msg)
+        return selected_paths
 
     def open(self) -> None:
         if self._is_open:
@@ -105,10 +194,26 @@ class Session(BaseModel):
         if not trial_paths:
             trial_paths = [self.path]
 
+        trial_paths = self._select_trial_paths(sorted(trial_paths))
+        session_anchor_time = (
+            self._resolve_session_anchor_time(trial_paths)
+            if self._is_elapsed_seconds_filter_enabled()
+            else None
+        )
+
         trials: list[BaseData] = []
 
-        for path in sorted(trial_paths):
-            trial = self.data_type(path=path, start=self.start, end=self.end)
+        for path in trial_paths:
+            trial = self.data_type(
+                path=path,
+                start=self.start,
+                end=self.end,
+                elapsed_seconds_end=self._elapsed_seconds_end,
+                elapsed_seconds_window=self._elapsed_seconds_window,
+                session_anchor_time=session_anchor_time,
+            )
+            if self._is_elapsed_seconds_filter_enabled() and not trial._should_open():
+                continue
             trial.open()
             trials.append(trial)
 

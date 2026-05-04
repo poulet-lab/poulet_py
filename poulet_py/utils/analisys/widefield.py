@@ -7,7 +7,7 @@ try:
     from numpy import ceil, ndarray, pad, save, savez_compressed, uint16
     from pydantic import BaseModel, Field, PrivateAttr
 
-    from poulet_py import LOGGER, Session
+    from poulet_py import LOGGER, Session, WidefieldData
 
 except ImportError as e:
     msg = """
@@ -26,7 +26,7 @@ class WidefieldAnalysis(BaseModel):
     _active_trial_idx: int = PrivateAttr(default=0)
 
     @property
-    def active_trial(self) -> Trial:
+    def active_trial(self) -> WidefieldData:
         if not self.session.trials:
             msg = "Session has no trials configured"
             raise ValueError(msg)
@@ -49,7 +49,7 @@ class WidefieldAnalysis(BaseModel):
         if load:
             wf.load(path)
         else:
-            wf.session.add_trial(Trial(path=path))
+            wf.session.add_trial(WidefieldData(path=path))
         return wf
 
     @classmethod
@@ -63,7 +63,7 @@ class WidefieldAnalysis(BaseModel):
         elif path.exists() and path.is_dir():
             for child in sorted(path.iterdir()):
                 if cls._is_trial_folder(child):
-                    wf.session.add_trial(Trial(path=child))
+                    wf.session.add_trial(WidefieldData(path=child))
         return wf
 
     def load(self, path: Path | str | None = None) -> None:
@@ -87,7 +87,7 @@ class WidefieldAnalysis(BaseModel):
                     trial.open()
                     LOGGER.info(str(trial))
                     return
-            trial = Trial(path=target)
+            trial = WidefieldData(path=target)
             self.session.add_trial(trial)
             self._active_trial_idx = len(self.session.trials) - 1
             trial.open()
@@ -116,7 +116,7 @@ class WidefieldAnalysis(BaseModel):
 
         for trial_path in discovered_trials:
             existing = next((t for t in self.session.trials if t.path == trial_path), None)
-            trial = existing if existing is not None else Trial(path=trial_path)
+            trial = existing if existing is not None else WidefieldData(path=trial_path)
             if existing is None:
                 self.session.add_trial(trial)
             trial.open()

@@ -1,4 +1,6 @@
 try:
+    import re
+    from datetime import datetime
     from pathlib import Path
     from typing import Any, ClassVar
 
@@ -6,7 +8,7 @@ try:
     from h5py import File
     from numpy import array, load, ndarray
     from pandas import DataFrame, read_csv
-    from pydantic import PrivateAttr
+    from pydantic import Field, PrivateAttr, model_validator
     from skimage.io import imread
 
     from poulet_py import LOGGER, BaseData
@@ -40,6 +42,54 @@ class WidefieldData(BaseData):
     _analog_output_data_file_attrs: dict[str, Any] = PrivateAttr(default_factory=dict)
     _condition: dict[str, Any] = PrivateAttr(default_factory=dict)
     _roi: dict[str, Any] = PrivateAttr(default_factory=dict)
+    elapsed_seconds_end: int | None = Field(default=None)
+    elapsed_seconds_window: tuple[int, int] | None = Field(default=None)
+    session_anchor_time: datetime | None = Field(default=None)
+
+    @model_validator(mode="after")
+    def _validate_elapsed_seconds_filter(self):
+        if self.elapsed_seconds_end is not None and self.elapsed_seconds_window is not None:
+            msg = "Use either elapsed_seconds_end or elapsed_seconds_window, not both"
+            raise ValueError(msg)
+
+        if self.elapsed_seconds_end is not None and self.elapsed_seconds_end < 0:
+            msg = "elapsed_seconds_end must be >= 0"
+            raise ValueError(msg)
+
+        if self.elapsed_seconds_window is not None:
+            start_seconds, end_seconds = self.elapsed_seconds_window
+            if start_seconds < 0 or end_seconds < 0:
+                msg = "elapsed_seconds_window values must be >= 0"
+                raise ValueError(msg)
+            if start_seconds > end_seconds:
+                msg = "elapsed_seconds_window must be ordered as (start, end)"
+                raise ValueError(msg)
+
+        return self
+
+    @staticmethod
+    def _parse_folder_datetime(
+        folder_name: str,
+        anchor_time: datetime | None = None,
+    ) -> datetime | None:
+        for date_format in ("%y%m%d_%H%M%S", "%Y%m%d_%H%M%S"):
+            try:
+                return datetime.strptime(folder_name, date_format)
+            except ValueError:
+                continue
+
+        try:
+            parsed_time = datetime.strptime(folder_name, "%H%M%S")
+        except ValueError:
+            return None
+
+        if anchor_time is None:
+            return parsed_time
+        return parsed_time.replace(
+            year=anchor_time.year,
+            month=anchor_time.month,
+            day=anchor_time.day,
+        )
 
     @property
     def imaging_data(self):
@@ -276,27 +326,39 @@ class WidefieldDataV1(WidefieldData):
 
     #TODO
     def _should_open(self) -> bool:
-            if isinstance(self.start, datetime) and isinstance(self.end, datetime):
-                folder_time = self._folder_datetime()
-                return folder_time is not None and self.start <= folder_time <= self.end
+        if self.elapsed_seconds_end is not None or self.elapsed_seconds_window is not None:
+            if self.session_anchor_time is None:
+                msg = "session_anchor_time is required when using elapsed-seconds filtering"
+                raise ValueError(msg)
 
-            if isinstance(self.start, int) and isinstance(self.end, int):
-                trial_number = self._folder_trial_number()
-                return trial_number is not None and self.start <= trial_number <= self.end
+            folder_time = self._folder_datetime(anchor_time=self.session_anchor_time)
+            if folder_time is None:
+                return False
 
-            msg = "start and end must both be datetime values or both be integer trial numbers"
-            raise TypeError(msg)
+            elapsed_seconds = (folder_time - self.session_anchor_time).total_seconds()
+            if elapsed_seconds < 0:
+                return False
 
-    def _folder_datetime(self) -> datetime | None:
-        folder_name = self.path.name
-        for date_format in ("%y%m%d_%H%M%S", "%Y%m%d_%H%M%S"):
-            # TODO: add just time not date
-            # TODO: also option to add internal time, so like u say the trials within the first 2 minutes
-            try:
-                return datetime.strptime(folder_name, date_format)
-            except ValueError:
-                continue
-        return None
+            if self.elapsed_seconds_end is not None:
+                return elapsed_seconds <= self.elapsed_seconds_end
+
+            if self.elapsed_seconds_window is not None:
+                start_seconds, end_seconds = self.elapsed_seconds_window
+                return start_seconds <= elapsed_seconds <= end_seconds
+
+        if isinstance(self.start, datetime) and isinstance(self.end, datetime):
+            folder_time = self._folder_datetime()
+            return folder_time is not None and self.start <= folder_time <= self.end
+
+        if isinstance(self.start, int) and isinstance(self.end, int):
+            trial_number = self._folder_trial_number()
+            return trial_number is not None and self.start <= trial_number <= self.end
+
+        msg = "start and end must both be datetime values or both be integer trial numbers"
+        raise TypeError(msg)
+
+    def _folder_datetime(self, anchor_time: datetime | None = None) -> datetime | None:
+        return self._parse_folder_datetime(self.path.name, anchor_time=anchor_time)
 
     def _folder_trial_number(self) -> int | None:
         match = re.fullmatch(r"(?:trial[_-]?)?0*(\d+)", self.path.name, flags=re.IGNORECASE)
