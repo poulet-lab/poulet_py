@@ -17,7 +17,9 @@ def build_parser():
         default=Path("outputs") / "basler_dualcam_test",
         help="Directory where recording artifacts are saved.",
     )
-    parser.add_argument("--duration", type=float, default=20.0, help="Recording duration in seconds.")
+    parser.add_argument(
+        "--duration", type=float, default=20.0, help="Recording duration in seconds."
+    )
     parser.add_argument("--fps", type=float, default=25.0, help="Acquisition frame rate.")
     parser.add_argument(
         "--max-cameras",
