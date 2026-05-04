@@ -288,6 +288,10 @@ class BaslerCamera:
             try:
                 grabResult = self.cameras.RetrieveResult(5000, pylon.TimeoutHandling_ThrowException)
                 camera_index = grabResult.GetCameraContext()
+                # Preview mode may run without set_output_file(), so initialize per-camera counters lazily.
+                self.last_block_ids.setdefault(camera_index, None)
+                self.dropped_frames.setdefault(camera_index, 0)
+                self.frame_numbers.setdefault(camera_index, 0)
 
                 if grabResult.GrabSucceeded():
                     img = grabResult.Array
