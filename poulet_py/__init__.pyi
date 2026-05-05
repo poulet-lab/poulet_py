@@ -24,6 +24,7 @@ from .hardware import (
     NIDigitalOutputTask,
     TCSCommand,
     ThermalCamera,
+    Soho,
 )
 from .io import (
     AcquisitionType,
@@ -146,4 +147,5 @@ __all__ = [
     "repeat",
     "sanitize_path",
     "setup_logging",
+    "Soho",
 ]
