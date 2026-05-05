@@ -46,6 +46,17 @@ Source = "https://github.com/poulet-lab/poulet_py"
 allow-direct-references = true
 constraints-file = "constraints.txt"
 
+[tool.hatch.build.targets.wheel]
+artifacts = [
+  "artifacts/leptonUVC/x64/*.dll",
+  "artifacts/leptonUVC/x64/*.xml",
+  "artifacts/leptonUVC/x86/*.dll",
+  "artifacts/leptonUVC/x86/*.xml",
+]
+
+[tool.hatch.build.targets.wheel.force-include]
+"artifacts" = "poulet_py/artifacts"
+
 [project.optional-dependencies]
 ## Sub-modules ##
 # optional, define them on their corresponding module
