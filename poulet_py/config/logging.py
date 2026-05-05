@@ -1,9 +1,42 @@
-from logging import FileHandler, Formatter, Logger, getLogger
+from logging import ERROR, INFO, WARNING, FileHandler, Formatter, Logger, LogRecord, getLogger
 
 from rich.console import Console
 from rich.logging import RichHandler
+from tqdm.auto import tqdm
 
 from poulet_py import SETTINGS
+
+
+class TqdmRichHandler(RichHandler):
+    """
+    Rich handler that can optionally fall back to tqdm.write()
+    when in a tqdm context.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def _tqdm_write(self, record: LogRecord) -> None:
+        msg = self.format(record)
+
+        if record.levelno >= ERROR:
+            tqdm.write(f"\033[91mERROR\033[0m\t  {msg}")  # Red
+        elif record.levelno >= WARNING:
+            tqdm.write(f"\033[93mWARNING\033[0m\t  {msg}")  # Yellow
+        elif record.levelno >= INFO:
+            tqdm.write(f"\033[94mINFO\033[0m\t {msg}")  # Blue
+        else:
+            tqdm.write(msg)
+
+    def emit(self, record: LogRecord) -> None:
+        """Emit the record, using tqdm.write() if in a tqdm context."""
+        try:
+            if hasattr(tqdm, "_instances") and tqdm._instances:
+                self._tqdm_write(record)
+            else:
+                super().emit(record)
+        except Exception:
+            self.handleError(record)
 
 
 def setup_logging(
@@ -49,32 +82,33 @@ def setup_logging(
         The logging level to set for the logger. Default is warning.
     file : str, optional
         The file to log to. If None, logs are output to the console.
-
     Returns
     -------
     None
     """
+    logger.handlers.clear()
+
     if file is not None:
         file_handler = FileHandler(file)
         file_handler.setFormatter(Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
         logger.addHandler(file_handler)
-    else:
-        console = Console(width=terminal_width) if terminal_width else Console()
-        rich_handler = RichHandler(
-            show_time=show_time,
-            show_level=True,
-            rich_tracebacks=rich_tracebacks,
-            tracebacks_show_locals=tracebacks_show_locals,
-            tracebacks_word_wrap=tracebacks_word_wrap,
-            tracebacks_extra_lines=tracebacks_extra_lines,
-            markup=markup,
-            show_path=show_path,
-            console=console,
-        )
-        rich_handler.setFormatter(Formatter("%(message)s"))
-        logger.addHandler(rich_handler)
 
-    logger.setLevel(level.upper())
+    console = Console(width=terminal_width) if terminal_width else Console()
+    rich_handler = TqdmRichHandler(
+        show_time=show_time,
+        show_level=True,
+        rich_tracebacks=rich_tracebacks,
+        tracebacks_show_locals=tracebacks_show_locals,
+        tracebacks_word_wrap=tracebacks_word_wrap,
+        tracebacks_extra_lines=tracebacks_extra_lines,
+        markup=markup,
+        show_path=show_path,
+        console=console,
+    )
+    rich_handler.setFormatter(Formatter("%(message)s"))
+    logger.addHandler(rich_handler)
+
+    logger.setLevel(level.upper() if isinstance(level, str) else level)
     logger.propagate = False
 
 
