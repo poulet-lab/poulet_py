@@ -1,4 +1,5 @@
 try:
+    from collections.abc import Sequence
     from random import shuffle
     from typing import Any, Literal
 except ImportError as e:
@@ -10,12 +11,9 @@ Missing 'tools' module. Install options:
     raise ImportError(msg) from e
 
 
-def generate_stimulus_sequence(
-    n: int,
-    *,
-    stimuli_options: list[Any],
-    mode: Literal["random", "fixed"] = "random",
-) -> list[Any]:
+def repeat(
+    l: Sequence[Any], n: int, *, mode: Literal["random", "sequential"] = "random"
+) -> Sequence[Any]:
     """
     Generate a list of trials with specified stimuli distribution.
 
@@ -25,10 +23,12 @@ def generate_stimulus_sequence(
         Number of trials to generate. Must be divisible by the number of
         stimuli options when mode is 'random' or when multiple stimuli
         are provided in 'fixed' mode.
-    stimuli_options : List[Any]
+    stimuli_options : Sequence[Any]
         List of possible stimulus values. For a single stimulus, all trials
         will use it. For multiple stimuli, distribution depends on mode.
-    mode : {'random', 'fixed'}, optional
+        note use sequential instead of fixed
+        as it is deprecated and will be removed in future releases.
+    mode : {'random', 'fixed', 'sequential'}, optional
         Distribution mode:
         - 'random': Shuffled trials with equal representation of each stimulus
         - 'fixed': Trials use stimuli in sequence (or single stimulus repeated)
@@ -36,7 +36,7 @@ def generate_stimulus_sequence(
 
     Returns
     -------
-    List[Any]
+    Sequence[Any]
         Generated list of stimuli for each trial
 
     Raises
@@ -61,29 +61,15 @@ def generate_stimulus_sequence(
     >>> generate_trials(3, stimuli_options=[5], mode="fixed")
     [5, 5, 5]
     """
-    n_stim = len(stimuli_options)
+    if len(l) == 0:
+        return l
 
-    if n_stim == 0:
-        msg = "stimuli_options cannot be empty"
-        raise ValueError(msg)
-
-    # Validate input for modes that require equal representation
-    if mode == "random" or (mode == "fixed" and n_stim > 1):
-        if n % n_stim != 0:
-            msg = f"Number of trials ({n}) must be divisible by the number"
-            "of stimuli ({n_stim}) for equal representation in mode '{mode}'."
-            raise ValueError(msg)
-
+    _l = list(l) * n
     if mode == "random":
-        # Create balanced representation then shuffle
-        trials = stimuli_options * (n // n_stim)
-        shuffle(trials)
-        return trials
-    elif mode == "fixed":
-        if n_stim == 1:
-            return stimuli_options * n
-        # For multiple stimuli in fixed mode, repeat the sequence
-        return (stimuli_options * ((n // n_stim) + 1))[:n]
+        shuffle(_l)
+        return _l
+    elif mode == "sequential":
+        return _l
 
-    msg = f"Invalid mode '{mode}'. Choose 'random' or 'fixed'."
+    msg = f"Invalid mode '{mode}'. Choose 'random' or 'sequential'."
     raise ValueError(msg)
