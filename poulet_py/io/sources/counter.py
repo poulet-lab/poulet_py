@@ -3,7 +3,7 @@ try:
 
     from pydantic import PrivateAttr
 
-    from poulet_py import BaseSource, precise_sleep
+    from poulet_py import BaseSource
 except ImportError as e:
     msg = """
 Missing 'sources' module. Install options:
@@ -35,6 +35,5 @@ class CounterSource(BaseSource):
             self._buffer[idx]["timestamp"] = timestamp
             self._buffer[idx]["counter"] = self._counter
             self._buffer_idx += 1
-        precise_sleep(self._max_stimulus_duration_ms / 1000.0)
 
         return True
