@@ -96,7 +96,7 @@ sources = [
   "numpy<=2.4.4",
   "open-ephys-python-tools<=1.0.1",
   "spidev<=3.8; platform_system == 'Linux'",
-  "adafruit-circuitpython-max31856<=0.12.6; platform_system != 'Windows'",
+  "adafruit-circuitpython-max31856<=0.12.7; platform_system != 'Windows'",
 ]
 # Tools
 
