@@ -112,6 +112,8 @@ class Max31856Source(BaseSource):
         if self._acquisition_thread and self._acquisition_thread.is_alive():
             return
 
+        self._stop_acquisition_event.clear()
+
         self._acquisition_thread = Thread(
             target=self._acquisition_thread_func,
             daemon=True,
@@ -121,10 +123,12 @@ class Max31856Source(BaseSource):
 
     def _close(self):
         """Close the SPI device and stop acquisition thread."""
-        self._stop_acquisition_event.clear()
+        self._stop_acquisition_event.set()
 
         if self._acquisition_thread and self._acquisition_thread.is_alive():
-            LOGGER.warning("MAX31856: Acquisition thread is still alive after closure")
+            self._acquisition_thread.join(timeout=2.0)
+            if self._acquisition_thread.is_alive():
+                LOGGER.warning("MAX31856: Acquisition thread is still alive after closure")
 
         if self._spi:
             self._spi.deinit()
