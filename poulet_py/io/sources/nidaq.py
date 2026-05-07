@@ -66,31 +66,27 @@ class NIDaQSource(BaseSource, NIDaQ):
 
         data = self.read(-1, -1)
 
-        if not data:
-            return False
+        if data:
+            lengths = [len(v) for v in data.values() if len(v) > 0]
+            
+            if lengths:
+                n = min(lengths)
+                samples = empty(n, dtype=self._buffer_dtype)
 
-        lengths = [len(v) for v in data.values() if len(v) > 0]
-        if not lengths:
-            return False
+                t_prev = 0
+                task_name = ""
 
-        n = min(lengths)
-        samples = empty(n, dtype=self._buffer_dtype)
+                for task in self._read_tasks:
+                    if task.name in data:
+                        if not task_name or t_prev > data[task.name]["timestamp"][0]:
+                            task_name = task.name
+                            t_prev = data[task.name]["timestamp"][0]
 
-        t_prev = 0
-        task_name = ""
+                        for ch in task.channels:
+                            samples[f"{task.name}_{ch.name}"] = data[task.name][ch.name][:n]
 
-        for task in self._read_tasks:
-            if task.name in data:
-                if not task_name or t_prev > data[task.name]["timestamp"][0]:
-                    task_name = task.name
-                    t_prev = data[task.name]["timestamp"][0]
-
-                for ch in task.channels:
-                    samples[f"{task.name}_{ch.name}"] = data[task.name][ch.name][:n]
-
-        samples["timestamp"] = data[task_name]["timestamp"][:n]
-
-        self._write_samples(samples)
+                samples["timestamp"] = data[task_name]["timestamp"][:n]
+                self._write_samples(samples)
 
         if self.acquisition_type == AcquisitionType.FINITE:
             self.stop()
