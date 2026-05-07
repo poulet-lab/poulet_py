@@ -163,22 +163,21 @@ class ExperimentRuntime(BaseModel):
 
     def run(self):
         self._ensure_open()
-        bottom_toolbar = HTML(
-            " <b>[enter]</b> Start Experiment <b>[esc]</b> Pause / Resume <b>[ctrl-x]</b> Abort."
-        )
 
         if self._aborted.is_set():
             return
 
         blocks = self._expand()
         with ThreadPoolExecutor(max_workers=len(self.sources)) as executor:
-            with ProgressBar(key_bindings=self._key_bindings, bottom_toolbar=bottom_toolbar) as pb:
+            with ProgressBar(
+                key_bindings=self._key_bindings, bottom_toolbar=self._generate_bottom_toolbar
+            ) as pb:
                 with patch_stdout():
                     self._wait_not_started()
 
                     for block, trials in pb(blocks, total=len(blocks), label="Blocks"):
                         for trial_idx, trial in pb(
-                            enumerate(trials), total=len(trials), label="Trial"
+                            enumerate(trials), total=len(trials), label="Trials"
                         ):
                             if self._aborted.is_set():
                                 break
@@ -213,6 +212,23 @@ class ExperimentRuntime(BaseModel):
             msg = f"{type(self)} need to be opened first"
             raise RuntimeError(msg)
 
+    def _generate_bottom_toolbar(self):
+        shortcuts = "<b>[ctrl-x]</b> Abort"
+        status = "Idle"
+
+        if not self._started.is_set():
+            shortcuts = "<b>[enter]</b> Start " + shortcuts
+        elif self._started.is_set() and not self._paused.is_set():
+            shortcuts = "<b>[esc]</b> Pause " + shortcuts
+            status = "Running"
+        elif self._started.is_set() and self._paused.is_set():
+            shortcuts = "<b>[esc]</b> Resume " + shortcuts
+            status = "Paused"
+
+        return HTML(
+            f"<b>Experiment:</b> {self.name} | <b>Status:</b> {status} | <b>Shortcuts:</b> {shortcuts}"
+        )
+
     def _create_key_bindings(self) -> KeyBindings:
         kb = KeyBindings()
 
@@ -220,21 +236,17 @@ class ExperimentRuntime(BaseModel):
         def _(event):
             if not self._started.is_set():
                 self._started.set()
-                LOGGER.info("Experiment started...")
 
         @kb.add(Keys.Escape, eager=True)
         def _(event):
             if self._started.is_set():
                 if self._paused.is_set():
                     self._paused.clear()
-                    LOGGER.info("RESUMED")
                 else:
                     self._paused.set()
-                    LOGGER.info("PAUSED")
 
         @kb.add(Keys.ControlX, eager=True)
         def _(event):
-            LOGGER.info("ABORTING...")
             self._aborted.set()
 
         return kb
