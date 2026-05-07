@@ -1,5 +1,6 @@
 try:
     from collections import deque
+    from collections.abc import Sequence
     from threading import Lock
     from typing import Any, Literal
 
@@ -11,7 +12,7 @@ try:
     from pandas import DataFrame
 except ImportError as e:
     msg = """
-Missing 'camera' module. Install options:
+Missing 'osc' module. Install options:
 - Dedicated:    pip install poulet_py[osc]
 - Module:       pip install poulet_py[utils]
 - Full:         pip install poulet_py[all]
@@ -96,7 +97,7 @@ class Oscilloscope:
         self._x = deque(maxlen=max_samples)
         self._y = deque(maxlen=max_samples)
         self._line_collection: LineCollection | None = None
-        self._legend_handles: list[Line2D] = []
+        self._legend_handles: Sequence[Line2D] = []
         self._animation: FuncAnimation | None = None
         self._last_ymin = float("inf")
         self._last_ymax = -float("inf")
@@ -170,7 +171,7 @@ class Oscilloscope:
             self._x.clear()
             self._y.clear()
 
-    def _update(self, frame) -> list[LineCollection]:
+    def _update(self, frame) -> Sequence[LineCollection]:
         """Internal animation update handler.
 
         Parameters
