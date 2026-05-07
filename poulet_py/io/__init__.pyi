@@ -12,7 +12,6 @@ from .sources import (
     ThermocoupleType,
     StimuliMetadataSource,
 )
-from .data_structures import BaseData, WidefieldData
 
 __all__ = [
     "AcquisitionType",
@@ -26,8 +25,6 @@ __all__ = [
     "EventBus",
     "EventHandler",
     "HDFSink",
-    "BaseData",
-    "WidefieldData",
     "HDFSink",
     "NIDaQSource",
     "SinkEvent",

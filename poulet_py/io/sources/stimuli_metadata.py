@@ -33,7 +33,10 @@ class StimuliMetadataSource(BaseSource):
 
     def _fire(self) -> bool:
         timestamp = time_ns()
-        meta = [st.model_dump(exclude_unset=True, exclude_none=True) for st in self._stimuli]
+        meta = [
+            {type(st).__name__: st.model_dump(exclude_unset=True, exclude_none=True)}
+            for st in self._stimuli
+        ]
 
         json_data = dumps(
             meta,
@@ -46,10 +49,6 @@ class StimuliMetadataSource(BaseSource):
             )
             json_data = json_data[: self.max_string_length]
 
-        with self._lock:
-            idx = self._buffer_idx % self.buffer_size
-            self._buffer[idx]["timestamp"] = timestamp
-            self._buffer[idx]["metadata"] = json_data
-            self._buffer_idx += 1
+        self._write_sample((timestamp, json_data))
 
         return True

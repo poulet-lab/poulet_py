@@ -111,9 +111,8 @@ class SPISource(BaseSource):
                 # Write SPI data
                 self._spi.writebytes2(st.build())
 
-
-                    # Read response if in finite mode (store in buffer)
-                    data = self._spi.readbytes(self.read_size)
-                    timestamp = time_ns()
+                # Read response if in finite mode (store in buffer)
+                data = self._spi.readbytes(self.read_size)
+                timestamp = time_ns()
 
         return True
