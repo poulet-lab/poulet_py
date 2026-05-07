@@ -453,9 +453,9 @@ class NIAnalogInputTask(NIBaseTask):
             dt = uint64(1e9 / self._clock_handle.rate)
             t0 = t_read - (n - 1) * dt
 
-            timestamps = self._buffer["timestamp"][:n]
-            timestamps[:] = t0
-            timestamps += dt * arange(n, dtype="uint64")
+            timestamp = self._buffer["timestamp"][:n]
+            timestamp[:] = t0
+            timestamp += dt * arange(n, dtype="uint64")
 
         return self._buffer[:n].copy()
 
@@ -637,9 +637,9 @@ class NIDigitalInputTask(NIBaseTask):
             dt = uint64(1e9 / self._clock_handle.rate)
             t0 = t_read - (n - 1) * dt
 
-            timestamps = self._buffer["timestamp"][:n]
-            timestamps[:] = t0
-            timestamps += dt * arange(n, dtype="uint64")
+            timestamp = self._buffer["timestamp"][:n]
+            timestamp[:] = t0
+            timestamp += dt * arange(n, dtype="uint64")
 
         return self._buffer[:n].copy()
 
