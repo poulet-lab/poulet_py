@@ -68,7 +68,7 @@ class NIDaQSource(BaseSource, NIDaQ):
 
         if data:
             lengths = [len(v) for v in data.values() if len(v) > 0]
-            
+
             if lengths:
                 n = min(lengths)
                 samples = empty(n, dtype=self._buffer_dtype)
