@@ -90,7 +90,7 @@ gpio = ["gpiozero<=2.0.1", "lgpio<=0.2.2.0; platform_system == 'Linux'"]
 soho = ["pandas<=3.0.2"]
 # IO
 event = ["numpydantic<=1.8.1"]
-sinks = ["poulet_py[event]", "h5py<=3.16.0", "orjson<=3.11.8", "numpy<=2.4.4"]
+sinks = ["poulet_py[event]", "h5py<=3.16.0", "orjson<=3.11.9", "numpy<=2.4.4"]
 sources = [
   "poulet_py[event]",
   "numpy<=2.4.4",
@@ -108,7 +108,7 @@ converters = ["poulet_py[seq]"]
 hardware = ["poulet_py[camera, daq, arduino, julabo, qst, triggers, soho]"]
 io = ["poulet_py[event, sinks, sources]"]
 stimuli = ["poulet_py[qst, nidaq, io, tools, utils]"]
-tools = ["orjson<=3.11.8"]
+tools = ["orjson<=3.11.9"]
 utils = ["poulet_py[exp, osc]"]
 # Install all modules
 all = ["poulet_py[converters, hardware, io, stimuli, tools, utils]"]
