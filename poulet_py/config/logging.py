@@ -1,48 +1,37 @@
-from logging import ERROR, INFO, WARNING, FileHandler, Formatter, Logger, LogRecord, getLogger
+from io import StringIO
+from logging import FileHandler, Formatter, Logger, LogRecord, getLogger
+from re import sub
 
+from prompt_toolkit import ANSI, print_formatted_text
 from rich.console import Console
 from rich.logging import RichHandler
-from tqdm.auto import tqdm
 
 from poulet_py import SETTINGS
 
 
-class TqdmRichHandler(RichHandler):
-    """
-    Rich handler that can optionally fall back to tqdm.write()
-    when in a tqdm context.
-    """
-
+class Handler(RichHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-    def _tqdm_write(self, record: LogRecord) -> None:
-        msg = self.format(record)
-
-        if record.levelno >= ERROR:
-            tqdm.write(f"\033[91mERROR\033[0m\t  {msg}")  # Red
-        elif record.levelno >= WARNING:
-            tqdm.write(f"\033[93mWARNING\033[0m\t  {msg}")  # Yellow
-        elif record.levelno >= INFO:
-            tqdm.write(f"\033[94mINFO\033[0m\t {msg}")  # Blue
-        else:
-            tqdm.write(msg)
+        self.string_buffer = StringIO()
+        self.console = Console(file=self.string_buffer, force_terminal=True)
 
     def emit(self, record: LogRecord) -> None:
-        """Emit the record, using tqdm.write() if in a tqdm context."""
+        """Emit the record using prompt_toolkit to preserve colors."""
         try:
-            if hasattr(tqdm, "_instances") and tqdm._instances:
-                self._tqdm_write(record)
-            else:
-                super().emit(record)
+            super().emit(record)
+
+            colored_output = sub(r";id=\d+|;file://[^;]*", "", self.string_buffer.getvalue())
+            self.string_buffer.truncate(0)
+            self.string_buffer.seek(0)
+
+            print_formatted_text(ANSI(colored_output))
         except Exception:
-            self.handleError(record)
+            super().emit(record)
 
 
 def setup_logging(
     logger: Logger,
     *,
-    terminal_width: int | None = None,
     show_time: bool = False,
     show_path: bool = True,
     markup: bool = True,
@@ -61,9 +50,6 @@ def setup_logging(
     ----------
     logger : Logger
         The logger instance to configure.
-    terminal_width : int, optional
-        The width of the terminal for rich console output.
-        If None, the default width is used.
     show_time : bool, optional
         Whether to show the time in the log output. Default is False.
     show_path : bool, optional
@@ -93,8 +79,7 @@ def setup_logging(
         file_handler.setFormatter(Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
         logger.addHandler(file_handler)
 
-    console = Console(width=terminal_width) if terminal_width else Console()
-    rich_handler = TqdmRichHandler(
+    rich_handler = Handler(
         show_time=show_time,
         show_level=True,
         rich_tracebacks=rich_tracebacks,
@@ -103,7 +88,6 @@ def setup_logging(
         tracebacks_extra_lines=tracebacks_extra_lines,
         markup=markup,
         show_path=show_path,
-        console=console,
     )
     rich_handler.setFormatter(Formatter("%(message)s"))
     logger.addHandler(rich_handler)
