@@ -19,7 +19,7 @@ Missing 'sinks' module. Install options:
 
 
 class BaseSink(EventHandler):
-    name: str = Field(..., description="Name of the sink")
+    name: str | None = Field(default=None, description="Name of the sink")
     queue_size: int = Field(default=1000, description="Size of the internal queue")
     meta: dict[str, Any] = Field(
         default_factory=dict, description="Additional metadata for the data packet"

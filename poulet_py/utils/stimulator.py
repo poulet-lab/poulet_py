@@ -1,3 +1,16 @@
+"""
+Stimulator management classes for defining and running experimental protocols.
+
+Classes
+-------
+StimulatorTrial
+    Container for a single trial.
+StimulatorBlock
+    Container for a block of trials with repetition and ordering controls.
+StimulatorRuntime
+    Main experiment orchestrator managing blocks, sources, sinks, and execution.
+"""
+
 try:
     from collections.abc import Sequence
     from concurrent.futures import ThreadPoolExecutor, wait
@@ -25,15 +38,22 @@ try:
 
 except ImportError as e:
     msg = """
-Missing 'experiment' module. Install options:
-- Dedicated:    pip install poulet_py[exp]
+Missing 'stimulator' module. Install options:
+- Dedicated:    pip install poulet_py[stm]
 - Module:       pip install poulet_py[utils]
 - Full:         pip install poulet_py[all]
 """
     raise ImportError(msg) from e
 
 
-class ExperimentTrial(BaseModel):
+class StimulatorTrial(BaseModel):
+    """
+    Represents a single trial within an experiment block.
+
+    A trial consists of one or more stimuli that are presented simultaneously
+    during the trial execution.
+    """
+
     name: str | None = Field(default=None, description="Name of the trial")
     stimuli: BaseStimulus | Sequence[BaseStimulus] = Field(..., description="Stimuli for the trial")
 
@@ -44,9 +64,20 @@ class ExperimentTrial(BaseModel):
         return self
 
 
-class ExperimentBlock(BaseModel):
+class StimulatorBlock(BaseModel):
+    """
+    Represents a block of trials within an experiment.
+
+    A block contains one or more trials that are repeated and ordered according
+    to specified parameters. ISI and trigger behavior can be configured per block.
+
+    Notes
+    -----
+    ISI values provided as a range will be converted to a list for random selection.
+    """
+
     name: str | None = Field(default=None, description="Name of the block")
-    trials: Sequence[ExperimentTrial] = Field(..., description="Trials in the block")
+    trials: Sequence[StimulatorTrial] = Field(..., description="Trials in the block")
 
     trial_repetitions: int = Field(
         default=1, ge=1, description="Number of times to repeat each trial"
@@ -70,9 +101,25 @@ class ExperimentBlock(BaseModel):
         return self
 
 
-class ExperimentRuntime(BaseModel):
-    name: str = Field(..., description="Name of the experiment")
-    blocks: Sequence[ExperimentBlock] = Field(..., description="Blocks in the experiment")
+class StimulatorRuntime(BaseModel):
+    """
+    Main experiment orchestrator managing execution, data sources, and sinks.
+
+    Controls the entire experiment lifecycle including opening/closing connections,
+    running trial blocks, handling triggers, and managing user interaction through
+    keyboard shortcuts.
+
+    Examples
+    --------
+    >>> stm = StimulatorRuntime(
+    ...     name="My Stimulator", blocks=[my_block], sources=[my_source], sinks=[my_sink]
+    ... )
+    >>> with stm:
+    ...     stm.run()
+    """
+
+    name: str = Field(..., description="Name of the stimulator")
+    blocks: Sequence[StimulatorBlock] = Field(..., description="Blocks in the stimulator")
     block_repetitions: int = Field(
         default=1, ge=1, description="Number of times to repeat each block"
     )
@@ -81,8 +128,8 @@ class ExperimentRuntime(BaseModel):
     )
     isi: int | Sequence[int] = Field(default=0, description="Inter-stimulus interval")
 
-    sources: Sequence[BaseSource] = Field(..., description="Sources for the experiment")
-    sinks: Sequence[BaseSink] = Field(..., description="Sinks for the experiment")
+    sources: Sequence[BaseSource] = Field(..., description="Sources for the stimulator")
+    sinks: Sequence[BaseSink] = Field(..., description="Sinks for the stimulator")
 
     _bus: EventBus = PrivateAttr(default_factory=EventBus)
     _external_bus: bool = PrivateAttr(default=False)
@@ -103,6 +150,22 @@ class ExperimentRuntime(BaseModel):
 
     @staticmethod
     def get_isi(isi):
+        """
+        Get inter-stimulus interval value.
+
+        If ISI is a sequence, randomly selects one value. Otherwise returns
+        the single value directly.
+
+        Parameters
+        ----------
+        isi : int or Sequence of int
+            ISI specification, either a single value or sequence of values.
+
+        Returns
+        -------
+        int
+            Selected ISI value in milliseconds.
+        """
         if isinstance(isi, Sequence):
             return choice(isi)
         return isi
@@ -114,13 +177,25 @@ class ExperimentRuntime(BaseModel):
     @bus.setter
     def bus(self, value: EventBus):
         if self._is_open:
-            msg = "Cannot change bus while experiment is open"
+            msg = "Cannot change bus while stimulator is open"
             raise RuntimeError(msg)
 
         self._bus = value
         self._external_bus = True
 
     def open(self):
+        """
+        Open all connections and prepare stimulator for execution.
+
+        Initializes the event bus (if not externally provided), opens all
+        source and sink connections, and sets up keyboard bindings for
+        user interaction control.
+
+        Notes
+        -----
+        Idempotent - calling multiple times has no additional effect after
+        first successful open.
+        """
         if self._is_open:
             return
 
@@ -140,6 +215,12 @@ class ExperimentRuntime(BaseModel):
         self._is_open = True
 
     def close(self):
+        """
+        Close all connections and clean up stimulator resources.
+
+        Closes all sinks and sources, clears event states, and closes
+        the event bus if it was internally created.
+        """
         if not self._is_open:
             return
 
@@ -162,12 +243,28 @@ class ExperimentRuntime(BaseModel):
             self.bus.close()
 
     def run(self):
+        """
+        Execute the stimulator protocol.
+
+        Expands blocks and trials according to repetition and ordering settings,
+        then iterates through each trial, handling triggers, ISI timing,
+        and user interaction (pause/resume/abort).
+
+        Each trial's stimuli are presented simultaneously through all sources
+        using a thread pool executor.
+
+        Raises
+        ------
+        RuntimeError
+            If stimulator is not opened before running, or if a trigger fails
+            with abort policy.
+        """
         self._ensure_open()
 
         if self._aborted.is_set():
             return
 
-        blocks = self._expand()
+        blocks = self._expand_trials()
         with ThreadPoolExecutor(max_workers=len(self.sources)) as executor:
             with ProgressBar(
                 key_bindings=self._key_bindings, bottom_toolbar=self._generate_bottom_toolbar
@@ -226,7 +323,7 @@ class ExperimentRuntime(BaseModel):
             status = "Paused"
 
         return HTML(
-            f"<b>Experiment:</b> {self.name} | <b>Status:</b> {status} | <b>Shortcuts:</b> {shortcuts}"
+            f"<b>Stimulator:</b> {self.name} | <b>Status:</b> {status} | <b>Shortcuts:</b> {shortcuts}"
         )
 
     def _create_key_bindings(self) -> KeyBindings:
@@ -259,7 +356,7 @@ class ExperimentRuntime(BaseModel):
         while self._paused.is_set() and not self._aborted.is_set():
             self._paused.wait(0.1)
 
-    def _expand(self):
+    def _expand_trials(self):
         blocks = repeat(self.blocks, self.block_repetitions, mode=self.block_order)
 
         return [
