@@ -5,6 +5,8 @@ This module provides a Python interface for collecting physiological data
 from DSI Ponemah software via TCP socket connection. It supports real-time
 data streaming, keyboard-controlled recording sessions, and CSV export.
 
+Interactive prompts use prompt_toolkit and assume a real terminal (TTY)
+
 Examples
 --------
 >>> soho = Soho(host="192.168.1.100", port=9000)
@@ -15,6 +17,7 @@ Examples
 """
 
 try:
+    import asyncio
     from collections.abc import Callable
     from os.path import basename, exists, join
     from re import sub
@@ -27,10 +30,15 @@ try:
     from typing import Any
 
     from pandas import DataFrame, MultiIndex, concat
+    from prompt_toolkit.application import Application, get_app_or_none
+    from prompt_toolkit.key_binding import KeyBindings
+    from prompt_toolkit.key_binding.key_processor import KeyPressEvent
+    from prompt_toolkit.layout import Layout
+    from prompt_toolkit.layout.containers import Window
+    from prompt_toolkit.layout.controls import FormattedTextControl
+    from prompt_toolkit.shortcuts import yes_no_dialog
     from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
-    from pynput.keyboard import Key, Listener
     from rich.console import Console
-    from rich.prompt import Confirm
 
     from poulet_py import LOGGER
 
@@ -44,6 +52,45 @@ Missing 'soho' module. Install options:
     raise ImportError(msg) from e
 
 console = Console()
+
+
+def _build_press_space_application() -> Application:
+    """Minimal prompt_toolkit app that exits on Space (cross-platform)."""
+    kb = KeyBindings()
+
+    @kb.add("space")
+    def _(event: KeyPressEvent) -> None:
+        event.app.exit(result=None)
+
+    return Application(
+        layout=Layout(Window(FormattedTextControl(""))),
+        key_bindings=kb,
+        full_screen=False,
+    )
+
+
+def _wait_for_space(prompt: str) -> None:
+    """
+    Wait for user to press Space before continuing.
+
+    Uses Space instead of Enter to avoid conflicts with Ponemah's connection
+    test. Only captures keystrokes when the terminal has focus.
+    """
+    console.print(prompt)
+    _build_press_space_application().run(handle_sigint=False)
+
+
+async def _wait_for_space_async(prompt: str) -> None:
+    """Async variant for callers already inside a prompt_toolkit event loop."""
+    console.print(prompt)
+    await _build_press_space_application().run_async(handle_sigint=False)
+
+
+async def _ptk_yes_no_async(text: str, *, default: bool = True) -> bool:
+    """Async yes/no dialog for use from key-binding background tasks."""
+    result = await yes_no_dialog(title="", text=text).run_async(handle_sigint=False)
+    return default if result is None else result
+
 
 HOST = "localhost"
 PORT = 6732
@@ -140,8 +187,9 @@ class Soho(BaseModel):
 
     _stop: bool = PrivateAttr(False)
     _active: bool = PrivateAttr(True)
+    _skip_keyboard_join: bool = PrivateAttr(False)
     _collection_thread: Thread | None = PrivateAttr(None)
-    _keyboard_listener_instance: Listener | None = PrivateAttr(None)
+    _keyboard_thread: Thread | None = PrivateAttr(None)
     _data_lock: Lock = PrivateAttr(default_factory=Lock)
     _packet_count: int = PrivateAttr(0)
 
@@ -393,20 +441,31 @@ class Soho(BaseModel):
         except OSError as err:
             Soho.log_error(str(err), self.error_log_file)
 
-    def start(self) -> None:
+    def start(
+        self,
+        *,
+        keyboard_handler: str = "internal",
+    ) -> None:
         """
         Start data collection with interactive keyboard controls.
 
-        Launches background threads for data collection and keyboard
-        monitoring. Prompts the user to confirm readiness before starting.
-        During recording, press 'e' to end or 't' to test the connection.
+        Launches background threads for data collection and optionally
+        keyboard monitoring. Prompts the user to confirm readiness before
+        starting. During recording, press 'e' to end or 't' to test the
+        connection.
+
+        Parameters
+        ----------
+        keyboard_handler : str, optional
+            "internal" (default): Soho runs its own keyboard thread for E/T.
+            "external": Caller handles E/T; no keyboard thread started.
         """
         self._active = True
         self._stop = False
 
-        console.input(
+        _wait_for_space(
             "[bold yellow]\nWARNING: Ensure that the continuous sampling is "
-            "activated. Press Enter when you're ready to start recording."
+            "activated. Press Space when you're ready to start recording."
         )
 
         console.rule("[bold cyan]🟢 RECORDING WITH PONEMAH[/bold cyan]", style="bold cyan")
@@ -415,7 +474,9 @@ class Soho(BaseModel):
         self._collection_thread = Thread(target=self.collect)
         self._collection_thread.start()
 
-        self._start_keyboard_listener()
+        if keyboard_handler == "internal":
+            self._keyboard_thread = Thread(target=self._keyboard_listener_loop)
+            self._keyboard_thread.start()
 
         console.print("[bold green]Soho recording started.[/bold green]")
 
@@ -430,6 +491,9 @@ class Soho(BaseModel):
         self._stop = True
         self._active = False
         self._stop_keyboard_listener()
+        if self._keyboard_thread is not None and not self._skip_keyboard_join:
+            self._keyboard_thread.join(timeout=2.0)
+            self._keyboard_thread = None
 
     def wait_for_completion(self) -> None:
         """
@@ -440,6 +504,9 @@ class Soho(BaseModel):
         data has been collected before saving or processing.
         """
         self._stop_keyboard_listener()
+        if self._keyboard_thread is not None:
+            self._keyboard_thread.join(timeout=2.0)
+            self._keyboard_thread = None
         if self._collection_thread:
             self._collection_thread.join()
 
@@ -451,30 +518,40 @@ class Soho(BaseModel):
         the remote connection in Ponemah, and offers the option to resume
         recording afterward. Previously collected data is preserved.
         """
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.run(self._pause_and_test_connection_async())
+        else:
+            msg = "pause_and_test_connection() cannot be called from a running event loop"
+            raise RuntimeError(msg)
+
+    async def _pause_and_test_connection_async(self) -> None:
+        """Async implementation (keyboard handler and internal use)."""
         console.print("[bold yellow]Pausing recording...[/bold yellow]")
         self._stop = True
 
         if self._collection_thread:
-            self._collection_thread.join()
+            await asyncio.to_thread(self._collection_thread.join)
 
         console.print("[bold cyan]🔌 CONNECTION TEST[/bold cyan]")
-        console.input(
+        await _wait_for_space_async(
             "Go to Ponemah 'Experiment Setup' and click 'Test' remote "
-            "connection. Press Enter when ready to test."
+            "connection. Press Space when ready to test."
         )
 
-        test_ponemah_connection(self.host, self.port)
+        await asyncio.to_thread(test_ponemah_connection, self.host, self.port)
 
-        console.input(
-            "Close the remote connection test window by pressing 'OK'. Press Enter when done."
+        await _wait_for_space_async(
+            "Close the remote connection test window by pressing 'OK'. Press Space when done."
         )
 
-        confirm_resume = Confirm.ask("[yellow]Resume recording? (y/n)[/yellow]", default=True)
+        confirm_resume = await _ptk_yes_no_async("Resume recording? (y/n)", default=True)
 
         if confirm_resume:
-            console.input(
+            await _wait_for_space_async(
                 "[bold yellow]\nWARNING: Ensure that the continuous sampling is "
-                "activated. Press Enter when you're ready to start recording."
+                "activated. Press Space when you're ready to start recording."
             )
             self._stop = False
             self._collection_thread = Thread(target=self.collect)
@@ -484,45 +561,55 @@ class Soho(BaseModel):
             console.print("[bold red]Recording not resumed.[/bold red]")
             self._active = False
 
-    def _start_keyboard_listener(self) -> None:
-        """Start the pynput keyboard listener."""
-        self._keyboard_listener_instance = Listener(on_press=self._on_key_press)
-        self._keyboard_listener_instance.start()
-
     def _stop_keyboard_listener(self) -> None:
-        """Stop the pynput keyboard listener."""
-        if self._keyboard_listener_instance is not None:
-            self._keyboard_listener_instance.stop()
-            self._keyboard_listener_instance = None
+        """Stop the keyboard listener thread (no-op if external handler)."""
+        self._stop = True
+        self._active = False
 
-    def _on_key_press(self, key: Key) -> bool | None:
-        """Handle key press events from pynput."""
-        if not self._active:
-            return False
+    def _keyboard_listener_loop(self) -> None:
+        """prompt_toolkit keyboard loop for E/T while recording."""
+        kb = KeyBindings()
 
-        try:
-            key_char = key.char if hasattr(key, "char") else None
-        except AttributeError:
-            return None
+        @kb.add("e")
+        def _(event: KeyPressEvent) -> None:
+            event.app.create_background_task(self._handle_key_async("e"))
 
-        if key_char is None:
-            return None
+        @kb.add("t")
+        def _(event: KeyPressEvent) -> None:
+            event.app.create_background_task(self._handle_key_async("t"))
 
-        if key_char.lower() == "e":
-            confirm = Confirm.ask("Are you sure you want to stop recording? (y/n): ", default=True)
+        exit_requested: list[bool] = [False]  # list to allow assignment in closure
 
-            if confirm:
+        def stop_if_inactive(app: Application) -> None:
+            if not self._active and not exit_requested[0]:
+                exit_requested[0] = True
+                app.exit(result=None)
+
+        app = Application(
+            layout=Layout(Window(FormattedTextControl(""))),
+            key_bindings=kb,
+            full_screen=False,
+            refresh_interval=0.1,
+            before_render=stop_if_inactive,
+        )
+        app.run(in_thread=True, handle_sigint=False)
+
+    async def _handle_key_async(self, c: str) -> None:
+        """Handle E or T via prompt_toolkit dialogs (same thread as listener app)."""
+        if c == "e":
+            if await _ptk_yes_no_async(
+                "Are you sure you want to stop recording? (y/n)", default=True
+            ):
                 console.print("[bold green]Stopping recording...[/bold green]")
-                self.stop()
-                return False
+                self._skip_keyboard_join = True
+                try:
+                    self.stop()
+                finally:
+                    self._skip_keyboard_join = False
 
-        elif key_char.lower() == "t":
-            confirm = Confirm.ask("Pause recording to test connection? (y/n): ", default=True)
-
-            if confirm:
-                self.pause_and_test_connection()
-
-        return None
+        elif c == "t":
+            if await _ptk_yes_no_async("Pause recording to test connection? (y/n)", default=True):
+                await self._pause_and_test_connection_async()
 
     @staticmethod
     def _read_exact(sock: Socket, n: int) -> bytes:
