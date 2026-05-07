@@ -183,8 +183,6 @@ class ExperimentRuntime(BaseModel):
                             if self._aborted.is_set():
                                 break
 
-                            self._wait_paused()
-
                             if block.trigger and not block.trigger.wait():
                                 if block.trigger_policy == "skip":
                                     LOGGER.warning(
@@ -207,6 +205,8 @@ class ExperimentRuntime(BaseModel):
 
                             isi = self.get_isi(block.isi or self.isi)
                             precise_sleep(isi / 1000.0)
+
+                            self._wait_paused()
 
     def _ensure_open(self):
         if not self._is_open:
