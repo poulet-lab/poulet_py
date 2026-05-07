@@ -42,8 +42,6 @@ from .io import (
     Max31856Source,
     ThermocoupleType,
     StimuliMetadataSource,
-    BaseData,
-    WidefieldData,
 )
 from .stimulus import (
     BaseStimulus,
@@ -69,7 +67,7 @@ from .stimulus import (
     TCSStimulus,
 )
 from .tools import go_to, json_serializer, repeat, sanitize_path, precise_sleep
-from .utils import ExperimentBlock, ExperimentRuntime, ExperimentTrial, Oscilloscope
+from .utils import StimulatorBlock, StimulatorRuntime, StimulatorTrial, Oscilloscope
 
 __all__ = [
     "LOGGER",
@@ -82,8 +80,6 @@ __all__ = [
     "BaseSink",
     "BaseSource",
     "BaseStimulus",
-    "BaseData",
-    "WidefieldData",
     "BaseTrigger",
     "BaslerCamera",
     "Max31856Source",
@@ -93,9 +89,9 @@ __all__ = [
     "EventBus",
     "ThermocoupleType",
     "EventHandler",
-    "ExperimentBlock",
-    "ExperimentRuntime",
-    "ExperimentTrial",
+    "StimulatorBlock",
+    "StimulatorRuntime",
+    "StimulatorTrial",
     "GPIOTrigger",
     "precise_sleep",
     "NIAnalogCompositeStimulus",
