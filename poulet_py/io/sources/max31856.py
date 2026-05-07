@@ -70,7 +70,7 @@ class Max31856Source(BaseSource):
     )
 
     _spi: SPI | None = PrivateAttr(None)
-    _cs: DigitalInOut = PrivateAttr()
+    _cs: DigitalInOut | None = PrivateAttr(default=None)
     _max31856: MAX31856 = PrivateAttr()
 
     _acquisition_thread: Thread | None = PrivateAttr(default=None)
@@ -105,22 +105,7 @@ class Max31856Source(BaseSource):
             msg = f"Failed to initialize MAX31856: {e}"
             raise RuntimeError(msg) from e
 
-        self._stop_acquisition = False
         self._start_acquisition_thread()
-
-    def _close(self):
-        """Close the SPI device and stop acquisition thread."""
-        self._stop_acquisition = True
-
-        if self._acquisition_thread and self._acquisition_thread.is_alive():
-            self._acquisition_thread.join(timeout=1.0)
-
-        if self._spi:
-            self._spi.deinit()
-        if hasattr(self, "_cs"):
-            self._cs.deinit()
-
-        self._acquisition_thread = None
 
     def _start_acquisition_thread(self):
         """Start the background acquisition thread."""
@@ -134,9 +119,24 @@ class Max31856Source(BaseSource):
         )
         self._acquisition_thread.start()
 
+    def _close(self):
+        """Close the SPI device and stop acquisition thread."""
+        self._stop_acquisition_event.clear()
+
+        if self._acquisition_thread and self._acquisition_thread.is_alive():
+            LOGGER.warning("MAX31856: Acquisition thread is still alive after closure")
+
+        if self._spi:
+            self._spi.deinit()
+
+        if self._cs:
+            self._cs.deinit()
+
+        self._acquisition_thread = None
+
     def _acquisition_thread_func(self):
         """Background thread for continuous SPI data acquisition."""
-        while not self._stop_acquisition and self._is_open:
+        while not self._stop_acquisition_event.is_set():
             try:
                 faults = self._max31856._read_register(_MAX31856_SR_REG, 1)[0]
                 self._max31856._perform_one_shot_measurement()
@@ -144,35 +144,10 @@ class Max31856Source(BaseSource):
                 temperature = self._max31856.read_high_res_temp()
                 reference = self._max31856.unpack_reference_temperature()
 
-                if faults:
-                    msg = "Faults found in the following: "
-                    if faults & _MAX31856_FAULT_CJRANGE:
-                        msg += "cj_range"
-                    if faults & _MAX31856_FAULT_TCRANGE:
-                        msg += "tc_range"
-                    if faults & _MAX31856_FAULT_CJHIGH:
-                        msg += "cj_high"
-                    if faults & _MAX31856_FAULT_CJLOW:
-                        msg += "cj_low"
-                    if faults & _MAX31856_FAULT_TCHIGH:
-                        msg += "tc_high"
-                    if faults & _MAX31856_FAULT_TCLOW:
-                        msg += "tc_low"
-                    if faults & _MAX31856_FAULT_OVUV:
-                        msg += "voltage"
-                    if faults & _MAX31856_FAULT_OPEN:
-                        msg += "open_tc"
-                    LOGGER.warning(msg)
+                self._log_faults(faults)
+                self._write_sample((timestamp, temperature, reference, faults))
 
-                with self._lock:
-                    idx = self._buffer_idx % self.buffer_size
-                    self._buffer[idx]["timestamp"] = timestamp
-                    self._buffer[idx]["temperature"] = temperature
-                    self._buffer[idx]["reference"] = reference
-                    self._buffer[idx]["faults"] = faults
-                    self._buffer_idx += 1
-
-                precise_sleep(0.1)  # Sleep briefly to avoid hogging CPU
+                precise_sleep(0.1)
 
             except Exception as e:
                 LOGGER.error(f"MAX31856 acquisition error: {e}")
@@ -182,3 +157,29 @@ class Max31856Source(BaseSource):
         precise_sleep(self._max_stimulus_duration_ms / 1000.0)
 
         return True
+
+    @staticmethod
+    def _log_faults(faults: int):
+        if faults:
+            fault_msgs = []
+            if faults & _MAX31856_FAULT_CJRANGE:
+                fault_msgs.append("cj_range")
+            if faults & _MAX31856_FAULT_TCRANGE:
+                fault_msgs.append("tc_range")
+            if faults & _MAX31856_FAULT_CJHIGH:
+                fault_msgs.append("cj_high")
+            if faults & _MAX31856_FAULT_CJLOW:
+                fault_msgs.append("cj_low")
+            if faults & _MAX31856_FAULT_TCHIGH:
+                fault_msgs.append("tc_high")
+            if faults & _MAX31856_FAULT_TCLOW:
+                fault_msgs.append("tc_low")
+            if faults & _MAX31856_FAULT_OVUV:
+                fault_msgs.append("voltage")
+            if faults & _MAX31856_FAULT_OPEN:
+                fault_msgs.append("open_tc")
+
+            LOGGER.warning(
+                "MAX31856 faults: %s",
+                ", ".join(fault_msgs),
+            )

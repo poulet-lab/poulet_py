@@ -26,6 +26,8 @@ class BaseSink(EventHandler):
     )
 
     _bus: EventBus = PrivateAttr(default_factory=EventBus)
+    _external_bus: bool = PrivateAttr(default=False)
+
     _queue: Queue = PrivateAttr()
     _thread: Thread = PrivateAttr()
     _is_open: bool = PrivateAttr(default=False)
@@ -66,12 +68,15 @@ class BaseSink(EventHandler):
             raise RuntimeError(msg)
 
         self._bus = value
+        self._external_bus = True
 
     def open(self):
         if self._is_open:
             return
 
-        self.bus.open()
+        if not self._external_bus:
+            self.bus.open()
+
         self.bus.subscribe(self)
 
         self._queue = Queue(maxsize=self.queue_size)
@@ -90,7 +95,10 @@ class BaseSink(EventHandler):
         self._queue.put(None)
         self._thread.join()
         self._close()
-        self.bus.close()
+
+        if not self._external_bus:
+            self.bus.close()
+
         self._is_open = False
 
     def _run(self):
@@ -98,6 +106,7 @@ class BaseSink(EventHandler):
             event = self._queue.get()
 
             if event is None:  # sentinel
+                self._queue.task_done()
                 break
 
             try:

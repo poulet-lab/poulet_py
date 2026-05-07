@@ -46,10 +46,6 @@ class StimuliMetadataSource(BaseSource):
             )
             json_data = json_data[: self.max_string_length]
 
-        with self._lock:
-            idx = self._buffer_idx % self.buffer_size
-            self._buffer[idx]["timestamp"] = timestamp
-            self._buffer[idx]["metadata"] = json_data
-            self._buffer_idx += 1
+        self._write_sample((timestamp, json_data))
 
         return True

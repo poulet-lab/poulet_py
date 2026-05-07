@@ -30,10 +30,6 @@ class CounterSource(BaseSource):
         timestamp = time_ns()
         self._counter += 1
 
-        with self._lock:
-            idx = self._buffer_idx % self.buffer_size
-            self._buffer[idx]["timestamp"] = timestamp
-            self._buffer[idx]["counter"] = self._counter
-            self._buffer_idx += 1
+        self._write_sample((timestamp, self._counter))
 
         return True

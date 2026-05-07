@@ -85,6 +85,8 @@ class ExperimentRuntime(BaseModel):
     sinks: Sequence[BaseSink] = Field(..., description="Sinks for the experiment")
 
     _bus: EventBus = PrivateAttr(default_factory=EventBus)
+    _external_bus: bool = PrivateAttr(default=False)
+
     _is_open: bool = PrivateAttr(default=False)
     _started: Event = PrivateAttr(default_factory=Event)
     _paused: Event = PrivateAttr(default_factory=Event)
@@ -114,13 +116,16 @@ class ExperimentRuntime(BaseModel):
         if self._is_open:
             msg = "Cannot change bus while experiment is open"
             raise RuntimeError(msg)
+
         self._bus = value
+        self._external_bus = True
 
     def open(self):
         if self._is_open:
             return
 
-        self.bus.open()
+        if not self._external_bus:
+            self.bus.open()
 
         for source in self.sources:
             source.bus = self.bus
@@ -153,7 +158,8 @@ class ExperimentRuntime(BaseModel):
         for source in self.sources:
             source.close()
 
-        self.bus.close()
+        if not self._external_bus:
+            self.bus.close()
 
     def run(self):
         self._ensure_open()

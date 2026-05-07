@@ -1,5 +1,5 @@
 try:
-    from numpy import arange, uint64
+    from numpy import empty
 
     from poulet_py import (
         AcquisitionType,
@@ -11,7 +11,6 @@ try:
         NIDigitalBaseStimulus,
         NIDigitalCompositeStimulus,
         NIDigitalInputTask,
-        precise_sleep,
     )
 except ImportError as e:
     msg = """
@@ -25,17 +24,18 @@ Missing 'sources' module. Install options:
 
 class NIDaQSource(BaseSource, NIDaQ):
     def _set_buffer_dtype(self):
-        self._buffer_dtype = [("timestamp", "uint64")]
+        dtype = [("timestamp", "uint64")]
 
         for task in self._read_tasks:
             if isinstance(task, NIAnalogInputTask):
-                dt = [(ch.name, "float64") for ch in task.channels]
-            elif isinstance(task, NIDigitalInputTask):
-                dt = [(ch.name, "uint32") for ch in task.channels]
-            else:
-                continue
+                for ch in task.channels:
+                    dtype.append((f"{task.name}_{ch.name}", "float64"))
 
-            self._buffer_dtype.append((task.name, dt))
+            elif isinstance(task, NIDigitalInputTask):
+                for ch in task.channels:
+                    dtype.append((f"{task.name}_{ch.name}", "uint32"))
+
+        self._buffer_dtype = dtype
 
     def _open(self):
         NIDaQ.open(self)
@@ -65,48 +65,32 @@ class NIDaQSource(BaseSource, NIDaQ):
             self.start()
 
         data = self.read(-1, -1)
-        if data:
-            lengths = [len(v) for v in data.values() if len(v) > 0]
-            if not lengths:
-                return True
 
-            n = min(lengths)
+        if not data:
+            return False
 
-            rate = self._clock_task._clock_handle.rate
-            dt = uint64(1e9 / rate)
+        lengths = [len(v) for v in data.values() if len(v) > 0]
+        if not lengths:
+            return False
 
-            t0 = min(data[t.name]["timestamp"][0] for t in self._read_tasks if t.name in data)
-            t0 = t0 - (n - 1) * dt
+        n = min(lengths)
+        samples = empty(n, dtype=self._buffer_dtype)
 
-            timestamps = t0 + dt * arange(n, dtype="uint64")
+        t_prev = 0
+        task_name = ""
 
-            with self._lock:
-                idx = self._buffer_idx % self.buffer_size
-                end = idx + n
-                self._buffer_idx += n
+        for task in self._read_tasks:
+            if task.name in data:
+                if not task_name or t_prev > data[task.name]["timestamp"][0]:
+                    task_name = task.name
+                    t_prev = data[task.name]["timestamp"][0]
 
-                if end <= self.buffer_size:
-                    self._buffer[idx:end]["timestamp"] = timestamps
+                for ch in task.channels:
+                    samples[f"{task.name}_{ch.name}"] = data[task.name][ch.name][:n]
 
-                    for task in self._read_tasks:
-                        if task.name in data:
-                            task_data = data[task.name]
-                            for ch in task.channels:
-                                self._buffer[idx:end][task.name][ch.name] = task_data[ch.name][:n]
-                else:
-                    split = self.buffer_size - idx
+        samples["timestamp"] = data[task_name]["timestamp"][:n]
 
-                    self._buffer[idx:]["timestamp"] = timestamps[:split]
-                    self._buffer[: end % self.buffer_size]["timestamp"] = timestamps[split:]
-
-                    for task in self._read_tasks:
-                        if task.name in data:
-                            task_data = data[task.name]
-                            for ch in task.channels:
-                                self._buffer[idx:][task.name][ch.name] = task_data[ch.name][:split]
-                                self._buffer[: end % self.buffer_size][task.name][ch.name] = (
-                                    task_data[ch.name][split:n]
-                                )
+        self._write_samples(samples)
 
         if self.acquisition_type == AcquisitionType.FINITE:
             self.stop()
