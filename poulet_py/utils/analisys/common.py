@@ -19,8 +19,7 @@ Missing required modules. Install options:
     raise ImportError(msg) from e
 
 
-#TODO
-class TrialCollection:
+class Trials:
     def __init__(self, trials: list[BaseData]):
         self._trials = trials
 
@@ -37,7 +36,7 @@ class TrialCollection:
 
         # slice
         if isinstance(key, slice):
-            return TrialCollection(self._trials[key])
+            return Trials(self._trials[key])
 
         # name-based (assuming path.name is unique)
         if isinstance(key, str):
@@ -48,7 +47,7 @@ class TrialCollection:
 
         raise TypeError(f"Unsupported key type: {type(key)}")
 
-    def filter(self, **criteria) -> "TrialCollection":
+    def filter(self, **criteria) -> "Trials":
         def match(trial: BaseData) -> bool:
             for key, value in criteria.items():
                 attr = getattr(trial, key, None)
@@ -62,7 +61,7 @@ class TrialCollection:
                         return False
             return True
 
-        return TrialCollection([t for t in self._trials if match(t)])
+        return Trials([t for t in self._trials if match(t)])
 
     def map(self, fn):
         return [fn(t) for t in self._trials]
@@ -71,7 +70,7 @@ class TrialCollection:
         return self._trials[0]
 
     def __repr__(self) -> str:
-        return f"TrialCollection(n={len(self._trials)})"
+        return f"Trials(n={len(self._trials)})"
 
 
 class Session(BaseModel):
@@ -90,9 +89,9 @@ class Session(BaseModel):
     _elapsed_seconds_window: tuple[int, int] | None = PrivateAttr(default=None)
 
     @property
-    def trials(self) -> "TrialCollection":
+    def trials(self) -> "Trials":
         self._ensure_open()
-        return TrialCollection(self._trials)
+        return Trials(self._trials)
 
     @property
     def trial_range(self) -> slice | None:
@@ -212,7 +211,14 @@ class Session(BaseModel):
                 elapsed_seconds_window=self._elapsed_seconds_window,
                 session_anchor_time=session_anchor_time,
             )
-            if self._is_elapsed_seconds_filter_enabled() and not trial._should_open():
+            if (
+                (
+                    self._is_elapsed_seconds_filter_enabled()
+                    or self.start is not None
+                    or self.end is not None
+                )
+                and not trial._should_open()
+            ):
                 continue
             trial.open()
             trials.append(trial)

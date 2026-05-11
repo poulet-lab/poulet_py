@@ -46,10 +46,16 @@ class BaseData(BaseModel, ABC):
     def _should_open(self) -> bool: ...
 
     def open(self) -> None:
+        if self._is_open:
+            return
         self._open()
+        self._is_open = True
 
     def close(self) -> None:
+        if not self._is_open:
+            return
         self._close()
+        self._is_open = False
 
     def _ensure_open(self):
         if not self._is_open:

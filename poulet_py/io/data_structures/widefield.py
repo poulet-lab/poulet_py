@@ -26,7 +26,7 @@ class WidefieldData(BaseData):
     VERSION_MARKERS: ClassVar[dict[int, list[str]]] = {
         1: [
             "recording.tif*",
-            "timestamps.csv",
+            "recording.csv",
             "data.h5",
             "green.tif*",
         ]
@@ -247,39 +247,31 @@ class WidefieldDataV1(WidefieldData):
         del self._reference_image_path
 
     def _resolve_paths(self) -> None:
-        video_candidates = ["recording.tiff", "recording.tif", "recording.npy"]
+        self._imaging_path = self.path / "recording.tiff"
+        self._timestamps_path = self.path / "recording.csv"
+        self._analog_output_data_path = self.path / "data.h5"
+        self._reference_image_path = self.path / "green.tiff"
 
-        for candidate in video_candidates:
-            candidate_path = self.path / candidate
-            if candidate_path.exists():
-                self.imaging_path = candidate_path
-                break
-
-        self.timestamps_path = self.path / "recording.csv"
-        if not self.timestamps_path.exists():
-            msg = f"Timestamps file not found: {self.timestamps_path}"
-            raise FileNotFoundError(msg)
-
-        self.analog_output_data_path = self.path / "data.h5"
-        if not self.analog_output_data_path.exists():
-            msg = f"Analog output data not found: {self.analog_output_data_path}"
-            raise FileNotFoundError(msg)
-
-        self.reference_image_path = self.path / "green.tiff"
-        if not self.reference_image_path.exists():
-            msg = f"Green reference image not found: {self.reference_image_path}"
-            raise FileNotFoundError(msg)
+        for label, path in (
+            ("Imaging file", self._imaging_path),
+            ("Timestamps file", self._timestamps_path),
+            ("Analog output data", self._analog_output_data_path),
+            ("Green reference image", self._reference_image_path),
+        ):
+            if not path.exists():
+                msg = f"{label} not found: {path}"
+                raise FileNotFoundError(msg)
 
     def _open_imaging(self) -> None:
-        LOGGER.info(f"Opening imaging data from: {self.imaging_path.name}")
+        LOGGER.info(f"Opening imaging data from: {self._imaging_path.name}")
 
-        if self.imaging_path.suffix.lower() == ".npy":
-            data = load(str(self.imaging_path))
+        if self._imaging_path.suffix.lower() == ".npy":
+            data = load(str(self._imaging_path))
 
-        elif self.imaging_path.suffix.lower() in (".tiff", ".tif"):
-            data = imread(str(self.imaging_path))
+        elif self._imaging_path.suffix.lower() in (".tiff", ".tif"):
+            data = imread(str(self._imaging_path))
         else:
-            msg = f"Unsupported imaging format: {self.imaging_path.suffix}"
+            msg = f"Unsupported imaging format: {self._imaging_path.suffix}"
             raise ValueError(msg)
 
         LOGGER.info(f"Opened imaging stack: {data.shape}")
@@ -287,9 +279,9 @@ class WidefieldDataV1(WidefieldData):
         self._imaging_data = data
 
     def _open_reference_image(self):
-        LOGGER.info(f"Opening green reference from: {self.reference_image_path.name}")
+        LOGGER.info(f"Opening green reference from: {self._reference_image_path.name}")
 
-        image = imread(str(self.reference_image_path))
+        image = imread(str(self._reference_image_path))
 
         if image.ndim == 3:
             image = image[0]
@@ -300,18 +292,18 @@ class WidefieldDataV1(WidefieldData):
 
     def _open_timestamps(self):
         try:
-            self._timestamps = read_csv(self.timestamps_path, sep=";")
+            self._timestamps = read_csv(self._timestamps_path, sep=";")
             self._timestamps = self._timestamps.loc[
                 :, ~self._timestamps.columns.str.contains("^Unnamed")
             ]
 
             LOGGER.info(f"Opened timestamps: {len(self._timestamps)} rows")
         except Exception:
-            LOGGER.exception(f"Error loading timestamps: {self.timestamps_path}")
+            LOGGER.exception(f"Error loading timestamps: {self._timestamps_path}")
 
     def _open_analog_output(self):
         try:
-            with File(self.analog_output_data_path, "r") as f:
+            with File(self._analog_output_data_path, "r") as f:
                 self._analog_output_data_file_attrs = dict(f.attrs)
 
                 def _visit_datasets(name: str, obj: Any) -> None:
@@ -322,7 +314,7 @@ class WidefieldDataV1(WidefieldData):
                 f.visititems(_visit_datasets)
 
         except Exception:
-            LOGGER.exception(f"Error loading H5: {self.analog_output_data_path}")
+            LOGGER.exception(f"Error loading H5: {self._analog_output_data_path}")
 
     #TODO
     def _should_open(self) -> bool:

@@ -69,7 +69,7 @@ from .stimulus import (
     TCSStimulus,
 )
 from .tools import go_to, json_serializer, repeat, sanitize_path, precise_sleep
-from .utils import ExperimentBlock, ExperimentRuntime, ExperimentTrial, Oscilloscope
+from .utils import ExperimentBlock, ExperimentRuntime, ExperimentTrial, Oscilloscope, Session, Trials
 
 __all__ = [
     "LOGGER",
@@ -96,6 +96,8 @@ __all__ = [
     "ExperimentBlock",
     "ExperimentRuntime",
     "ExperimentTrial",
+    "Session",
+    "Trials",
     "GPIOTrigger",
     "precise_sleep",
     "NIAnalogCompositeStimulus",
