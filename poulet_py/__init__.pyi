@@ -44,6 +44,15 @@ from .io import (
     StimuliMetadataSource,
     BaseData,
     WidefieldData,
+    DataSignature,
+    DATA_SIGNATURES,
+    DataStructure,
+    BasePattern,
+    PathPattern,
+    DiscoveryStrategy,
+    PatternBasedDiscovery,
+    ExplicitDiscovery,
+    GlobBasedDiscovery,
 )
 from .stimulus import (
     BaseStimulus,
@@ -69,7 +78,15 @@ from .stimulus import (
     TCSStimulus,
 )
 from .tools import go_to, json_serializer, repeat, sanitize_path, precise_sleep
-from .utils import ExperimentBlock, ExperimentRuntime, ExperimentTrial, Oscilloscope, Session, Trials
+from .utils import (
+    ExperimentBlock,
+    ExperimentRuntime,
+    ExperimentTrial,
+    Oscilloscope,
+    Session,
+    Trial,
+    WidefieldAnalysis,
+)
 
 __all__ = [
     "LOGGER",
@@ -97,7 +114,8 @@ __all__ = [
     "ExperimentRuntime",
     "ExperimentTrial",
     "Session",
-    "Trials",
+    "Trial",
+    "WidefieldAnalysis",
     "GPIOTrigger",
     "precise_sleep",
     "NIAnalogCompositeStimulus",
@@ -108,6 +126,8 @@ __all__ = [
     "KeyboardTrigger",
     "NIAnalogBaseStimulus",
     "NIAnalogInputChannel",
+    "DataSignature",
+    "DATA_SIGNATURES",
     "NIAnalogInputTask",
     "NIAnalogOutputChannel",
     "NIAnalogOutputTask",
@@ -150,4 +170,11 @@ __all__ = [
     "sanitize_path",
     "setup_logging",
     "Soho",
+    "DataStructure",
+    "BasePattern",
+    "PathPattern",
+    "DiscoveryStrategy",
+    "PatternBasedDiscovery",
+    "ExplicitDiscovery",
+    "GlobBasedDiscovery",
 ]

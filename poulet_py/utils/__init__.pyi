@@ -1,5 +1,5 @@
 # ruff: noqa TID252
-from .analisys.common import Session, Trials
+from .analysis import Session, Trial, WidefieldAnalysis
 from .experiment import ExperimentBlock, ExperimentRuntime, ExperimentTrial
 from .oscilloscope import Oscilloscope
 
@@ -9,5 +9,6 @@ __all__ = [
     "ExperimentTrial",
     "Oscilloscope",
     "Session",
-    "Trials",
+    "Trial",
+    "WidefieldAnalysis",
 ]

@@ -1,8 +1,11 @@
 try:
-    from pathlib import Path
-    from pydantic import BaseModel, Field, PrivateAttr
+    from typing import Self
 
-    from poulet_py import LOGGER, Session, WidefieldData
+    from numpy import ceil, ndarray, pad
+    from pydantic import PrivateAttr
+
+    from poulet_py import Session, WidefieldData
+    from poulet_py.config.logging import LOGGER
 
 except ImportError as e:
     msg = """
@@ -16,45 +19,98 @@ Also ensure: h5py, numpy, pandas, scikit-image, imageio, matplotlib are installe
     raise ImportError(msg) from e
 
 
-class WidefieldAnalysis(BaseModel):
-    path: Path = Field(..., description="Path to a widefield trial or session folder")
-    _session: Session = PrivateAttr()
-    _active_trial_idx: int = PrivateAttr(default=0)
+class WidefieldAnalysis(Session):
+    _downscaled_imaging: dict[int, ndarray] = PrivateAttr(default_factory=dict)
 
-    @property
-    def session(self) -> Session:
-        if not hasattr(self, "_session"):
-            msg = "Session has not been loaded. Call load() first."
-            raise RuntimeError(msg)
-        return self._session
+    def downscale(
+        self, target_resolution: tuple[int, int], factor: int, inplace: bool = False
+    ) -> Self | None:
+        obj = self if inplace else self.copy(deep=True)
 
-    @property
-    def active_trial(self) -> WidefieldData:
-        if not self.session.trials:
-            msg = "Session has no trials configured"
-            raise ValueError(msg)
-        return self.session.trials[self._active_trial_idx]
+        # TODO filtering before (vik)
+        for trial in obj.trials:
+            if not isinstance(trial.data, WidefieldData):
+                continue
 
-    def load(self, path: Path | str | None = None) -> None:
-        """
-        Load widefield data.
+            imaging_data = trial.data.imaging
 
-        Behavior:
-        - path is a trial folder: open a session containing that single trial.
-        - path is a session folder: discover and open child trial folders.
-        - path is None: open the configured session.
-        """
-        if path is not None:
-            self.path = Path(path)
+            if imaging_data is None:
+                LOGGER.warning("No imaging data loaded. Call load_data() first.")
+                return None
 
-        if not self.path.exists() or not self.path.is_dir():
-            msg = f"Path does not exist or is not a directory: {self.path}"
-            raise ValueError(msg)
+            T, H, W = imaging_data.shape
+            mov = imaging_data.copy()
 
-        if hasattr(self, "_session"):
-            self._session.close()
+            if target_resolution is not None:
+                target_H, target_W = target_resolution
+                factor_H = H / target_H
+                factor_W = W / target_W
 
-        self._session = Session(path=self.path, data_type=WidefieldData)
-        self.session.open()
-        self._active_trial_idx = 0
-        LOGGER.info(str(self.active_trial))
+                if not factor_H.is_integer() or not factor_W.is_integer():
+                    factor_H_int = int(ceil(factor_H))
+                    factor_W_int = int(ceil(factor_W))
+                    new_H = target_H * factor_H_int
+                    new_W = target_W * factor_W_int
+                    pad_H = new_H - H
+                    pad_W = new_W - W
+
+                    LOGGER.warning(
+                        f"Target {target_resolution} requires factors "
+                        f"({factor_H:.2f}, {factor_W:.2f}). "
+                        f"Padding ({pad_H}, {pad_W}) pixels to use factors "
+                        f"({factor_H_int}, {factor_W_int})."
+                    )
+
+                    mov = pad(
+                        mov, ((0, 0), (0, pad_H), (0, pad_W)), mode="constant", constant_values=0
+                    )
+                    T, H, W = mov.shape
+                    factor_H = factor_H_int
+                    factor_W = factor_W_int
+                else:
+                    factor_H = int(factor_H)
+                    factor_W = int(factor_W)
+
+                if factor_H == factor_W:
+                    factor = factor_H
+                    mov = mov.reshape(T, H // factor, factor, W // factor, factor).mean(4).mean(2)
+                else:
+                    LOGGER.info(f"Using different factors: H={factor_H}, W={factor_W}")
+                    mov = mov.reshape(T, H // factor_H, factor_H, W, 1).mean(2)
+                    mov = mov.reshape(T, H // factor_H, W // factor_W, factor_W).mean(3)
+
+            elif factor is not None:
+                if H % factor != 0 or W % factor != 0:
+                    pad_H = (factor - (H % factor)) % factor
+                    pad_W = (factor - (W % factor)) % factor
+                    LOGGER.warning(
+                        f"Dimensions ({H}, {W}) not divisible by factor {factor}. "
+                        f"Padding ({pad_H}, {pad_W}) pixels."
+                    )
+                    mov = pad(
+                        mov, ((0, 0), (0, pad_H), (0, pad_W)), mode="constant", constant_values=0
+                    )
+                    T, H, W = mov.shape
+
+                mov = mov.reshape(T, H // factor, factor, W // factor, factor).mean(4).mean(2)
+
+                trial.data._imaging = mov.astype("uint16")
+                # write this also in metadata table
+
+        if not inplace:
+            return obj
+
+    def to_numpy(self) -> dict[str, ndarray]:
+        data_dict = {}
+
+        for trial in self.trials:
+            if not isinstance(trial.data, WidefieldData):
+                continue
+
+            if trial.data.imaging is None:
+                LOGGER.warning("No imaging data loaded. Call load_data() first.")
+                continue
+
+            data_dict[trial.path.name] = trial.data.imaging
+
+        return data_dict

@@ -12,7 +12,19 @@ from .sources import (
     ThermocoupleType,
     StimuliMetadataSource,
 )
-from .data_structures import BaseData, WidefieldData
+from .data_structures import (
+    BaseData,
+    WidefieldData,
+    DataSignature,
+    DATA_SIGNATURES,
+    DataStructure,
+    BasePattern,
+    PathPattern,
+    DiscoveryStrategy,
+    PatternBasedDiscovery,
+    ExplicitDiscovery,
+    GlobBasedDiscovery,
+)
 
 __all__ = [
     "AcquisitionType",
@@ -27,10 +39,19 @@ __all__ = [
     "EventHandler",
     "HDFSink",
     "BaseData",
+    "DataSignature",
     "WidefieldData",
     "HDFSink",
     "NIDaQSource",
     "SinkEvent",
     "TCSSource",
     "OpenEphysSource",
+    "DATA_SIGNATURES",
+    "DataStructure",
+    "BasePattern",
+    "PathPattern",
+    "DiscoveryStrategy",
+    "PatternBasedDiscovery",
+    "ExplicitDiscovery",
+    "GlobBasedDiscovery",
 ]

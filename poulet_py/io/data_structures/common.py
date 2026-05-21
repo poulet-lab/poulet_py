@@ -1,9 +1,11 @@
 try:
     from abc import ABC, abstractmethod
-    from datetime import datetime
+    from collections.abc import Sequence
+    from enum import Enum
     from pathlib import Path
+    from typing import Any, ClassVar
 
-    from pydantic import BaseModel, Field, PrivateAttr, model_validator
+    from pydantic import BaseModel, Field, PrivateAttr
 except ImportError as e:
     msg = """
 Missing required modules. Install options:
@@ -14,57 +16,66 @@ Missing required modules. Install options:
     raise ImportError(msg) from e
 
 
+class DataStructure(int, Enum):
+    NONE = 0
+    SINGLE_FILE = 1
+    FOLDER_PER_TRIAL = 2
+
+
+class DataSignature(BaseModel):
+    data_structure: DataStructure = Field(
+        ...,
+        description="Expected structure of trial data (e.g. folder per trial, single file, etc.)",
+    )
+    data_type: type["BaseData"] = Field(
+        ...,
+        description="Expected type of data contained in trials (e.g. electrophysiology, behavior, etc.)",
+    )
+    files: Sequence[str] = Field(default_factory=list, description="List of file patterns to match")
+
+    def matches(self, path: Path) -> bool:
+        """Check if path matches this signature."""
+
+        if not path.exists():
+            return False
+
+        if not self.files:
+            return True
+
+        return all(any(path.glob(file_pattern)) for file_pattern in self.files)
+
+    def __eq__(self, value: object) -> bool:
+        if not isinstance(value, DataSignature):
+            return NotImplemented
+
+        return (
+            self.data_structure == value.data_structure
+            and self.data_type == value.data_type
+            and set(self.files) == set(value.files)
+        )
+
+    def __hash__(self) -> int:
+        return hash((self.data_structure, self.data_type, frozenset(self.files)))
+
+
 class BaseData(BaseModel, ABC):
+    DATA_SIGNATURE: ClassVar[DataSignature]
+
     path: Path = Field(..., description="Path to trial folder")
-    start: datetime | int | None = Field(default=None)
-    end: datetime | int | None = Field(default=None)
 
-    _is_open: bool = PrivateAttr(default=False)
+    _metadata: dict[str, Any] = PrivateAttr(default_factory=dict)
+    _paths: Sequence[Path] = PrivateAttr(default_factory=list)
 
-    @model_validator(mode="after")
-    def validate_path(self):
-        if not isinstance(self.path, Path):
-            self.path = Path(self.path)
+    @property
+    def signature(self) -> DataSignature:
+        return self.DATA_SIGNATURE
 
-        msg = ""
-        if not self.path.exists():
-            msg = f"Data Path {self.path} does not exist"
-        if not self.path.is_dir():
-            msg = f"Data Path must be a directory: {self.path}"
-        if msg:
-            raise ValueError(msg)
-
-        return self
+    @property
+    def metadata(self) -> dict[str, Any]:
+        return self._metadata
 
     @abstractmethod
-    def _open(self): ...
+    def summary(self) -> str: ...
 
-    @abstractmethod
-    def _close(self): ...
-
-    @abstractmethod
-    def _should_open(self) -> bool: ...
-
-    def open(self) -> None:
-        if self._is_open:
-            return
-        self._open()
-        self._is_open = True
-
-    def close(self) -> None:
-        if not self._is_open:
-            return
-        self._close()
-        self._is_open = False
-
-    def _ensure_open(self):
-        if not self._is_open:
-            msg = f"{type(self)} need to be opened first"
-            raise RuntimeError(msg)
-
-    def __enter__(self):
-        self.open()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
+    def __str__(self) -> str:
+        return self.summary()

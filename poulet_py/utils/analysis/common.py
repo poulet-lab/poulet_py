@@ -1,13 +1,13 @@
 try:
-    from collections.abc import Iterator
-    from datetime import datetime
+    from collections.abc import Generator, Sequence
     from pathlib import Path
     from typing import Any
 
+    from pandas import DataFrame
     from pydantic import BaseModel, Field, PrivateAttr
 
-    from poulet_py import BaseData
-
+    from poulet_py import DATA_SIGNATURES, BaseData, DataSignature, DataStructure, DiscoveryStrategy
+    from poulet_py.io.data_structures.filters import Index, _ILocIndexer, _LocIndexer
 except ImportError as e:
     msg = """
 Missing required modules. Install options:
@@ -19,234 +19,112 @@ Missing required modules. Install options:
     raise ImportError(msg) from e
 
 
-class Trials:
-    def __init__(self, trials: list[BaseData]):
-        self._trials = trials
+class Trial(BaseModel):
+    path: Path = Field(..., description="Path to trial folder or file")
 
-    def __len__(self) -> int:
-        return len(self._trials)
+    _signature: DataSignature = PrivateAttr()
+    _data: BaseData = PrivateAttr()
+    _n_trials: int | None = PrivateAttr(default=None)
+    _metadata: DataFrame = PrivateAttr(default_factory=DataFrame)
 
-    def __iter__(self) -> Iterator[BaseData]:
-        return iter(self._trials)
+    @property
+    def n_trials(self) -> int | None:
+        return self._n_trials
 
-    def __getitem__(self, key: Any):
-        # index
-        if isinstance(key, int):
-            return self._trials[key]
+    @property
+    def signature(self) -> DataSignature | None:
+        return self._signature
 
-        # slice
-        if isinstance(key, slice):
-            return Trials(self._trials[key])
+    @property
+    def metadata(self) -> DataFrame | None:
+        return self._metadata
 
-        # name-based (assuming path.name is unique)
-        if isinstance(key, str):
-            for t in self._trials:
-                if t.path.name == key:
-                    return t
-            raise KeyError(f"No trial named '{key}'")
+    @metadata.setter
+    def metadata(self, value: dict[str, Any] | DataFrame):
+        if isinstance(value, dict):
+            self._metadata = DataFrame([value])
+        elif isinstance(value, DataFrame):
+            self._metadata = value
+        else:
+            msg = "Metadata must be a dict or DataFrame"
+            raise ValueError(msg)
 
-        raise TypeError(f"Unsupported key type: {type(key)}")
+    @property
+    def data(self) -> BaseData | None:
+        return self._data
 
-    def filter(self, **criteria) -> "Trials":
-        def match(trial: BaseData) -> bool:
-            for key, value in criteria.items():
-                attr = getattr(trial, key, None)
+    def model_post_init(self, __context):
+        for signature in DATA_SIGNATURES.values():
+            if signature.matches(self.path):
+                self._signature = signature
+                self._data = signature.data_type(path=self.path)
 
-                # callable predicate support
-                if callable(value):
-                    if not value(attr):
-                        return False
+                if self._signature.data_structure == DataStructure.FOLDER_PER_TRIAL:
+                    self._n_trials = 1
+                elif self._signature.data_structure == DataStructure.SINGLE_FILE:
+                    # TODO implement logic to determine number of trials in a single file
+                    self._n_trials = None
                 else:
-                    if attr != value:
-                        return False
-            return True
+                    self._n_trials = None
 
-        return Trials([t for t in self._trials if match(t)])
+                return
 
-    def map(self, fn):
-        return [fn(t) for t in self._trials]
-
-    def first(self) -> BaseData:
-        return self._trials[0]
-
-    def __repr__(self) -> str:
-        return f"Trials(n={len(self._trials)})"
+        msg = f"No matching data signature found for path: {self.path}"
+        raise ValueError(msg)
 
 
 class Session(BaseModel):
-
-    path: Path = Field(..., description="Path to the session folder")
-    start: datetime | int | None = Field(default=None)
-    end: datetime | int | None = Field(default=None)
-    data_type: type[BaseData] = Field(
-        default=..., description="Type of data in the session, e.g. 'widefield' or 'ephys'"
+    path: Path = Field(..., description="Root path to search for sessions")
+    discovery_strategy: DiscoveryStrategy | None = Field(
+        default=None, description="How to discover trials"
     )
+    signature: DataSignature | None = Field(
+        default=None, description="Expected data signature for trials"
+    )
+    _paths: DataFrame = PrivateAttr()
+    _trials: Index[Trial] = PrivateAttr()
 
-    _trials: list[BaseData] = PrivateAttr()
-    _is_open: bool = PrivateAttr(default=False)
-    _trial_index: slice | None = PrivateAttr(default=None)
-    _elapsed_seconds_end: int | None = PrivateAttr(default=None)
-    _elapsed_seconds_window: tuple[int, int] | None = PrivateAttr(default=None)
-
-    @property
-    def trials(self) -> "Trials":
-        self._ensure_open()
-        return Trials(self._trials)
-
-    @property
-    def trial_range(self) -> slice | None:
-        return self._trial_index
-
-    def set_trial_range(
-        self,
-        start: int | None,
-        end: int | None,
-        step: int | None = None,
-    ) -> None:
-        for name, value in (("start", start), ("end", end), ("step", step)):
-            if value is not None and not isinstance(value, int):
-                msg = f"{name} must be an integer or None"
-                raise TypeError(msg)
-        if step == 0:
-            msg = "step must not be zero"
-            raise ValueError(msg)
-
-        self._trial_index = slice(start, end, step)
-
-    def set_elapsed_seconds(self, start: Any, end: Any | None = None) -> None:
-        if not isinstance(start, int):
-            msg = "start must be an integer"
-            raise TypeError(msg)
-        if start < 0:
-            msg = "start must be >= 0"
-            raise ValueError(msg)
-
-        if end is None:
-            self._elapsed_seconds_end = start
-            self._elapsed_seconds_window = None
-            return
-
-        if not isinstance(end, int):
-            msg = "end must be an integer"
-            raise TypeError(msg)
-        if end < 0:
-            msg = "end must be >= 0"
-            raise ValueError(msg)
-        if start > end:
-            msg = "elapsed seconds window must be ordered as (start, end)"
-            raise ValueError(msg)
-
-        self._elapsed_seconds_end = None
-        self._elapsed_seconds_window = (start, end)
-
-    def clear_elapsed_seconds_filter(self) -> None:
-        self._elapsed_seconds_end = None
-        self._elapsed_seconds_window = None
-
-    def _is_elapsed_seconds_filter_enabled(self) -> bool:
-        return self._elapsed_seconds_end is not None or self._elapsed_seconds_window is not None
-
-    def _resolve_session_anchor_time(self, trial_paths: list[Path]) -> datetime:
-        parser = getattr(self.data_type, "_parse_folder_datetime", None)
-        if not callable(parser):
-            msg = (
-                f"{self.data_type} does not support elapsed-seconds filtering. "
-                "Expected a _parse_folder_datetime(folder_name) helper."
-            )
-            raise TypeError(msg)
-
-        first_trial_name = trial_paths[0].name
-        anchor_time = parser(first_trial_name)
-        if anchor_time is None:
-            msg = (
-                "Unable to compute session anchor time from first trial folder "
-                f"'{first_trial_name}'. Expected folder names in yyMMdd_HHmmss, "
-                "yyyyMMdd_HHmmss, or HHmmss format."
-            )
-            raise ValueError(msg)
-        return anchor_time
-
-    def _select_trial_paths(self, trial_paths: list[Path]) -> list[Path]:
-        if self._trial_index is None:
-            return trial_paths
-
-        selected_paths = trial_paths[self._trial_index]
-        if not selected_paths:
-            msg = (
-                f"Trial range {self._trial_index.start}:{self._trial_index.stop}:"
-                f"{self._trial_index.step} selected no trials out of "
-                f"{len(trial_paths)} discovered"
-            )
-            raise ValueError(msg)
-        return selected_paths
-
-    def open(self) -> None:
-        if self._is_open:
-            return
-
-        if not self.path.exists():
-            msg = f"Session path does not exist: {self.path}"
-            raise FileNotFoundError(msg)
-
-        trial_paths = [p for p in self.path.iterdir() if p.is_dir()]
-
-        if not trial_paths:
-            trial_paths = [self.path]
-
-        trial_paths = self._select_trial_paths(sorted(trial_paths))
-        session_anchor_time = (
-            self._resolve_session_anchor_time(trial_paths)
-            if self._is_elapsed_seconds_filter_enabled()
-            else None
+    def model_post_init(self, __context):
+        self._paths = (
+            self.discovery_strategy.to_df(self.path)
+            if self.discovery_strategy
+            else DataFrame([DiscoveryStrategy.path_stats(p) for p in self.path.rglob("*")])
         )
 
-        trials: list[BaseData] = []
+        trials = []
+        for _, row in self._paths.iterrows():
+            if row["is_dir"]:
+                trial = Trial(path=row["parent"] / row["name"])
+                trial.metadata = row.to_frame().T
+                if not self.signature or (trial.signature and self.signature == trial.signature):
+                    trials.append(trial)
 
-        for path in trial_paths:
-            trial = self.data_type(
-                path=path,
-                start=self.start,
-                end=self.end,
-                elapsed_seconds_end=self._elapsed_seconds_end,
-                elapsed_seconds_window=self._elapsed_seconds_window,
-                session_anchor_time=session_anchor_time,
-            )
-            if (
-                (
-                    self._is_elapsed_seconds_filter_enabled()
-                    or self.start is not None
-                    or self.end is not None
-                )
-                and not trial._should_open()
-            ):
-                continue
-            trial.open()
-            trials.append(trial)
+        self._trials = Index(trials)
 
-        self._trials = trials
+    @property
+    def trials(self) -> Index[Trial]:
+        return self._trials
 
-        self._is_open = True
+    @property
+    def iloc(self) -> _ILocIndexer[Trial]:
+        return self._trials.iloc
 
-    def close(self) -> None:
-        if not self._is_open:
-            return
+    @property
+    def loc(self) -> _LocIndexer[Trial]:
+        return self._trials.loc
 
-        trials = self._trials if isinstance(self._trials, list) else [self._trials]
+    # def query(self) -> Query:
+    #     return Query(self)
 
-        for trial in trials:
-            trial.close()
+    def __len__(self) -> int:
+        return sum(trial._n_trials or 1 for trial in self._trials)
 
-        self._trials = []
-        self._is_open = False
+    def __iter__(self) -> Generator[tuple[str, Any], None, None]:
+        for trial in self._trials:
+            if trial.data is not None:
+                yield str(trial.path), trial.data
 
-    def _ensure_open(self):
-        if not self._is_open:
-            msg = f"{type(self)} need to be opened first"
-            raise RuntimeError(msg)
-
-    def __enter__(self):
-        self.open()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
+    def __getitem__(
+        self, key: int | str | slice | Sequence[int] | Sequence[str]
+    ) -> Trial | Sequence[Trial]:
+        return self._trials[key]
