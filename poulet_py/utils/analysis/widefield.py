@@ -1,15 +1,20 @@
+from numpy import maximum
+
+
 try:
-    from typing import Callable, Self
-    from pathlib import Path
-    from numpy import ceil, ndarray, pad
-    from pydantic import PrivateAttr
     import json
-    from math import sqrt # type: ignore
+    from collections.abc import Callable
+    from math import sqrt
+    from pathlib import Path
+    from typing import Self
+
     import imageio.v2 as imageio
     import matplotlib.pyplot as plt
-    from numpy import ceil, ndarray, ogrid, pad
     from matplotlib import cm
     from matplotlib.colors import Normalize
+    from numpy import ascontiguousarray, ceil, ndarray, ogrid, pad, zeros, any, ceil, array, floor
+    from pydantic import PrivateAttr
+
     from poulet_py import Session, WidefieldData
     from poulet_py.config.logging import LOGGER
 
@@ -26,87 +31,60 @@ Also ensure: h5py, numpy, pandas, scikit-image, imageio, matplotlib are installe
 
 
 class WidefieldAnalysis(Session):
-    _downscaled_imaging: dict[int, ndarray] = PrivateAttr(default_factory=dict)
     _created_movies: dict[str, Path] = PrivateAttr(default_factory=dict)
     _mask_data: dict[str, float] | None = PrivateAttr(default=None)
 
-    def downscale(
-        self, target_resolution: tuple[int, int], factor: int, inplace: bool = False
-    ) -> Self | None:
-        obj = self if inplace else self.copy(deep=True)
+    def downscale(self, target: tuple[int, int] | int | float, *, inplace: bool = False) -> Self:
+        obj = self if inplace else self.model_copy(deep=True)
 
-        # TODO filtering before (vik)
+        target_dim = zeros(2, dtype="int32")
+
+        if isinstance(target, (tuple, int)):
+            target_dim[:] = target
+        elif isinstance(target, float):
+            if not (0 < target < 1):
+                raise ValueError("Float target must be between 0 and 1.")
+        else:
+            raise ValueError("target must be a tuple, int, or float.")
+
+        if (target_dim <= 0).any():
+            raise ValueError("Target dimensions must be positive.")
+
+        # TODO Vik filtering
         for trial in obj.trials:
             if not isinstance(trial.data, WidefieldData):
                 continue
 
-            imaging_data = trial.data.imaging
+            imaging = trial.data.imaging
+            t = imaging.shape[0]
+            dim = array(imaging.shape[1:])
 
-            if imaging_data is None:
-                LOGGER.warning("No imaging data loaded. Call load_data() first.")
-                return None
+            if isinstance(target, float):
+                current_target = maximum(1, floor(dim * target))
+            else:
+                current_target = target_dim
 
-            T, H, W = imaging_data.shape
-            mov = imaging_data.copy()
+            if (current_target >= dim).any():
+                raise ValueError("Target dimensions must be smaller than original.")
 
-            if target_resolution is not None:
-                target_H, target_W = target_resolution
-                factor_H = H / target_H
-                factor_W = W / target_W
+            factor = (dim + current_target - 1) // current_target
+            padding = current_target * factor - dim
 
-                if not factor_H.is_integer() or not factor_W.is_integer():
-                    factor_H_int = int(ceil(factor_H))
-                    factor_W_int = int(ceil(factor_W))
-                    new_H = target_H * factor_H_int
-                    new_W = target_W * factor_W_int
-                    pad_H = new_H - H
-                    pad_W = new_W - W
+            imaging = pad(
+                imaging,
+                ((0, 0), (0, padding[0]), (0, padding[1])),
+                mode="constant",
+                constant_values=0,
+            )
 
-                    LOGGER.warning(
-                        f"Target {target_resolution} requires factors "
-                        f"({factor_H:.2f}, {factor_W:.2f}). "
-                        f"Padding ({pad_H}, {pad_W}) pixels to use factors "
-                        f"({factor_H_int}, {factor_W_int})."
-                    )
+            imaging = ascontiguousarray(imaging)
+            imaging = imaging.reshape(
+                t, current_target[0], factor[0], current_target[1], factor[1]
+            ).mean(axis=(2, 4), dtype="float32")
 
-                    mov = pad(
-                        mov, ((0, 0), (0, pad_H), (0, pad_W)), mode="constant", constant_values=0
-                    )
-                    T, H, W = mov.shape
-                    factor_H = factor_H_int
-                    factor_W = factor_W_int
-                else:
-                    factor_H = int(factor_H)
-                    factor_W = int(factor_W)
+            trial.data._imaging = imaging
 
-                if factor_H == factor_W:
-                    factor = factor_H
-                    mov = mov.reshape(T, H // factor, factor, W // factor, factor).mean(4).mean(2)
-                else:
-                    LOGGER.info(f"Using different factors: H={factor_H}, W={factor_W}")
-                    mov = mov.reshape(T, H // factor_H, factor_H, W, 1).mean(2)
-                    mov = mov.reshape(T, H // factor_H, W // factor_W, factor_W).mean(3)
-
-            elif factor is not None:
-                if H % factor != 0 or W % factor != 0:
-                    pad_H = (factor - (H % factor)) % factor
-                    pad_W = (factor - (W % factor)) % factor
-                    LOGGER.warning(
-                        f"Dimensions ({H}, {W}) not divisible by factor {factor}. "
-                        f"Padding ({pad_H}, {pad_W}) pixels."
-                    )
-                    mov = pad(
-                        mov, ((0, 0), (0, pad_H), (0, pad_W)), mode="constant", constant_values=0
-                    )
-                    T, H, W = mov.shape
-
-                mov = mov.reshape(T, H // factor, factor, W // factor, factor).mean(4).mean(2)
-
-                trial.data._imaging = mov.astype("uint16")
-                # write this also in metadata table
-
-        if not inplace:
-            return obj
+        return obj
 
     def to_numpy(self) -> dict[str, ndarray]:
         data_dict = {}
@@ -122,8 +100,9 @@ class WidefieldAnalysis(Session):
             data_dict[trial.path.name] = trial.data.imaging
 
         return data_dict
-#### add the processed folder in the common.py get processed folder 
-#### this is important for the saving the array as well if needed 
+
+    #### add the processed folder in the common.py get processed folder
+    #### this is important for the saving the array as well if needed
     def create_movie(
         self,
         output_path: Path | None = None,
@@ -145,7 +124,7 @@ class WidefieldAnalysis(Session):
         - stores output paths in obj._created_movies
         - returns obj only when inplace=False
         """
-        obj = self if inplace else self.copy(deep=True)
+        obj = self if inplace else self.model_copy(deep=True)
 
         obj._created_movies = {}
 
@@ -204,19 +183,9 @@ class WidefieldAnalysis(Session):
 
         if not inplace:
             return obj
-#### i made the mask to be created on the downscaled movie already 
-    def create_mask(
-        self,
-        initial_radius: float = 100.0,
-        inplace: bool = False,
-    ) -> Self | None:
-        """
-        Create a circular mask on the current imaging data.
 
-        If downscale() was called before this, the mask is created on the
-        downscaled imaging frame.
-        """
-        obj = self if inplace else self.copy(deep=True)
+    def window_mask(self, initial_radius: float = 100.0, *, inplace: bool = False) -> Self | None:
+        obj = self if inplace else self.model_copy(deep=True)
 
         reference_frame = None
 
@@ -325,8 +294,8 @@ class WidefieldAnalysis(Session):
 
         if not inplace:
             return obj
-        
-#### save mask in processed? 
+
+    #### save mask in processed?
     def save_mask(
         self,
         mask_data: dict[str, float] | None = None,
