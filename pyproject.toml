@@ -70,15 +70,15 @@ seq = [
 ]
 # Hardware
 camera = [
-  "pypylon<=26.4.1",
+  "pypylon<=26.5.0",
   "opencv-python<=4.13.0.92",
   "numpy<=2.4.4",
   "scipy<=1.17.1",
   "matplotlib<=3.10.9",
   "h5py<=3.16.0",
   "keyboard<=0.13.5",
-  "pywin32<=311; platform_system == 'Windows'",
-  "pythonnet<=3.0.5; platform_system == 'Windows'",
+  "pywin32<=312; platform_system == 'Windows'",
+  "pythonnet<=3.1.0; platform_system == 'Windows'",
 ]
 daq = ["poulet_py[nidaq]"]
 nidaq = ["nidaqmx<=1.5.0"]
