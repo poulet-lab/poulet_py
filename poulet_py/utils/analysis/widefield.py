@@ -1,18 +1,28 @@
-from numpy import maximum
-
-
 try:
     import json
     from collections.abc import Callable
     from math import sqrt
     from pathlib import Path
-    from typing import Self
+    from typing import Literal, Self
 
-    import imageio.v2 as imageio
     import matplotlib.pyplot as plt
+    from cv2 import COLOR_RGB2BGR, VideoWriter, VideoWriter_fourcc, cvtColor
+    from h5py import File
     from matplotlib import cm
-    from matplotlib.colors import Normalize
-    from numpy import ascontiguousarray, ceil, ndarray, ogrid, pad, zeros, any, ceil, array, floor
+    from numpy import (
+        array,
+        ascontiguousarray,
+        clip,
+        floor,
+        load,
+        maximum,
+        ndarray,
+        ogrid,
+        pad,
+        savez_compressed,
+        zeros,
+    )
+    from prompt_toolkit.shortcuts import ProgressBar
     from pydantic import PrivateAttr
 
     from poulet_py import Session, WidefieldData
@@ -31,7 +41,6 @@ Also ensure: h5py, numpy, pandas, scikit-image, imageio, matplotlib are installe
 
 
 class WidefieldAnalysis(Session):
-    _created_movies: dict[str, Path] = PrivateAttr(default_factory=dict)
     _mask_data: dict[str, float] | None = PrivateAttr(default=None)
 
     def downscale(self, target: tuple[int, int] | int | float, *, inplace: bool = False) -> Self:
@@ -51,138 +60,41 @@ class WidefieldAnalysis(Session):
             raise ValueError("Target dimensions must be positive.")
 
         # TODO Vik filtering
-        for trial in obj.trials:
-            if not isinstance(trial.data, WidefieldData):
-                continue
+        with ProgressBar("Downscaling movies") as pb:
+            for trial in pb(obj.trials, label="Trials", total=len(obj.trials)):
+                if not isinstance(trial.data, WidefieldData):
+                    continue
 
-            imaging = trial.data.imaging
-            t = imaging.shape[0]
-            dim = array(imaging.shape[1:])
+                imaging = trial.data.imaging
+                t = imaging.shape[0]
+                dim = array(imaging.shape[1:])
 
-            if isinstance(target, float):
-                current_target = maximum(1, floor(dim * target))
-            else:
-                current_target = target_dim
+                if isinstance(target, float):
+                    current_target = maximum(1, floor(dim * target))
+                else:
+                    current_target = target_dim
 
-            if (current_target >= dim).any():
-                raise ValueError("Target dimensions must be smaller than original.")
+                if (current_target >= dim).any():
+                    raise ValueError("Target dimensions must be smaller than original.")
 
-            factor = (dim + current_target - 1) // current_target
-            padding = current_target * factor - dim
+                factor = (dim + current_target - 1) // current_target
+                padding = current_target * factor - dim
 
-            imaging = pad(
-                imaging,
-                ((0, 0), (0, padding[0]), (0, padding[1])),
-                mode="constant",
-                constant_values=0,
-            )
+                imaging = pad(
+                    imaging,
+                    ((0, 0), (0, padding[0]), (0, padding[1])),
+                    mode="constant",
+                    constant_values=0,
+                )
 
-            imaging = ascontiguousarray(imaging)
-            imaging = imaging.reshape(
-                t, current_target[0], factor[0], current_target[1], factor[1]
-            ).mean(axis=(2, 4), dtype="float32")
+                imaging = ascontiguousarray(imaging)
+                imaging = imaging.reshape(
+                    t, current_target[0], factor[0], current_target[1], factor[1]
+                ).mean(axis=(2, 4), dtype="float32")
 
-            trial.data._imaging = imaging
+                trial.data._imaging = imaging
 
         return obj
-
-    def to_numpy(self) -> dict[str, ndarray]:
-        data_dict = {}
-
-        for trial in self.trials:
-            if not isinstance(trial.data, WidefieldData):
-                continue
-
-            if trial.data.imaging is None:
-                LOGGER.warning("No imaging data loaded. Call load_data() first.")
-                continue
-
-            data_dict[trial.path.name] = trial.data.imaging
-
-        return data_dict
-
-    #### add the processed folder in the common.py get processed folder
-    #### this is important for the saving the array as well if needed
-    def create_movie(
-        self,
-        output_path: Path | None = None,
-        fps: int = 10,
-        cmap: str = "gray",
-        vmin: float | None = None,
-        vmax: float | None = None,
-        frame_callback: Callable | None = None,
-        inplace: bool = False,
-    ) -> Self | None:
-        """
-        Create MP4 movie(s) from imaging data.
-
-        Follows the same concept as downscale():
-        - creates obj from self depending on inplace
-        - loops over obj.trials
-        - reads trial.data.imaging
-        - saves one movie per trial
-        - stores output paths in obj._created_movies
-        - returns obj only when inplace=False
-        """
-        obj = self if inplace else self.model_copy(deep=True)
-
-        obj._created_movies = {}
-
-        for trial in obj.trials:
-            if not isinstance(trial.data, WidefieldData):
-                continue
-
-            movie_data = trial.data.imaging
-
-            if movie_data is None:
-                LOGGER.warning("No imaging data loaded. Call load_data() first.")
-                return None
-
-            if movie_data.ndim != 3:
-                LOGGER.error(f"Expected 3D array (T, H, W), got: {movie_data.shape}")
-                return None
-
-            if output_path is None:
-                trial_output_path = trial.path / "movie.mp4"
-            else:
-                output_folder = Path(output_path)
-                output_folder.mkdir(parents=True, exist_ok=True)
-                trial_output_path = output_folder / f"{trial.path.name}_movie.mp4"
-
-            try:
-                norm = Normalize(
-                    vmin=vmin if vmin is not None else movie_data.min(),
-                    vmax=vmax if vmax is not None else movie_data.max(),
-                )
-                colormap = cm.get_cmap(cmap)
-
-                with imageio.get_writer(str(trial_output_path), fps=fps) as writer:
-                    for frame_idx, frame in enumerate(movie_data):
-                        rgba_frame = colormap(norm(frame))
-                        rgb_frame = (rgba_frame[:, :, :3] * 255).astype("uint8")
-
-                        if frame_callback is not None:
-                            callback_result = frame_callback(rgb_frame, frame_idx)
-
-                            if callback_result is not None:
-                                rgb_frame = callback_result
-
-                        writer.append_data(rgb_frame)
-
-                obj._created_movies[trial.path.name] = trial_output_path
-
-                LOGGER.info(f"Created movie: {trial_output_path}")
-
-            except Exception:
-                LOGGER.exception(f"Error creating movie for trial: {trial.path.name}")
-                return None
-
-        if not obj._created_movies:
-            LOGGER.warning("No movies were created.")
-            return None
-
-        if not inplace:
-            return obj
 
     def window_mask(self, initial_radius: float = 100.0, *, inplace: bool = False) -> Self | None:
         obj = self if inplace else self.model_copy(deep=True)
@@ -240,7 +152,7 @@ class WidefieldAnalysis(Session):
         if not inplace:
             return obj
 
-    def apply_mask(
+    def apply_window_mask(
         self,
         mask_data: dict[str, float] | None = None,
         mask_name: str = "mask",
@@ -371,3 +283,144 @@ class WidefieldAnalysis(Session):
         except Exception:
             LOGGER.exception("Error loading mask")
             return None
+
+    def movie(
+        self,
+        path: Path,
+        mode: Literal["append", "overwrite"] = "append",
+        *,
+        fps: int = 10,
+        cmap: str = "gray",
+        vmin: float | None = None,
+        vmax: float | None = None,
+        frame_callback: Callable[[ndarray, int], ndarray | None] | None = None,
+        codec: str = "mp4v",
+    ) -> Self:
+        #### add the processed folder in the common.py get processed folder
+        #### this is important for the saving the array as well if needed
+        path.mkdir(parents=True, exist_ok=True)
+
+        with ProgressBar("Rendering movies") as pb:
+            for trial in pb(self.trials, label="Trials", total=len(self.trials)):
+                if not isinstance(trial.data, WidefieldData):
+                    continue
+
+                try:
+                    imaging = trial.data.imaging
+                    if imaging.ndim != 3:
+                        raise ValueError(
+                            f"Expected imaging shape (frames, height, width), got {imaging.shape}"
+                        )
+                    height, width = imaging[0].shape
+
+                    local_vmin = vmin if vmin is not None else float(imaging.min())
+                    local_vmax = vmax if vmax is not None else float(imaging.max())
+
+                    if local_vmax <= local_vmin:
+                        local_vmax = local_vmin + 1.0
+
+                    normalized = clip((imaging - local_vmin) / (local_vmax - local_vmin), 0, 1)
+
+                    colormap = cm.get_cmap(cmap)
+
+                    colored = colormap(normalized)[..., :3]
+                    colored = (colored * 255).astype("uint8")
+
+                    trial_output_path = path / f"{trial.path.stem}.mp4"
+
+                    if trial_output_path.exists():
+                        if mode == "append":
+                            LOGGER.info(f"Skipping existing movie: {trial_output_path.name}")
+                            continue
+                        elif mode == "overwrite":
+                            LOGGER.info(f"Overwriting existing movie: {trial_output_path.name}")
+
+                    trial_output_path.unlink()
+                    writer = VideoWriter(
+                        str(trial_output_path),
+                        VideoWriter_fourcc(*codec),
+                        fps,
+                        (width, height),
+                        isColor=True,
+                    )
+
+                    if not writer.isOpened():
+                        raise RuntimeError(f"Failed to open video writer for {trial_output_path}")
+
+                    try:
+                        for frame_idx, frame in pb(
+                            enumerate(imaging), label="Frames", total=len(imaging)
+                        ):
+                            if frame_callback is not None:
+                                result = frame_callback(frame, frame_idx)
+                                if result is not None:
+                                    frame = result
+
+                            writer.write(cvtColor(frame, COLOR_RGB2BGR))
+                    finally:
+                        writer.release()
+
+                except Exception as e:
+                    raise RuntimeError(f"Error creating movie for trial: {trial.path.name}") from e
+        return self
+
+    def save(self, file: Path, mode: Literal["append", "overwrite"] = "append") -> Self:
+        file.parent.mkdir(parents=True, exist_ok=True)
+
+        if file.exists():
+            if file.is_dir():
+                raise ValueError(f"Path must be a file: {file}")
+
+            if mode == "overwrite":
+                file.unlink()
+            elif mode != "append":
+                # TODO
+                raise ValueError(f"Unsupported mode: {mode}")
+
+        try:
+            if file.suffix == ".npz":
+                self._to_npz(file)
+            elif file.suffix in {".h5", ".hdf5"}:
+                self._to_h5(file)
+            else:
+                raise ValueError(f"Unsupported file extension: {file.suffix}")
+
+            LOGGER.info(f"Saved widefield data to: {file}")
+
+        except Exception as e:
+            raise RuntimeError(f"Error saving file: {file}") from e
+
+        return self
+
+    def _to_npz(self, file: Path) -> None:
+        trials_dict = self._trials_to_dict()
+
+        if file.exists():
+            # now keep existing data and add new trials
+            with load(file, allow_pickle=False) as existing:
+                trials_dict.update({k: existing[k] for k in existing.files})
+
+        savez_compressed(file, **trials_dict)
+
+    def _to_h5(self, file: Path) -> None:
+        # TODO more options for compression, chunking, etc.
+        trials_dict = self._trials_to_dict()
+        with File(file, "a") as h5file:
+            for trial_name, data in trials_dict.items():
+                if trial_name in h5file:
+                    continue  # TODO handle existing datasets based on mode
+
+                h5file.create_dataset(trial_name, data=data, compression="gzip")
+
+    def _trials_to_dict(self) -> dict[str, ndarray]:
+        data_dict: dict[str, ndarray] = {}
+        with ProgressBar("Converting trials to dict") as pb:
+            for trial in pb(self.trials, label="Trials", total=len(self.trials)):
+                if not isinstance(trial.data, WidefieldData):
+                    continue
+
+                data_dict[trial.path.name] = trial.data.imaging
+
+        return data_dict
+
+    #TODO trials_to_df, trials_to_array? for faster processing.
