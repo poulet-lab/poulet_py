@@ -89,7 +89,7 @@ triggers = ["poulet_py[gpio]"]
 gpio = ["gpiozero<=2.0.1", "lgpio<=0.2.2.0; platform_system == 'Linux'"]
 soho = ["pandas<=3.0.2"]
 # IO
-event = ["numpydantic<=1.8.1"]
+event = ["numpydantic<=1.9.0"]
 sinks = ["poulet_py[event]", "h5py<=3.16.0", "orjson<=3.11.9", "numpy<=2.4.4"]
 sources = [
   "poulet_py[event]",
