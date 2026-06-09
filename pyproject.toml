@@ -99,6 +99,7 @@ analysis = [
   "scipy<=1.17.1",
   "matplotlib<=3.10.9",
   "scikit-image<=0.26.0",
+  "imageio<=2.37.2",
 ]
 ## Main modules ##
 converters = ["poulet_py[seq]"]

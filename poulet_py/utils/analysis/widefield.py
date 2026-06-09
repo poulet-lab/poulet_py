@@ -6,6 +6,7 @@ try:
 
     from poulet_py import Session, WidefieldData
     from poulet_py.config.logging import LOGGER
+    from poulet_py.utils.analysis.motion import apply_motion_correction
 
 except ImportError as e:
     msg = """
@@ -21,6 +22,8 @@ Also ensure: h5py, numpy, pandas, scikit-image, imageio, matplotlib are installe
 
 class WidefieldAnalysis(Session):
     _downscaled_imaging: dict[int, ndarray] = PrivateAttr(default_factory=dict)
+    _motion_vectors: dict[str, ndarray] = PrivateAttr(default_factory=dict)
+    _motion_reference_images: dict[str, ndarray] = PrivateAttr(default_factory=dict)
 
     def downscale(
         self, target_resolution: tuple[int, int], factor: int, inplace: bool = False
@@ -96,6 +99,42 @@ class WidefieldAnalysis(Session):
 
                 trial.data._imaging = mov.astype("uint16")
                 # write this also in metadata table
+
+        if not inplace:
+            return obj
+
+    def motion_correction(
+        self,
+        motion_region: tuple | None = None,
+        shift_method: str = "integer",
+        n_parallel_workers: int | None = 4,
+        reference_image: ndarray | None = None,
+        *,
+        inplace: bool = False,
+    ) -> Self | None:
+        obj = self if inplace else self.copy(deep=True)
+
+        for trial in obj.trials:
+            if not isinstance(trial.data, WidefieldData):
+                continue
+
+            imaging_data = trial.data.imaging
+
+            if imaging_data is None:
+                LOGGER.warning("No imaging data loaded. Call load_data() first.")
+                return None
+
+            corrected_movie, motion_vectors, motion_reference_image = apply_motion_correction(
+                imaging_data,
+                motion_region=motion_region,
+                shift_method=shift_method,
+                n_parallel_workers=n_parallel_workers,
+                reference_image=reference_image,
+            )
+            trial.data._imaging = corrected_movie
+            trial_key = str(trial.path)
+            obj._motion_vectors[trial_key] = motion_vectors
+            obj._motion_reference_images[trial_key] = motion_reference_image
 
         if not inplace:
             return obj
