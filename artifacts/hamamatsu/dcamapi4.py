@@ -4,9 +4,8 @@
 
 
 import platform
-from enum import IntEnum
 from ctypes import *
-
+from enum import IntEnum
 
 # ==== load shared library ====
 
