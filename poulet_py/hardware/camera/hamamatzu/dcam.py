@@ -6,16 +6,16 @@ from numpy import ndarray
 from pydantic import BaseModel, Field, PrivateAttr
 
 from ._api import (
-    DCAM_PIXELTYPE,
-    DCAMPROP,
     DCAM_IDPROP,
+    DCAM_PIXELTYPE,
     DCAMAPI_INIT,
-    dcamapi_init,
-    DCAMERR,
-    dcamapi_uninit,
     DCAMDEV_OPEN,
-    dcamdev_open,
+    DCAMERR,
+    DCAMPROP,
+    dcamapi_init,
+    dcamapi_uninit,
     dcamdev_close,
+    dcamdev_open,
     dcamwait_close,
 )
 
@@ -652,9 +652,7 @@ class DCAM(BaseModel):
 
         if not self.dcam.buf_alloc(number_of_frames):
             print(
-                "-NG: Dcam.buf_alloc({}) failed with error {}".format(
-                    number_of_frames, self.dcam.lasterr().name
-                )
+                f"-NG: Dcam.buf_alloc({number_of_frames}) failed with error {self.dcam.lasterr().name}"
             )
             return False
 
@@ -674,7 +672,7 @@ class DCAM(BaseModel):
             return False
 
         if not self.dcam.buf_release():
-            print("-NG: Dcam.buf_release() failed with error {}".format(self.dcam.lasterr().name))
+            print(f"-NG: Dcam.buf_release() failed with error {self.dcam.lasterr().name}")
             return False
 
         return True
@@ -696,7 +694,7 @@ class DCAM(BaseModel):
             return False
 
         if not self.dcam.cap_start(is_sequence):
-            print("-NG: Dcam.cap_start() failed with error {}".format(self.dcam.lasterr().name))
+            print(f"-NG: Dcam.cap_start() failed with error {self.dcam.lasterr().name}")
             return False
 
         return True
@@ -715,7 +713,7 @@ class DCAM(BaseModel):
             return False
 
         if not self.dcam.cap_stop():
-            print("-NG: Dcam.cap_stop() failed with error {}".format(self.dcam.lasterr().name))
+            print(f"-NG: Dcam.cap_stop() failed with error {self.dcam.lasterr().name}")
             return False
 
         return True
@@ -734,7 +732,7 @@ class DCAM(BaseModel):
 
         capstatus = self.dcam.cap_status()
         if capstatus is False:
-            print("-NG: Dcam.cap_status() failed with error {}".format(self.dcam.lasterr().name))
+            print(f"-NG: Dcam.cap_status() failed with error {self.dcam.lasterr().name}")
             return False
 
         return capstatus == DCAMCAP_STATUS.READY
@@ -752,9 +750,7 @@ class DCAM(BaseModel):
             return False
 
         if not self.dcam.cap_firetrigger():
-            print(
-                "-NG: Dcam.cap_firetrigger() failed with error {}".format(self.dcam.lasterr().name)
-            )
+            print(f"-NG: Dcam.cap_firetrigger() failed with error {self.dcam.lasterr().name}")
             return False
 
         return True
@@ -798,11 +794,7 @@ class DCAM(BaseModel):
 
         ret = self.dcam.buf_getlastframedata()
         if ret is False:
-            print(
-                "-NG: Dcam.buf_getlastframedata() failed with error {}".format(
-                    self.dcam.lasterr().name
-                )
-            )
+            print(f"-NG: Dcam.buf_getlastframedata() failed with error {self.dcam.lasterr().name}")
             return False
 
         return ret
@@ -822,9 +814,7 @@ class DCAM(BaseModel):
 
         captransferinfo = self.dcam.cap_transferinfo()
         if captransferinfo is False:
-            print(
-                "-NG: Dcam.cap_transferinfo() failed with error {}".format(self.dcam.lasterr().name)
-            )
+            print(f"-NG: Dcam.cap_transferinfo() failed with error {self.dcam.lasterr().name}")
             return False
 
         if captransferinfo.nFrameCount < 1:
@@ -852,9 +842,7 @@ class DCAM(BaseModel):
 
         captransferinfo = self.dcam.cap_transferinfo()
         if captransferinfo is False:
-            print(
-                "-NG: Dcam.cap_transferinfo() failed with error {}".format(self.dcam.lasterr().name)
-            )
+            print(f"-NG: Dcam.cap_transferinfo() failed with error {self.dcam.lasterr().name}")
             return False
 
         if captransferinfo.nFrameCount < 1:
@@ -871,7 +859,7 @@ class DCAM(BaseModel):
         for i in range(0, number_of_images, 1):
             index = (start_frameindex + i) % self.__number_of_frames
             datai = self.dcam.buf_getframedata(index)
-            filename = "{} - {}.raw".format(prefix, i + 1)
+            filename = f"{prefix} - {i + 1}.raw"
             datai.tofile(filename)
 
         return True
@@ -901,9 +889,7 @@ class DCAM(BaseModel):
         if propvalue is False:
             if showerrmsg:
                 print(
-                    "-NG: Dcam.prop_getvalue({}) failed with error {}".format(
-                        propid.name, self.dcam.lasterr().name
-                    )
+                    f"-NG: Dcam.prop_getvalue({propid.name}) failed with error {self.dcam.lasterr().name}"
                 )
             return False
 
@@ -928,9 +914,7 @@ class DCAM(BaseModel):
 
         if not self.dcam.prop_setvalue(propid, val):
             print(
-                "-NG: Dcam.prop_setvalue({}, {}) failed with error {}".format(
-                    propid.name, val, self.dcam.lasterr().name
-                )
+                f"-NG: Dcam.prop_setvalue({propid.name}, {val}) failed with error {self.dcam.lasterr().name}"
             )
             return False
 
@@ -957,9 +941,7 @@ class DCAM(BaseModel):
         res = self.dcam.prop_setgetvalue(propid, val)
         if res is False:
             print(
-                "-NG: Dcam.prop_setgetvalue({}, {}) failed with error {}".format(
-                    propid.name, val, self.dcam.lasterr().name
-                )
+                f"-NG: Dcam.prop_setgetvalue({propid.name}, {val}) failed with error {self.dcam.lasterr().name}"
             )
             return False
 
@@ -1038,7 +1020,7 @@ class DCAM(BaseModel):
                     )
                     for textval in valuelist:
                         valuetext = self.dcam.prop_getvaluetext(propid, textval)
-                        prompt += "[{}]".format(int(textval)) + valuetext + "\n"
+                        prompt += f"[{int(textval)}]" + valuetext + "\n"
 
                     valuetext = self.dcam.prop_getvaluetext(propid, default)
                     prompt += "\n[default] " + valuetext
@@ -1090,16 +1072,16 @@ class DCAM(BaseModel):
                         return unitstr
 
                     unitname = get_units(propattr.iUnit)
-                    minstr = "{:.6f}".format(min).rstrip("0")
+                    minstr = f"{min:.6f}".rstrip("0")
                     if minstr[-1] == ".":
                         minstr += "0"
-                    maxstr = "{:.6f}".format(max).rstrip("0")
+                    maxstr = f"{max:.6f}".rstrip("0")
                     if maxstr[-1] == ".":
                         maxstr += "0"
-                    stepstr = "{:.6f}".format(step).rstrip("0")
+                    stepstr = f"{step:.6f}".rstrip("0")
                     if stepstr[-1] == ".":
                         stepstr += "0"
-                    defstr = "{:.6f}".format(default).rstrip("0")
+                    defstr = f"{default:.6f}".rstrip("0")
                     if defstr[-1] == ".":
                         defstr += "0"
                     prompt = "\nEnter a value for " + str(self.dcam.prop_getname(propid))
@@ -1279,21 +1261,19 @@ class DCAM(BaseModel):
                             cursize = self.get_propertyvalue(sizeid)
                             if cursize is False:
                                 res = False
-                            else:
-                                if sizeval < cursize:
-                                    if self.set_propertyvalue(
-                                        sizeid, sizeval
-                                    ) and self.set_propertyvalue(offsetid, offsetval):
-                                        res = True
-                                    else:
-                                        res = False
+                            elif sizeval < cursize:
+                                if self.set_propertyvalue(
+                                    sizeid, sizeval
+                                ) and self.set_propertyvalue(offsetid, offsetval):
+                                    res = True
                                 else:
-                                    if self.set_propertyvalue(
-                                        offsetid, offsetval
-                                    ) and self.set_propertyvalue(sizeid, sizeval):
-                                        res = True
-                                    else:
-                                        res = False
+                                    res = False
+                            elif self.set_propertyvalue(
+                                offsetid, offsetval
+                            ) and self.set_propertyvalue(sizeid, sizeval):
+                                res = True
+                            else:
+                                res = False
                 elif is_offset_available:
                     # prompt to set offset only
                     res = self.prompt_propvalue(offsetid)
