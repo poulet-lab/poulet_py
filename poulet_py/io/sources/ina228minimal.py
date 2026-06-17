@@ -26,7 +26,7 @@ Missing 'sources' module. Install options:
 #especially for up to 16V and 400 mA
 
 
-class INA228Source(BaseSource):
+class INA228Source_minimal(BaseSource):
     #incase multiple ina228 sources are used, we can specify the i2c address for each one
     
     model_config = ConfigDict(arbitrary_types_allowed=True)
