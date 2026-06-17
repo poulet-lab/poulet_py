@@ -11,12 +11,14 @@ from .sources import (
     Max31856Source,
     ThermocoupleType,
     StimuliMetadataSource,
+    INA228Source,
 )
 
 __all__ = [
     "AcquisitionType",
     "BaseEvent",
     "StimuliMetadataSource",
+    "INA228Source",
     "BaseSink",
     "ThermocoupleType",
     "BaseSource",

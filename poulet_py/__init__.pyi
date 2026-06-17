@@ -40,6 +40,7 @@ from .io import (
     SinkEvent,
     TCSSource,
     Max31856Source,
+    Ina228Source,
     ThermocoupleType,
     StimuliMetadataSource,
 )
@@ -83,6 +84,7 @@ __all__ = [
     "BaseTrigger",
     "BaslerCamera",
     "Max31856Source",
+    "INA228Source",
     "CounterSource",
     "OpenEphysSource",
     "EmptyStimulus",
