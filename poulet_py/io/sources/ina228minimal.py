@@ -40,19 +40,21 @@ class INA228Source_minimal(BaseSource):
     sda: Pin | None = Field(default=SDA, description="I2C SDA pin")
     scl: Pin | None = Field(default=SCL, description="I2C SCL pin")
     
-    #bus_voltage_conv_time: Literal[50, 80, 150, 280, 540, 1052, 2074, 4120] = Field(
-    #    default=50, description="ADC conversion time for bus voltage measurement in microseconds"
-    #)
-    #shunt_voltage_conv_time: Literal[50, 80, 150, 280, 540, 1052, 2074, 4120] = Field(
-    #    default=50, description="ADC conversion time for shunt voltage measurement in microseconds, higher conversion times can improve the accurcay of a signal but also increase the time it takes to acquire a signal"
-    #)
-    #averaging_count: Literal[1, 4, 16, 64, 128, 256, 512, 1024] = Field(
-    #    default=1, description="Number of samples to average for each reading, higher values can improve the accurcay of a signal but also increase the time it takes to acquire a signal"
-    #)
+    bus_voltage_conv_time: Literal[50, 84, 150, 280, 540, 1052, 2074, 4120] = Field(
+        default=50, description="ADC conversion time for bus voltage measurement in microseconds"
+    )
+    shunt_voltage_conv_time: Literal[50, 84, 150, 280, 540, 1052, 2074, 4120] = Field(
+        default=50, description="ADC conversion time for shunt voltage measurement in microseconds, higher conversion times can improve the accurcay of a signal but also increase the time it takes to acquire a signal"
+    )
+    averaging_count: Literal[1, 4, 16, 64, 128, 256, 512, 1024] = Field(
+        default=1, description="Number of samples to average for each reading, higher values can improve the accurcay of a signal but also increase the time it takes to acquire a signal"
+    )
     
-    
-    
-    #add averaging
+    #Set calibration mode (closest to expected current and voltage range, check adafruit library for details)
+    #need to test whether useful as no mesaurements are currently done through over the shunt res
+    #default 32V 2A
+    #32V 1A
+    #16V 400mA
 
     _sda: SDA | None = PrivateAttr(None)
     _scl: SCL | None = PrivateAttr(None)
@@ -84,10 +86,10 @@ class INA228Source_minimal(BaseSource):
                 #baudrate=self.baud_rate,
                 )
             #max voltage as temperature maximum
-            self._ina228. = self.temperature_thresholds
+            self._ina228 = self.bus_voltage
             #temperature threshold for faults schould be ~50-60°C, (check during continous measurement) and not changable
             #temp reading in lib
-            self._ina228.reference_temperature_thresholds = self.reference_temperature_thresholds
+            #self._ina228.reference_temperature_thresholds = self.reference_temperature_thresholds
 
         except Exception as e:
             msg = f"Failed to initialize INA228: {e}"
@@ -128,8 +130,8 @@ class INA228Source_minimal(BaseSource):
         """Background thread for continuous SPI data acquisition."""
         while not self._stop_acquisition_event.is_set():
             try:
-                faults = self._ina228._read_register(_INA228_SR_REG, 1)[0]
-                self._ina228._perform_one_shot_measurement()
+                #faults = self._ina228._read_register(_INA228_SR_REG, 1)[0]
+                #self._ina228._perform_one_shot_measurement()
                 timestamp = time_ns()
                 temperature = self._ina228.read_temperature()
                 current = self._ina228.read_current()
@@ -140,7 +142,7 @@ class INA228Source_minimal(BaseSource):
 
                 #reference = self._ina228.unpack_reference_temperature()
 
-                self._log_faults(faults)
+                #self._log_faults(faults)
                 self._write_sample(timestamp, temperature, current, bus_voltage, shunt_voltage, power, energy)
 
                 precise_sleep(0.1)
@@ -153,17 +155,3 @@ class INA228Source_minimal(BaseSource):
         precise_sleep(self._max_stimulus_duration_ms / 1000.0)
 
         return True
-
-   # @staticmethod
-   # ef _log_faults(faults: int):
-   #     if faults:
-   #         fault_msgs = []
-   #         if faults & _INA228_FAULT_CJRANGE:
-   #             fault_msgs.append("cj_range")
-   #         if faults & _INA228_FAULT_TCRANGE:
-   #             fault_msgs.append("tc_range")
-#
-#            LOGGER.warning(
-#                "INA228 faults: %s",
-#                ", ".join(fault_msgs),
-#            )
