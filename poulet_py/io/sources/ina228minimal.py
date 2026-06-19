@@ -2,7 +2,7 @@ try:
     from threading import Event, Thread
     from time import time_ns
     from typing import Literal
-    from adafruit_blinka.microcontroller.generic_linux.rpi_gpio_pin import Pin
+    #from adafruit_blinka.microcontroller.generic_linux.rpi_gpio_pin import Pin
     from adafruit_ina228 import (
         INA228,
     )
@@ -29,7 +29,7 @@ Missing 'sources' module. Install options:
 class INA228Source_minimal(BaseSource):
     #incase multiple ina228 sources are used, we can specify the i2c address for each one
     
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    #model_config = ConfigDict(arbitrary_types_allowed=True)
 
     #I2C clock frequency in Hz:
     #Fast mode: 400 kHz
@@ -37,8 +37,8 @@ class INA228Source_minimal(BaseSource):
     #Check how to set the clock frequency for the i2c bus in adafruit_blinka
     #baud_rate: int = Field(default=400_000, description="I2C clock speed in Hz")
     
-    sda: Pin | None = Field(default=SDA, description="I2C SDA pin")
-    scl: Pin | None = Field(default=SCL, description="I2C SCL pin")
+    #sda: Pin | None = Field(default=SDA, description="I2C SDA pin")
+    #scl: Pin | None = Field(default=SCL, description="I2C SCL pin")
     
     bus_voltage_conv_time: Literal[50, 84, 150, 280, 540, 1052, 2074, 4120] = Field(
         default=50, description="ADC conversion time for bus voltage measurement in microseconds"
@@ -56,9 +56,9 @@ class INA228Source_minimal(BaseSource):
     #32V 1A
     #16V 400mA
 
-    _sda: SDA | None = PrivateAttr(None)
-    _scl: SCL | None = PrivateAttr(None)
-    _ina28: INA228 = PrivateAttr()
+#    _sda: SDA | None = PrivateAttr(None)
+#    _scl: SCL | None = PrivateAttr(None)
+#    _ina228: INA228 = PrivateAttr()
 
     _acquisition_thread: Thread | None = PrivateAttr(default=None)
     _stop_acquisition_event: Event = PrivateAttr(default_factory=Event)
@@ -153,5 +153,4 @@ class INA228Source_minimal(BaseSource):
 
     def _fire(self) -> bool:
         precise_sleep(self._max_stimulus_duration_ms / 1000.0)
-
         return True

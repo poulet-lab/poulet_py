@@ -3,7 +3,6 @@ try:
     from time import time_ns
     from typing import Literal
 
-    from adafruit_blinka.microcontroller.generic_linux.rpi_gpio_pin import Pin
     
     #what to import for ina228 logger
     from adafruit_ina228 import (
