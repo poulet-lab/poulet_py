@@ -12,8 +12,7 @@ from .stimuli_metadata import StimuliMetadataSource
 __all__ = [
     "BaseSource",
     "Max31856Source",
-    #"INA228Source",
-    INA228Source_minimal,
+    "INA228Source_minimal",
     "StimuliMetadataSource",
     "ThermocoupleType",
     "NIDaQSource",

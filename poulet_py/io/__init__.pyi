@@ -13,7 +13,7 @@ from .sources import (
     Max31856Source,
     ThermocoupleType,
     StimuliMetadataSource,
-    INA228Source,
+    #INA228Source,
     INA228Source_minimal
 )
 
