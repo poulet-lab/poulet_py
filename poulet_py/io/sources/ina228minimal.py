@@ -34,12 +34,12 @@ class INA228Source_minimal(BaseSource):
     def _set_buffer_dtype(self):
         self._buffer_dtype = [
             ("timestamp", "uint64"),
-            ("current", "float32"),        # A
+            #("current", "float32"),        # A
             ("bus_voltage", "float32"),    # V
-            ("shunt_voltage", "float32"),  # V
-            ("power", "float32"),          # W
-            ("energy", "float32"),         # J
-            ("temperature", "float32"),    # °C
+            #("shunt_voltage", "float32"),  # V
+            #("power", "float32"),          # W
+            #("energy", "float32"),         # J
+            #("temperature", "float32"),    # °C
         ]
 
     def _open(self):
