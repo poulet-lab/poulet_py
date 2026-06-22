@@ -56,9 +56,9 @@ class INA228Source_minimal(BaseSource):
     #32V 1A
     #16V 400mA
 
-#    _sda: SDA | None = PrivateAttr(None)
-#    _scl: SCL | None = PrivateAttr(None)
-#    _ina228: INA228 = PrivateAttr()
+    _sda: SDA | None = PrivateAttr(None)
+    _scl: SCL | None = PrivateAttr(None)
+    _ina228: INA228 = PrivateAttr()
 
     _acquisition_thread: Thread | None = PrivateAttr(default=None)
     _stop_acquisition_event: Event = PrivateAttr(default_factory=Event)
