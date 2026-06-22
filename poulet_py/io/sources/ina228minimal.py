@@ -23,7 +23,7 @@ class INA228Source_minimal(BaseSource):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     address: int = Field(default=0x40, description="INA228 I2C address")
-    sample_interval_s: float = Field(default=0.1, description="Sample interval in seconds")
+    sample_interval_s: float = Field(default=1, description="Sample interval in seconds")
 
     _i2c: I2C | None = PrivateAttr(default=None)
     _ina228: INA228 | None = PrivateAttr(default=None)
@@ -88,22 +88,22 @@ class INA228Source_minimal(BaseSource):
                     raise RuntimeError("INA228 is not initialized")
 
                 timestamp = time_ns()
-                current = self._ina228.current
+                #current = self._ina228.current
                 bus_voltage = self._ina228.bus_voltage
-                shunt_voltage = self._ina228.shunt_voltage
-                power = self._ina228.power
-                energy = self._ina228.energy
-                temperature = self._ina228.die_temperature
+                #shunt_voltage = self._ina228.shunt_voltage
+                #power = self._ina228.power
+                #energy = self._ina228.energy
+                #temperature = self._ina228.die_temperature
 
                 self._write_sample(
                     (
                         timestamp,
-                        current,
+                        #current,
                         bus_voltage,
-                        shunt_voltage,
-                        power,
-                        energy,
-                        temperature,
+                        #shunt_voltage,
+                        #power,
+                        #energy,
+                        #temperature,
                     )
                 )
 
