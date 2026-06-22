@@ -3,6 +3,7 @@ try:
     from time import time_ns
     from typing import Literal
     import board
+    import busio
     from adafruit_ina228 import INA228
     from busio import I2C
     from pydantic import ConfigDict, Field, PrivateAttr
@@ -59,7 +60,8 @@ class INA228Source_minimal(BaseSource):
 
     def _open(self):
         try:
-            self._i2c = board.I2C(frequency=self.bus_frequency)
+            #self._i2c = board.I2C(frequency=self.bus_frequency)
+            self._i2c = busio.I2C(board.SCL, board.SDA, frequency=self.bus_frequency)
             self._ina228 = INA228(self._i2c, address=self.address)
 
         except Exception as e:
