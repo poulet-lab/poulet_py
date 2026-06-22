@@ -24,8 +24,13 @@ class INA228Source_minimal(BaseSource):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     
     address: int = Field(default=0x40, description="INA228 I2C address")
-    bus_frequency: int = Field(default=400_000, description="Fast I2C clock speed in Hz")
-
+    bus_frequency: int = Field(
+        default=400_000, 
+        description="Fast I2C clock speed in Hz")
+    ftdi_latency_ms: int | None = Field(
+        default=1,
+        description="FTDI USB latency timer in ms. Use None to leave default.",
+    )
     bus_voltage_conv_time: Literal[50, 80, 150, 280, 540, 1052, 2074, 4120] = Field(
         default=50, description="ADC conversion time for bus voltage measurement in microseconds"
     )
@@ -60,7 +65,8 @@ class INA228Source_minimal(BaseSource):
 
     def _open(self):
         try:
-            #self._i2c = board.I2C(frequency=self.bus_frequency)
+            self._set_ftdi_latency_timer()
+            self._ina228 = INA228(self._i2c, address=0x40)
             self._i2c = busio.I2C(board.SCL, board.SDA, frequency=self.bus_frequency)
             self._ina228 = INA228(self._i2c, address=self.address)
 
@@ -69,6 +75,8 @@ class INA228Source_minimal(BaseSource):
             raise RuntimeError(msg) from e
 
         self._start_acquisition_thread()
+
+    
 
     def _start_acquisition_thread(self):
         if self._acquisition_thread and self._acquisition_thread.is_alive():
@@ -133,3 +141,37 @@ class INA228Source_minimal(BaseSource):
     def _fire(self) -> bool:
         precise_sleep(self._max_stimulus_duration_ms / 1000.0)
         return True
+    
+    def _set_ftdi_latency_timer(self):
+        """
+        Blinka FT232H path is:
+
+            busio.I2C
+            ._i2c                         -> Blinka FTDI MPSSE I2C wrapper
+            ._i2c                         -> pyftdi.i2c.I2cController
+            .ftdi                         -> pyftdi.ftdi.Ftdi
+
+        This is intentionally private-attribute access, because Blinka does not
+        expose FTDI latency tuning as a public busio.I2C option.
+        """
+        if self.ftdi_latency_ms is None:
+            return
+
+        if not 1 <= self.ftdi_latency_ms <= 255:
+            raise ValueError("ftdi_latency_ms must be between 1 and 255")
+
+        try:
+            pyftdi_i2c_controller = self._i2c._i2c._i2c
+            ftdi = pyftdi_i2c_controller.ftdi
+            ftdi.set_latency_timer(self.ftdi_latency_ms)
+
+            LOGGER.info(
+                "FT232H latency timer set to %d ms",
+                self.ftdi_latency_ms,
+            )
+
+        except AttributeError as e:
+            raise RuntimeError(
+                "Could not access pyftdi controller through Blinka. "
+                "This optimization only works on the FT232H/pyftdi backend."
+            ) from e
