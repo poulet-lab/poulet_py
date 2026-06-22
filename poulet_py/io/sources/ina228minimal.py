@@ -1,7 +1,7 @@
 try:
     from threading import Event, Thread
     from time import time_ns
-
+    from typing import Literal
     import board
     from adafruit_ina228 import INA228
     from busio import I2C
@@ -21,9 +21,22 @@ Missing INA228 source dependencies. Install options:
 
 class INA228Source_minimal(BaseSource):
     model_config = ConfigDict(arbitrary_types_allowed=True)
-
+    
     address: int = Field(default=0x40, description="INA228 I2C address")
+    bus_frequency: int = Field(default=400_000, description="Fast I2C clock speed in Hz")
+
+    bus_voltage_conv_time: Literal[50, 80, 150, 280, 540, 1052, 2074, 4120] = Field(
+        default=50, description="ADC conversion time for bus voltage measurement in microseconds"
+    )
+    shunt_voltage_conv_time: Literal[50, 80, 150, 280, 540, 1052, 2074, 4120] = Field(
+        default=50, description="ADC conversion time for shunt voltage measurement in microseconds, higher conversion times can improve the accurcay of a signal but also increase the time it takes to acquire a signal"
+    )
+    averaging_count: Literal[1, 4, 16, 64, 128, 256, 512, 1024] = Field(
+        default=1, description="Number of samples to average for each reading, higher values can improve the accurcay of a signal but also increase the time it takes to acquire a signal"
+    )
+    
     sample_interval_s: float = Field(default=1, description="Sample interval in seconds")
+
 
     _i2c: I2C | None = PrivateAttr(default=None)
     _ina228: INA228 | None = PrivateAttr(default=None)
@@ -31,6 +44,8 @@ class INA228Source_minimal(BaseSource):
     _acquisition_thread: Thread | None = PrivateAttr(default=None)
     _stop_acquisition_event: Event = PrivateAttr(default_factory=Event)
 
+#incorporating more INA228 features and settings is possible, but for now we will keep it minimal
+#seems to affect sampling rate
     def _set_buffer_dtype(self):
         self._buffer_dtype = [
             ("timestamp", "uint64"),
@@ -44,7 +59,7 @@ class INA228Source_minimal(BaseSource):
 
     def _open(self):
         try:
-            self._i2c = board.I2C()
+            self._i2c = board.I2C(frequency=self.bus_frequency)
             self._ina228 = INA228(self._i2c, address=self.address)
 
         except Exception as e:
