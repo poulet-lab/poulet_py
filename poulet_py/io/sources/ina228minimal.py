@@ -19,7 +19,7 @@ Missing INA228 source dependencies. Install options:
     raise ImportError(msg) from e
 
 
-class INA228SourceMinimal(BaseSource):
+class INA228Source_minimal(BaseSource):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     address: int = Field(default=0x40, description="INA228 I2C address")
