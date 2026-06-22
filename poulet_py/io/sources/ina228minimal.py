@@ -65,11 +65,10 @@ class INA228Source_minimal(BaseSource):
 
     def _open(self):
         try:
+            self._i2c = busio.I2C(board.SCL, board.SDA, frequency=self.bus_frequency)
             self._set_ftdi_latency_timer()
             self._ina228 = INA228(self._i2c, address=0x40)
-            self._i2c = busio.I2C(board.SCL, board.SDA, frequency=self.bus_frequency)
-            self._ina228 = INA228(self._i2c, address=self.address)
-
+            
         except Exception as e:
             msg = f"Failed to initialize INA228: {e}"
             raise RuntimeError(msg) from e
