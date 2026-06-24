@@ -11,6 +11,7 @@ from .sources import (
     Max31856Source,
     ThermocoupleType,
     StimuliMetadataSource,
+    DCAMSource,
 )
 
 __all__ = [
@@ -30,4 +31,5 @@ __all__ = [
     "SinkEvent",
     "TCSSource",
     "OpenEphysSource",
+    "DCAMSource",
 ]

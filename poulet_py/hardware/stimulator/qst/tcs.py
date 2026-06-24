@@ -10,7 +10,7 @@ try:
     from collections import deque
     from re import Match, Pattern, compile, search
     from threading import Condition, Event, Thread
-    from time import time_ns
+    from time import monotonic_ns
 
     from numpy import ndarray, zeros
     from numpy.typing import ArrayLike
@@ -535,11 +535,11 @@ class TCS(BaseModel, validate_assignment=True):
             msg = f"Provided array has {data.shape[0]} rows, need at least {n}"
             raise ValueError(msg)
 
-        deadline = time_ns() + timeout
+        deadline = monotonic_ns() + timeout
 
         with self._sampling_cond:
             while self._buffer_idx == 0:
-                remaining = deadline - time_ns()
+                remaining = deadline - monotonic_ns()
                 if remaining <= 0:
                     return 0
                 self._sampling_cond.wait(timeout=remaining / 1e9)
@@ -722,13 +722,13 @@ class TCS(BaseModel, validate_assignment=True):
 
                         if request.pattern is not None:
                             if match := search(request.pattern, line):
-                                request.result = (time_ns(), match)
+                                request.result = (monotonic_ns(), match)
                                 request.event.set()
                                 self._serial_search_queue.popleft()
 
                 if match := search(self._temperature_line_pattern, line):
                     idx = self._buffer_idx % self.buffer_size
-                    timestamp = time_ns()
+                    timestamp = monotonic_ns()
                     values = tuple(map(float, match.groups()))
                     self._buffer[idx] = (timestamp, *values)
 

@@ -1,6 +1,6 @@
 try:
     from threading import Thread
-    from time import time_ns
+    from time import monotonic_ns
 
     import spidev
     from pydantic import Field, PrivateAttr
@@ -90,7 +90,7 @@ class SPISource(BaseSource):
         while not self._stop_acquisition and self._is_open:
             try:
                 data = self._spi.readbytes(self.read_size)  # Returns List[int]
-                timestamp = time_ns()
+                timestamp = monotonic_ns()
 
                 with self._lock:
                     idx = self._buffer_idx % self.buffer_size
@@ -113,6 +113,6 @@ class SPISource(BaseSource):
 
                 # Read response if in finite mode (store in buffer)
                 data = self._spi.readbytes(self.read_size)
-                timestamp = time_ns()
+                timestamp = monotonic_ns()
 
         return True

@@ -1,5 +1,5 @@
 try:
-    from time import time_ns
+    from time import monotonic_ns
     from typing import Any
 
     from numpydantic import NDArray
@@ -17,7 +17,7 @@ Missing 'event' module. Install options:
 
 class BaseEvent(BaseModel):
     name: str = Field(..., description="Name of the data source")
-    timestamp: int = Field(default_factory=time_ns, description="Timestamp of the event")
+    timestamp: int = Field(default_factory=monotonic_ns, description="Timestamp of the event")
 
 
 class SinkEvent(BaseEvent):

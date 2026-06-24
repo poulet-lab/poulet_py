@@ -79,7 +79,7 @@ class BaseSource(BaseModel, ABC):
         self._bus = value
         self._external_bus = True
 
-    def open(self):
+    def open(self) -> None:
         if self._is_open:
             return
 
@@ -90,7 +90,7 @@ class BaseSource(BaseModel, ABC):
         self._open()
         self._is_open = True
 
-    def close(self):
+    def close(self) -> None:
 
         self._close()
         self._del_buffer()
@@ -120,12 +120,12 @@ class BaseSource(BaseModel, ABC):
 
         return True
 
-    def _ensure_open(self):
+    def _ensure_open(self) -> None:
         if not self._is_open:
             msg = f"{type(self).__name__} needs to be opened first"
             raise RuntimeError(msg)
 
-    def _set_buffer(self):
+    def _set_buffer(self) -> None:
         if self.acquisition_type == AcquisitionType.NONE:
             return
 
@@ -140,14 +140,14 @@ class BaseSource(BaseModel, ABC):
         self._buffer_idx = 0
         self._last_publish_idx = 0
 
-    def _del_buffer(self):
+    def _del_buffer(self) -> None:
         if hasattr(self, "_buffer"):
             del self._buffer
 
         self._buffer_idx = 0
         self._last_publish_idx = 0
 
-    def _write_sample(self, sample: tuple | dict):
+    def _write_sample(self, sample: tuple | dict) -> None:
         if self.acquisition_type == AcquisitionType.NONE:
             return
 
@@ -162,7 +162,7 @@ class BaseSource(BaseModel, ABC):
 
             self._buffer_idx += 1
 
-    def _write_samples(self, samples: ndarray):
+    def _write_samples(self, samples: ndarray) -> None:
         if self.acquisition_type == AcquisitionType.NONE:
             return
 
@@ -182,7 +182,7 @@ class BaseSource(BaseModel, ABC):
 
             self._buffer_idx += n
 
-    def _supports(self):
+    def _supports(self) -> None:
         if self.fire_on == "all":
             return
         self._stimuli = tuple(st for st in self._stimuli if isinstance(st, tuple(self.fire_on)))

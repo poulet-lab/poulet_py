@@ -1,5 +1,5 @@
 try:
-    from time import time_ns
+    from time import monotonic_ns
 
     from orjson import OPT_SERIALIZE_DATACLASS, OPT_SERIALIZE_NUMPY, OPT_SERIALIZE_UUID, dumps
     from pydantic import Field
@@ -32,7 +32,7 @@ class StimuliMetadataSource(BaseSource):
         pass
 
     def _fire(self) -> bool:
-        timestamp = time_ns()
+        timestamp = monotonic_ns()
         meta = [
             {type(st).__name__: st.model_dump(exclude_unset=True, exclude_none=True)}
             for st in self._stimuli

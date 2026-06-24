@@ -1,6 +1,6 @@
 try:
     from threading import Thread
-    from time import time_ns
+    from time import monotonic_ns
 
     from numpy import float64, ndarray, uint64, zeros
     from open_ephys.control import OpenEphysHTTPServer
@@ -74,7 +74,7 @@ class OpenEphysSource(BaseSource):
                 spike_data[i] = info[amp_key]
 
         self._store_sample(
-            timestamp=time_ns(),
+            timestamp=monotonic_ns(),
             channel_data=spike_data,
         )
 
