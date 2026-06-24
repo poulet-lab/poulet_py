@@ -1,5 +1,5 @@
 try:
-    from time import sleep, monotonic_ns
+    from time import monotonic_ns, sleep
 except ImportError as e:
     msg = """
 Missing 'tools' module. Install options:
