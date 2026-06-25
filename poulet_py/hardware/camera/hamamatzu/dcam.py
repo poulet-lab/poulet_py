@@ -313,7 +313,7 @@ class DCAM(BaseModel):
         self.__dcam_internal_buffer.type = self.pixel_type
         self.__dcam_internal_buffer.width = int(self.__get_property(DCAM_IDPROP.IMAGE_WIDTH))
         self.__dcam_internal_buffer.height = int(self.__get_property(DCAM_IDPROP.IMAGE_HEIGHT))
-        self.__dcam_device.rowbytes = int(
+        self.__dcam_internal_buffer.rowbytes = int(
             self.__get_property(
                 DCAM_IDPROP.FRAMEBUNDLE_ROWBYTES
                 if self.framebundle_mode == DCAMPROP.MODE.ON
