@@ -160,7 +160,7 @@ class DCAM(BaseModel):
             self.__set_params()
             self.__set_dcam_internal_buffer()
             self.__set_buffer()
-            # self.__start_acquisition_thread()
+            self.__start_acquisition_thread()
 
             self.__is_open = True
         except Exception as e:
@@ -173,7 +173,7 @@ class DCAM(BaseModel):
 
         self.__is_open = False
 
-        # self.__stop_acquisition_thread()
+        self.__stop_acquisition_thread()
         self.__release_buffer()
         self.__release_dcam_internal_buffer()
         self.__release_dcam_device()
@@ -376,20 +376,20 @@ class DCAM(BaseModel):
         self.__open_dcam_wait()
         self.__start_capture()
 
-        self.__acquisition_thread = Thread(
-            target=self.__acquisition_thread_func, name="DCAM Acquisition Thread", daemon=True
-        )
-        self.__acquisition_thread.start()
+        # self.__acquisition_thread = Thread(
+        #     target=self.__acquisition_thread_func, name="DCAM Acquisition Thread", daemon=True
+        # )
+        # self.__acquisition_thread.start()
 
     def __stop_acquisition_thread(self) -> None:
-        self.__stop_acquisition_event.set()
+        # self.__stop_acquisition_event.set()
 
-        self.__acquisition_thread.join(timeout=5)
-        if self.__acquisition_thread.is_alive():
-            LOGGER.warning("Streaming thread did not stop gracefully")
+        # self.__acquisition_thread.join(timeout=5)
+        # if self.__acquisition_thread.is_alive():
+        #     LOGGER.warning("Streaming thread did not stop gracefully")
 
-        del self.__acquisition_thread
-        self.__stop_acquisition_event.clear()
+        # del self.__acquisition_thread
+        # self.__stop_acquisition_event.clear()
 
         self.__stop_capture()
         self.__close_dcam_wait()
