@@ -19,9 +19,12 @@ devices = DCAM.get_available_devices()
 
 if devices:
     print(devices)
+else:
+    raise RuntimeError("No Devices")
 
-    dcam = DCAM(device_index=0)
+dcam = DCAM(device_index=0)
 
+try:
     with dcam:
         # cv2.namedWindow(
         #     NAME,
@@ -37,3 +40,6 @@ if devices:
             #     break
 
     # cv2.destroyAllWindows()
+except KeyboardInterrupt:
+    print("\nShutdown initiated. Cleaning up resources...")
+    print("Shutdown complete.")

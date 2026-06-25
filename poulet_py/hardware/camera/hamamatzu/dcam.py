@@ -79,6 +79,9 @@ class DCAM(BaseModel):
     exposure_time: int = Field(default=30, description="in ms")
     contrast_gain: int = Field(default=10, description="in ms")
     framebundle_mode: DCAMPROP.MODE = Field(default=DCAMPROP.MODE.OFF, description="")
+    framebundle_number: int = Field(default=1, description="")
+    number_of_view: int = Field(default=1, description="")
+
     buffer_size: int = Field(default=1000, description="")
     dcam_internal_buffer_size: int = Field(default=1000, description="")
     timeout: int | Literal["auto"] = Field(default="auto", description="handle timeout in ms")
@@ -283,26 +286,40 @@ class DCAM(BaseModel):
 
         return value.value
 
-    def __set_property(self, prop: DCAM_IDPROP, value: float | int | Enum) -> None:
+    def __set_property(
+        self,
+        prop: DCAM_IDPROP,
+        value: float | int | Enum,
+        errors: Literal["ignore", "raise", "log"] = "log",
+    ) -> None:
         err = dcamprop_setvalue(self.__dcam_device.hdcam, prop, value)
         if err.is_failed():
-            raise RuntimeError(f"Failed to set property {prop}: {DCAMERR(err).name}")
+            if errors == "raise":
+                raise RuntimeError(f"Failed to set property {prop}: {DCAMERR(err).name}")
+            elif errors == "log":
+                LOGGER.error(f"Failed to set property {prop}: {DCAMERR(err).name}")
+            else:
+                return
 
     def __set_params(self) -> None:
         # TODO handle non excisting
         self.__set_property(DCAM_IDPROP.IMAGE_PIXELTYPE, self.pixel_type)
         self.__set_property(DCAM_IDPROP.SENSORMODE, self.sensor_mode)
-        # self.__set_property(DCAM_IDPROP.SHUTTER_MODE, self.shutter_mode)
+        self.__set_property(DCAM_IDPROP.SHUTTER_MODE, self.shutter_mode)
         self.__set_property(DCAM_IDPROP.READOUTSPEED, self.readout_speed)
-        # self.__set_property(DCAM_IDPROP.READOUT_DIRECTION, self.readout_direction)
+        self.__set_property(DCAM_IDPROP.READOUT_DIRECTION, self.readout_direction)
         self.__set_property(DCAM_IDPROP.TRIGGERSOURCE, self.trigger_source)
         self.__set_property(DCAM_IDPROP.TRIGGER_MODE, self.trigger_mode)
         self.__set_property(DCAM_IDPROP.TRIGGERACTIVE, self.trigger_active)
         self.__set_property(DCAM_IDPROP.TRIGGERPOLARITY, self.trigger_polarity)
         self.__set_property(DCAM_IDPROP.BINNING, self.binning)
         self.__set_property(DCAM_IDPROP.EXPOSURETIME, self.exposure_time)
-        # self.__set_property(DCAM_IDPROP.CONTRASTGAIN, self.contrast_gain)
+        self.__set_property(DCAM_IDPROP.CONTRASTGAIN, self.contrast_gain)
         self.__set_property(DCAM_IDPROP.FRAMEBUNDLE_MODE, self.framebundle_mode)
+
+        if self.framebundle_mode == DCAMPROP.MODE.ON:
+            self.__set_property(DCAM_IDPROP.FRAMEBUNDLE_NUMBER, self.framebundle_number)
+        self.__set_property(DCAM_IDPROP.NUMBEROF_VIEW, self.number_of_view)
 
     def __set_dcam_internal_buffer(self) -> None:
         buffer_size = c_int32(self.dcam_internal_buffer_size)
@@ -333,6 +350,8 @@ class DCAM(BaseModel):
             LOGGER.error(f"Failed to release device internal buffer: {DCAMERR(err).name}")
 
     def __set_buffer(self) -> None:
+        height = self.__dcam_internal_buffer.height * self.framebundle_number * self.number_of_view
+
         self.__buffer = zeros(
             self.buffer_size,
             dtype=[
@@ -340,7 +359,7 @@ class DCAM(BaseModel):
                 (
                     "dcam",
                     self.DTYPE_MAP.get(self.pixel_type, "float32"),
-                    (self.__dcam_internal_buffer.height, self.__dcam_internal_buffer.width),
+                    (height, self.__dcam_internal_buffer.width),
                 ),
             ],
         )
@@ -452,70 +471,19 @@ class DCAM(BaseModel):
         self.__timeout_errors = 0
         return self.__dcam_wait_event.eventhappened
 
-    @staticmethod
-    def dcammisc_alloc_ndarray(frame: DCAMBUF_FRAME, framebundlenum=1, viewnum=1):
-        height = frame.height * framebundlenum * viewnum
-
-        if frame.type == DCAM_PIXELTYPE.MONO16:
-            return zeros((height, frame.width), dtype="uint16")
-
-        return zeros((height, frame.width), dtype="uint8")
-
     def __dcam_frames_to_buffer(self) -> None:
-        framebundlenum = 1
-
-        fValue = c_double()
-        err = dcamprop_getvalue(
-            self.__dcam_device.hdcam, DCAM_IDPROP.FRAMEBUNDLE_MODE, byref(fValue)
-        )
-        if not err.is_failed() and int(fValue.value) == DCAMPROP.MODE.ON:
-            err = dcamprop_getvalue(
-                self.__dcam_device.hdcam, DCAM_IDPROP.FRAMEBUNDLE_NUMBER, byref(fValue)
-            )
-            if not err.is_failed():
-                framebundlenum = int(fValue.value)
-            else:
-                return
-
-        viewnum = 1
-
-        err = dcamprop_getvalue(self.__dcam_device.hdcam, DCAM_IDPROP.NUMBEROF_VIEW, byref(fValue))
-        if not err.is_failed():
-            viewnum = int(fValue.value)
-
-        npBuf = self.dcammisc_alloc_ndarray(self.__dcam_internal_buffer, framebundlenum, viewnum)
-
-        print(npBuf)
-        print(npBuf.shape)
-
-        print("internal buffer:")
-        print("type     =", self.__dcam_internal_buffer.type)
-        print("width    =", self.__dcam_internal_buffer.width)
-        print("height   =", self.__dcam_internal_buffer.height)
-        print("rowbytes =", self.__dcam_internal_buffer.rowbytes)
-
-        print("allocated:")
-        print("shape =", npBuf.shape)
-        print("dtype =", npBuf.dtype)
-
         with self.__acquisition_cond:
             idx = self.__buffer_idx % self.buffer_size
-            aFrame = DCAMBUF_FRAME()
-            aFrame.iFrame = -1
 
-            aFrame.buf = npBuf.ctypes.data_as(c_void_p)
-            aFrame.rowbytes = self.__dcam_internal_buffer.rowbytes
-            aFrame.type = self.__dcam_internal_buffer.type
-            aFrame.width = self.__dcam_internal_buffer.width
-            aFrame.height = self.__dcam_internal_buffer.height
-            err = dcambuf_copyframe(self.__dcam_device.hdcam, byref(aFrame))
+            self.__dcam_frame.buf = self.__buffer[idx]["dcam"].ctypes.data_as(c_void_p)
+
+            err = dcambuf_copyframe(self.__dcam_device.hdcam, byref(self.__dcam_frame))
             if err.is_failed():
-                print("err =", err)
-                print("err hex =", hex(int(err)))
                 raise RuntimeError(f"Failed to copy data: {DCAMERR(err).name}")
-            print(npBuf)
 
+            self.__buffer[idx]["timestamp"] = self.__dcam_frame.timestamp
             self.__buffer_idx += 1
+
             self.__acquisition_cond.notify_all()
 
     def __acquisition_thread_func(self) -> None:
