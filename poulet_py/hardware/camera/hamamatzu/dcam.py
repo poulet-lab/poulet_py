@@ -488,7 +488,6 @@ class DCAM(BaseModel):
             self.__buffer_idx += 1
 
             self.__acquisition_cond.notify_all()
-            print(self.__buffer[idx])
 
     def __acquisition_thread_func(self) -> None:
         self.__software_trigger()
