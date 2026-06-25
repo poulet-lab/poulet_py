@@ -476,6 +476,7 @@ class DCAM(BaseModel):
             idx = self.__buffer_idx % self.buffer_size
 
             self.__dcam_frame.buf = self.__buffer[idx]["dcam"].ctypes.data_as(c_void_p)
+            self.__buffer[idx]["timestamp"] = monotonic_ns()
 
             err = dcambuf_copyframe(self.__dcam_device.hdcam, byref(self.__dcam_frame))
             if err.is_failed():
@@ -485,6 +486,7 @@ class DCAM(BaseModel):
             self.__buffer_idx += 1
 
             self.__acquisition_cond.notify_all()
+            print(self.__buffer[idx])
 
     def __acquisition_thread_func(self) -> None:
         self.__software_trigger()

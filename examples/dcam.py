@@ -1,9 +1,21 @@
 # import cv2
 # import numpy as np
 
+import signal
+from time import sleep
+
 from poulet_py import DCAM
 
 NAME = "dcam_example"
+running = True
+
+
+def handler(sig, frame):
+    global running
+    running = True
+
+
+signal.signal(signal.SIGINT, handler)
 
 
 # def show_framedata(data):
@@ -31,14 +43,16 @@ try:
         #     cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO | cv2.WINDOW_GUI_NORMAL,
         # )
 
-        while True:
+        while running:
             sample = dcam.read_last_sample()
-            print(sample)
+            # print(sample)
             # show_framedata(sample["dcam"])
 
             # key = cv2.waitKey(1) & 0xFF
             # if key == ord("q"):
             #     break
+            sleep(0.01)
+            signal.pause()
 
     # cv2.destroyAllWindows()
 except KeyboardInterrupt:
