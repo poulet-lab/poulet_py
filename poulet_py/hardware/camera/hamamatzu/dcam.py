@@ -294,12 +294,13 @@ class DCAM(BaseModel):
     ) -> None:
         err = dcamprop_setvalue(self.__dcam_device.hdcam, prop, value)
         if err.is_failed():
+            msg = f"Failed to set property {DCAM_IDPROP(prop).name}[{prop}]: {DCAMERR(err).name}[{err}]"
             if errors == "raise":
-                raise RuntimeError(f"Failed to set property {prop}: {DCAMERR(err).name}")
+                raise RuntimeError(msg)
             elif errors == "log":
-                LOGGER.error(f"Failed to set property {prop}: {DCAMERR(err).name}")
+                LOGGER.error(msg)
             else:
-                return
+                pass
 
     def __set_params(self) -> None:
         # TODO handle non excisting
