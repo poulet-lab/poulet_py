@@ -478,7 +478,8 @@ class DCAM(BaseModel):
         with self.__acquisition_cond:
             idx = self.__buffer_idx % self.buffer_size
 
-            self.__dcam_frame.buf = self.__buffer[idx]["dcam"].ctypes.data_as(c_void_p)
+            ptr = self.__buffer[idx]["dcam"].ctypes.data
+            self.__dcam_frame.buf = c_void_p(ptr)
             self.__buffer[idx]["timestamp"] = monotonic_ns()
 
             err = dcambuf_copyframe(self.__dcam_device.hdcam, byref(self.__dcam_frame))
@@ -499,7 +500,7 @@ class DCAM(BaseModel):
                 self.__dcam_frames_to_buffer()
                 self.__software_trigger()
             except Exception as e:
-                self.close()
+                self.__stop_acquisition_event.set()
                 raise e
 
     def __enter__(self):
