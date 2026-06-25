@@ -1,3 +1,8 @@
+from typing import Literal
+
+from pydantic import Field
+
+
 try:
     from abc import ABC, abstractmethod
     from pathlib import Path
@@ -7,10 +12,10 @@ try:
     from h5py import File
     from numpy import array, ndarray
     from pandas import DataFrame, read_csv
-    from pydantic import PrivateAttr
+    from pydantic import BaseModel, PrivateAttr
     from skimage.io import imread
 
-    from poulet_py import BaseData, DataSignature, DataStructure
+    from poulet_py import BaseData, BaseMetadata, DataSignature, DataStructure
 except ImportError as e:
     msg = """
 Missing required modules. Install options:
@@ -21,7 +26,18 @@ Missing required modules. Install options:
     raise ImportError(msg) from e
 
 
-class WidefieldData(BaseData, ABC):
+class WidefieldMaskData(BaseModel):
+    center: tuple[float, float] = Field(default=(0.0, 0.0))
+    radius: float = Field(default=0.0)
+
+
+class WidefieldMetadata(BaseMetadata):
+    mask_data: WidefieldMaskData | None = Field(default=None)
+
+
+class WidefieldData(BaseData[WidefieldMetadata], ABC):
+    metadata: WidefieldMetadata = Field(default_factory=WidefieldMetadata)
+
     _imaging: ndarray[Any, Any] = PrivateAttr()
     _reference_image: ndarray[Any, Any] = PrivateAttr()
     _timestamps: DataFrame = PrivateAttr()
@@ -105,7 +121,7 @@ class WidefieldData(BaseData, ABC):
                 f"  Columns: {list(self.timestamps.columns)}",
             ]
         )
-
+        # TODO fix make schema for h5 meta
         if self.analog_output:
             lines.append("Analog output data:")
             for name, data in self.analog_output.items():

@@ -53,6 +53,7 @@ from .io import (
     PatternBasedDiscovery,
     ExplicitDiscovery,
     GlobBasedDiscovery,
+    BaseMetadata,
 )
 from .stimulus import (
     BaseStimulus,
@@ -139,6 +140,7 @@ __all__ = [
     "NIClockTask",
     "NIConstantAnalogStimulus",
     "NIConstantDigitalStimulus",
+    "BaseMetadata",
     "NIDaQ",
     "NIDaQSource",
     "NIDigitalBaseStimulus",

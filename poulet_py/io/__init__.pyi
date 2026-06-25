@@ -13,6 +13,7 @@ from .sources import (
     StimuliMetadataSource,
 )
 from .data_structures import (
+    BaseMetadata,
     BaseData,
     WidefieldData,
     DataSignature,
@@ -54,4 +55,5 @@ __all__ = [
     "PatternBasedDiscovery",
     "ExplicitDiscovery",
     "GlobBasedDiscovery",
+    "BaseMetadata",
 ]
