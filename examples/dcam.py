@@ -33,6 +33,7 @@ try:
 
         while True:
             sample = dcam.read_last_sample()
+            print(sample)
             # show_framedata(sample["dcam"])
 
             # key = cv2.waitKey(1) & 0xFF
