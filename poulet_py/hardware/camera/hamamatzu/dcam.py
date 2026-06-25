@@ -84,7 +84,7 @@ class DCAM(BaseModel):
     number_of_view: int = Field(default=1, description="")
 
     buffer_size: int = Field(default=1000, description="")
-    dcam_internal_buffer_size: int = Field(default=1000, description="")
+    dcam_internal_buffer_size: int = Field(default=10, description="")
     timeout: int | Literal["auto"] = Field(default="auto", description="handle timeout in ms")
     capture_mode: DCAMCAP_START = Field(default=DCAMCAP_START.SEQUENCE, description="")
 
@@ -374,24 +374,24 @@ class DCAM(BaseModel):
         self.__set_timeout()
         self.__trigger_policy()
         self.__open_dcam_wait()
-        # self.__start_capture()
+        self.__start_capture()
 
-        # self.__acquisition_thread = Thread(
-        #     target=self.__acquisition_thread_func, name="DCAM Acquisition Thread", daemon=True
-        # )
-        # self.__acquisition_thread.start()
+        self.__acquisition_thread = Thread(
+            target=self.__acquisition_thread_func, name="DCAM Acquisition Thread", daemon=True
+        )
+        self.__acquisition_thread.start()
 
     def __stop_acquisition_thread(self) -> None:
-        # self.__stop_acquisition_event.set()
+        self.__stop_acquisition_event.set()
 
-        # self.__acquisition_thread.join(timeout=5)
-        # if self.__acquisition_thread.is_alive():
-        #     LOGGER.warning("Streaming thread did not stop gracefully")
+        self.__acquisition_thread.join(timeout=5)
+        if self.__acquisition_thread.is_alive():
+            LOGGER.warning("Streaming thread did not stop gracefully")
 
-        # del self.__acquisition_thread
-        # self.__stop_acquisition_event.clear()
+        del self.__acquisition_thread
+        self.__stop_acquisition_event.clear()
 
-        # self.__stop_capture()
+        self.__stop_capture()
         self.__close_dcam_wait()
 
     def __set_timeout(self) -> None:
