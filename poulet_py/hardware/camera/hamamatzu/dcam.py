@@ -493,11 +493,12 @@ class DCAM(BaseModel):
         self.__software_trigger()
         while not self.__stop_acquisition_event.is_set():
             try:
-                if not self.__wait_event(DCAMWAIT_CAPEVENT.FRAMEREADY, self.__timeout):
-                    continue
+                pass
+                # if not self.__wait_event(DCAMWAIT_CAPEVENT.FRAMEREADY, self.__timeout):
+                #     continue
 
                 # self.__dcam_frames_to_buffer()
-                self.__software_trigger()
+                # self.__software_trigger()
             except Exception as e:
                 self.__stop_acquisition_event.set()
                 raise e
