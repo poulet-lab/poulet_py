@@ -482,7 +482,6 @@ class DCAM(BaseModel):
             if err.is_failed():
                 raise RuntimeError(f"Failed to copy data: {DCAMERR(err).name}")
 
-            self.__buffer[idx]["timestamp"] = self.__dcam_frame.timestamp
             self.__buffer_idx += 1
 
             self.__acquisition_cond.notify_all()
