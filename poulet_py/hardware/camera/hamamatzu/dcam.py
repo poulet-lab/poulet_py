@@ -35,7 +35,6 @@ from poulet_py.hardware.camera.hamamatzu._api import (
     dcamdev_close,
     dcamdev_getstring,
     dcamdev_open,
-    dcammisc_alloc_ndarray,
     dcamprop_getvalue,
     dcamprop_setvalue,
     dcamwait_close,
@@ -453,6 +452,15 @@ class DCAM(BaseModel):
         self.__timeout_errors = 0
         return self.__dcam_wait_event.eventhappened
 
+    @staticmethod
+    def dcammisc_alloc_ndarray(frame: DCAMBUF_FRAME, framebundlenum=1, viewnum=1):
+        height = frame.height * framebundlenum * viewnum
+
+        if frame.type == DCAM_PIXELTYPE.MONO16:
+            return zeros((height, frame.width), dtype="uint16")
+
+        return zeros((height, frame.width), dtype="uint8")
+
     def __dcam_frames_to_buffer(self) -> None:
         framebundlenum = 1
 
@@ -475,7 +483,7 @@ class DCAM(BaseModel):
         if not err.is_failed():
             viewnum = int(fValue.value)
 
-        npBuf = dcammisc_alloc_ndarray(self.__dcam_internal_buffer, framebundlenum, viewnum)
+        npBuf = self.dcammisc_alloc_ndarray(self.__dcam_internal_buffer, framebundlenum, viewnum)
 
         print(npBuf)
         print(npBuf.shape)
