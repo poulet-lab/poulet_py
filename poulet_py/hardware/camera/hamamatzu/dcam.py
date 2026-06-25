@@ -491,8 +491,10 @@ class DCAM(BaseModel):
         with self.__acquisition_cond:
             idx = self.__buffer_idx % self.buffer_size
 
+            self.__dcam_frame.iFrame = -1
             self.__dcam_frame.buf = npBuf.ctypes.data_as(c_void_p)
             self.__buffer[idx]["timestamp"] = monotonic_ns()
+            print(self.__dcam_frame)
             err = dcambuf_copyframe(self.__dcam_device.hdcam, byref(self.__dcam_frame))
             if err.is_failed():
                 raise RuntimeError(f"Failed to copy data: {DCAMERR(err).name}")
