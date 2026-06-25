@@ -58,7 +58,7 @@ class DCAM(BaseModel):
         default=DCAMPROP.SHUTTER_MODE.GLOBAL, description=""
     )
     readout_speed: DCAMPROP.READOUTSPEED = Field(
-        default=DCAMPROP.READOUTSPEED.SLOWEST, description=""
+        default=DCAMPROP.READOUTSPEED.FASTEST, description=""
     )
     readout_direction: DCAMPROP.READOUT_DIRECTION = Field(
         default=DCAMPROP.READOUT_DIRECTION.FORWARD, description=""
