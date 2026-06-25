@@ -35,6 +35,7 @@ from poulet_py.hardware.camera.hamamatzu._api import (
     dcamdev_close,
     dcamdev_getstring,
     dcamdev_open,
+    dcammisc_alloc_ndarray,
     dcamprop_getvalue,
     dcamprop_setvalue,
     dcamwait_close,
@@ -289,18 +290,19 @@ class DCAM(BaseModel):
             raise RuntimeError(f"Failed to set property {prop}: {DCAMERR(err).name}")
 
     def __set_params(self) -> None:
+        # TODO handle non excisting
         self.__set_property(DCAM_IDPROP.IMAGE_PIXELTYPE, self.pixel_type)
         self.__set_property(DCAM_IDPROP.SENSORMODE, self.sensor_mode)
-        self.__set_property(DCAM_IDPROP.SHUTTER_MODE, self.shutter_mode)
+        # self.__set_property(DCAM_IDPROP.SHUTTER_MODE, self.shutter_mode)
         self.__set_property(DCAM_IDPROP.READOUTSPEED, self.readout_speed)
-        self.__set_property(DCAM_IDPROP.READOUT_DIRECTION, self.readout_direction)
+        # self.__set_property(DCAM_IDPROP.READOUT_DIRECTION, self.readout_direction)
         self.__set_property(DCAM_IDPROP.TRIGGERSOURCE, self.trigger_source)
         self.__set_property(DCAM_IDPROP.TRIGGER_MODE, self.trigger_mode)
         self.__set_property(DCAM_IDPROP.TRIGGERACTIVE, self.trigger_active)
         self.__set_property(DCAM_IDPROP.TRIGGERPOLARITY, self.trigger_polarity)
         self.__set_property(DCAM_IDPROP.BINNING, self.binning)
         self.__set_property(DCAM_IDPROP.EXPOSURETIME, self.exposure_time)
-        self.__set_property(DCAM_IDPROP.CONTRASTGAIN, self.contrast_gain)
+        # self.__set_property(DCAM_IDPROP.CONTRASTGAIN, self.contrast_gain)
         self.__set_property(DCAM_IDPROP.FRAMEBUNDLE_MODE, self.framebundle_mode)
 
     def __set_dcam_internal_buffer(self) -> None:
@@ -429,7 +431,7 @@ class DCAM(BaseModel):
             raise RuntimeError(f"Failed to open dcam wait: {DCAMERR.INVALIDWAITHANDLE.name}")
 
     def __close_dcam_wait(self) -> None:
-        err = dcamwait_close(self.__dcam_wait)
+        err = dcamwait_close(self.__dcam_wait.hwait)
         if err.is_failed():
             LOGGER.error(f"Failed to close dcam wait: {DCAMERR(err).name}")
 
@@ -439,7 +441,7 @@ class DCAM(BaseModel):
         self.__dcam_wait_event.eventmask = eventmask
         self.__dcam_wait_event.timeout = timeout
 
-        err = dcamwait_start(self.__dcam_wait, byref(self.__dcam_wait_event))
+        err = dcamwait_start(self.__dcam_wait.hwait, byref(self.__dcam_wait_event))
         if err.is_failed() and err != DCAMERR.TIMEOUT:
             raise RuntimeError(f"Failed to start dcam wait event: {DCAMERR(err).name}")
 
@@ -452,18 +454,43 @@ class DCAM(BaseModel):
         return self.__dcam_wait_event.eventhappened
 
     def __dcam_frames_to_buffer(self) -> None:
+        framebundlenum = 1
+
+        fValue = c_double()
+        err = dcamprop_getvalue(
+            self.__dcam_device.hdcam, DCAM_IDPROP.FRAMEBUNDLE_MODE, byref(fValue)
+        )
+        if not err.is_failed() and int(fValue.value) == DCAMPROP.MODE.ON:
+            err = dcamprop_getvalue(
+                self.__dcam_device.hdcam, DCAM_IDPROP.FRAMEBUNDLE_NUMBER, byref(fValue)
+            )
+            if not err.is_failed():
+                framebundlenum = int(fValue.value)
+            else:
+                return
+
+        viewnum = 1
+
+        err = dcamprop_getvalue(self.__dcam_device.hdcam, DCAM_IDPROP.NUMBEROF_VIEW, byref(fValue))
+        if not err.is_failed():
+            viewnum = int(fValue.value)
+
+        npBuf = dcammisc_alloc_ndarray(self.__dcam_internal_buffer, framebundlenum, viewnum)
+
+        print(npBuf)
+        print(npBuf.shape)
+
         with self.__acquisition_cond:
             idx = self.__buffer_idx % self.buffer_size
 
-            self.__dcam_frame.buf = self.__buffer[idx]["dcam"].ctypes.data_as(c_void_p)
-
+            self.__dcam_frame.buf = npBuf.ctypes.data_as(c_void_p)
+            self.__buffer[idx]["timestamp"] = monotonic_ns()
             err = dcambuf_copyframe(self.__dcam_device.hdcam, byref(self.__dcam_frame))
             if err.is_failed():
                 raise RuntimeError(f"Failed to copy data: {DCAMERR(err).name}")
+            print(npBuf)
 
-            self.__buffer[idx]["timestamp"] = self.__dcam_frame.timestamp
             self.__buffer_idx += 1
-
             self.__acquisition_cond.notify_all()
 
     def __acquisition_thread_func(self) -> None:
