@@ -374,7 +374,7 @@ class DCAM(BaseModel):
         self.__set_timeout()
         self.__trigger_policy()
         self.__open_dcam_wait()
-        self.__start_capture()
+        # self.__start_capture()
 
         # self.__acquisition_thread = Thread(
         #     target=self.__acquisition_thread_func, name="DCAM Acquisition Thread", daemon=True
@@ -391,7 +391,7 @@ class DCAM(BaseModel):
         # del self.__acquisition_thread
         # self.__stop_acquisition_event.clear()
 
-        self.__stop_capture()
+        # self.__stop_capture()
         self.__close_dcam_wait()
 
     def __set_timeout(self) -> None:
