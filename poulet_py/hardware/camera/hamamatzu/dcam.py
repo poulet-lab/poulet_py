@@ -75,8 +75,10 @@ class DCAM(BaseModel):
     trigger_polarity: DCAMPROP.TRIGGERENABLE_POLARITY = Field(
         default=DCAMPROP.TRIGGERENABLE_POLARITY.NEGATIVE, description=""
     )
+    # TODO check
     binning: DCAMPROP.BINNING = Field(default=DCAMPROP.BINNING._1, description="")
-    exposure_time: int = Field(default=30, description="in ms")
+    # subarray_mode: TODO
+    exposure_time: int = Field(default=9, description="in ms", gt=1, lt=10000)
     contrast_gain: int = Field(default=10, description="in ms")
     framebundle_mode: DCAMPROP.MODE = Field(default=DCAMPROP.MODE.OFF, description="")
     framebundle_number: int = Field(default=1, description="")
@@ -314,7 +316,7 @@ class DCAM(BaseModel):
         self.__set_property(DCAM_IDPROP.TRIGGERACTIVE, self.trigger_active)
         self.__set_property(DCAM_IDPROP.TRIGGERPOLARITY, self.trigger_polarity)
         self.__set_property(DCAM_IDPROP.BINNING, self.binning)
-        self.__set_property(DCAM_IDPROP.EXPOSURETIME, self.exposure_time)
+        self.__set_property(DCAM_IDPROP.EXPOSURETIME, self.exposure_time / 1000)
         self.__set_property(DCAM_IDPROP.CONTRASTGAIN, self.contrast_gain)
         self.__set_property(DCAM_IDPROP.FRAMEBUNDLE_MODE, self.framebundle_mode)
 
