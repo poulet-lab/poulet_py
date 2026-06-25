@@ -493,6 +493,7 @@ class DCAM(BaseModel):
 
             self.__dcam_frame.iFrame = -1
             self.__dcam_frame.buf = npBuf.ctypes.data_as(c_void_p)
+            print(self.__buffer["dcam"].shape)
             self.__buffer[idx]["timestamp"] = monotonic_ns()
             print(self.__dcam_frame)
             err = dcambuf_copyframe(self.__dcam_device.hdcam, byref(self.__dcam_frame))
