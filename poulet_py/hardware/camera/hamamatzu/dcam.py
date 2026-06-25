@@ -481,9 +481,9 @@ class DCAM(BaseModel):
             self.__dcam_frame.buf = c_void_p(ptr)
             self.__buffer[idx]["timestamp"] = monotonic_ns()
 
-            # err = dcambuf_copyframe(self.__dcam_device.hdcam, byref(self.__dcam_frame))
-            # if err.is_failed():
-            #     raise RuntimeError(f"Failed to copy data: {DCAMERR(err).name}")
+            err = dcambuf_copyframe(self.__dcam_device.hdcam, byref(self.__dcam_frame))
+            if err.is_failed():
+                raise RuntimeError(f"Failed to copy data: {DCAMERR(err).name}")
 
             self.__buffer_idx += 1
 
@@ -496,7 +496,7 @@ class DCAM(BaseModel):
                 if not self.__wait_event(DCAMWAIT_CAPEVENT.FRAMEREADY, self.__timeout):
                     continue
 
-                self.__dcam_frames_to_buffer()
+                # self.__dcam_frames_to_buffer()
                 self.__software_trigger()
             except Exception as e:
                 self.__stop_acquisition_event.set()
