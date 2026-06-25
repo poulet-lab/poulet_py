@@ -488,6 +488,16 @@ class DCAM(BaseModel):
         print(npBuf)
         print(npBuf.shape)
 
+        print("internal buffer:")
+        print("type     =", self.__dcam_internal_buffer.type)
+        print("width    =", self.__dcam_internal_buffer.width)
+        print("height   =", self.__dcam_internal_buffer.height)
+        print("rowbytes =", self.__dcam_internal_buffer.rowbytes)
+
+        print("allocated:")
+        print("shape =", npBuf.shape)
+        print("dtype =", npBuf.dtype)
+
         with self.__acquisition_cond:
             idx = self.__buffer_idx % self.buffer_size
             aFrame = DCAMBUF_FRAME()
@@ -500,6 +510,8 @@ class DCAM(BaseModel):
             aFrame.height = self.__dcam_internal_buffer.height
             err = dcambuf_copyframe(self.__dcam_device.hdcam, byref(aFrame))
             if err.is_failed():
+                print("err =", err)
+                print("err hex =", hex(int(err)))
                 raise RuntimeError(f"Failed to copy data: {DCAMERR(err).name}")
             print(npBuf)
 
@@ -509,11 +521,15 @@ class DCAM(BaseModel):
     def __acquisition_thread_func(self) -> None:
         self.__software_trigger()
         while not self.__stop_acquisition_event.is_set():
-            if not self.__wait_event(DCAMWAIT_CAPEVENT.FRAMEREADY, self.__timeout):
-                continue
+            try:
+                if not self.__wait_event(DCAMWAIT_CAPEVENT.FRAMEREADY, self.__timeout):
+                    continue
 
-            self.__dcam_frames_to_buffer()
-            self.__software_trigger()
+                self.__dcam_frames_to_buffer()
+                self.__software_trigger()
+            except Exception as e:
+                self.close()
+                raise e
 
     def __enter__(self):
         self.open()
