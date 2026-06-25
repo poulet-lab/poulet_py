@@ -26,7 +26,6 @@ from poulet_py.hardware.camera.hamamatzu._api import (
     dcamapi_init,
     dcamapi_uninit,
     dcambuf_alloc,
-    dcambuf_copyframe,
     dcambuf_release,
     dcamcap_firetrigger,
     dcamcap_start,
