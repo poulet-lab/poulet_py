@@ -160,7 +160,7 @@ class DCAM(BaseModel):
             self.__set_params()
             self.__set_dcam_internal_buffer()
             self.__set_buffer()
-            self.__start_acquisition_thread()
+            # self.__start_acquisition_thread()
 
             self.__is_open = True
         except Exception as e:
@@ -173,7 +173,7 @@ class DCAM(BaseModel):
 
         self.__is_open = False
 
-        self.__stop_acquisition_thread()
+        # self.__stop_acquisition_thread()
         self.__release_buffer()
         self.__release_dcam_internal_buffer()
         self.__release_dcam_device()
@@ -493,12 +493,11 @@ class DCAM(BaseModel):
         self.__software_trigger()
         while not self.__stop_acquisition_event.is_set():
             try:
-                pass
-                # if not self.__wait_event(DCAMWAIT_CAPEVENT.FRAMEREADY, self.__timeout):
-                #     continue
+                if not self.__wait_event(DCAMWAIT_CAPEVENT.FRAMEREADY, self.__timeout):
+                    continue
 
-                # self.__dcam_frames_to_buffer()
-                # self.__software_trigger()
+                self.__dcam_frames_to_buffer()
+                self.__software_trigger()
             except Exception as e:
                 self.__stop_acquisition_event.set()
                 raise e
