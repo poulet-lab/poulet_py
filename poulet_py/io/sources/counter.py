@@ -1,5 +1,5 @@
 try:
-    from time import time_ns
+    from time import monotonic_ns
 
     from pydantic import PrivateAttr
 
@@ -27,7 +27,7 @@ class CounterSource(BaseSource):
         pass
 
     def _fire(self) -> bool:
-        timestamp = time_ns()
+        timestamp = monotonic_ns()
         self._counter += 1
 
         self._write_sample((timestamp, self._counter))

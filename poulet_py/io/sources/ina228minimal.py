@@ -1,6 +1,6 @@
 try:
     from threading import Event, Thread
-    from time import time_ns
+    from time import monotonic_ns
     from typing import Literal
     import board
     import busio
@@ -41,10 +41,9 @@ class INA228Source_minimal(BaseSource):
         default=1, description="Number of samples to average for each reading, higher values can improve the accurcay of a signal but also increase the time it takes to acquire a signal"
     )
     
-    sample_interval_s: float = Field(default=1, description="Sample interval in seconds")
+    i2c: I2C | None = Field(default=None)
 
 
-    _i2c: I2C | None = PrivateAttr(default=None)
     _ina228: INA228 | None = PrivateAttr(default=None)
 
     _acquisition_thread: Thread | None = PrivateAttr(default=None)
@@ -65,9 +64,10 @@ class INA228Source_minimal(BaseSource):
 
     def _open(self):
         try:
-            self._i2c = busio.I2C(board.SCL, board.SDA, frequency=self.bus_frequency)
+            if self.i2c is None:
+                self.i2c = busio.I2C(board.SCL, board.SDA, frequency=self.bus_frequency)
             self._set_ftdi_latency_timer()
-            self._ina228 = INA228(self._i2c, address=0x40)
+            self._ina228 = INA228(self.i2c, address=self.address)
             
         except Exception as e:
             msg = f"Failed to initialize INA228: {e}"
@@ -98,11 +98,11 @@ class INA228Source_minimal(BaseSource):
             if self._acquisition_thread.is_alive():
                 LOGGER.warning("INA228: Acquisition thread is still alive after closure")
 
-        if self._i2c:
-            self._i2c.deinit()
+        if self.i2c:
+            self.i2c.deinit()
 
         self._ina228 = None
-        self._i2c = None
+        self.i2c = None
         self._acquisition_thread = None
 
     def _acquisition_thread_func(self):
@@ -111,7 +111,7 @@ class INA228Source_minimal(BaseSource):
                 if self._ina228 is None:
                     raise RuntimeError("INA228 is not initialized")
 
-                timestamp = time_ns()
+                timestamp = monotonic_ns()
                 #current = self._ina228.current
                 bus_voltage = self._ina228.bus_voltage
                 #shunt_voltage = self._ina228.shunt_voltage
@@ -131,8 +131,7 @@ class INA228Source_minimal(BaseSource):
                     )
                 )
 
-                precise_sleep(self.sample_interval_s)
-
+                precise_sleep(0.001)
             except Exception as e:
                 LOGGER.error(f"INA228 acquisition error: {e}")
                 break
@@ -146,8 +145,8 @@ class INA228Source_minimal(BaseSource):
         Blinka FT232H path is:
 
             busio.I2C
-            ._i2c                         -> Blinka FTDI MPSSE I2C wrapper
-            ._i2c                         -> pyftdi.i2c.I2cController
+            .i2c                         -> Blinka FTDI MPSSE I2C wrapper
+            .i2c                         -> pyftdi.i2c.I2cController
             .ftdi                         -> pyftdi.ftdi.Ftdi
 
         This is intentionally private-attribute access, because Blinka does not
@@ -160,7 +159,7 @@ class INA228Source_minimal(BaseSource):
             raise ValueError("ftdi_latency_ms must be between 1 and 255")
 
         try:
-            pyftdi_i2c_controller = self._i2c._i2c._i2c
+            pyftdi_i2c_controller = self.i2c._i2c._i2c
             ftdi = pyftdi_i2c_controller.ftdi
             ftdi.set_latency_timer(self.ftdi_latency_ms)
 
