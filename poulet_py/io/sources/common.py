@@ -99,8 +99,8 @@ class BaseSource(BaseModel, ABC):
         if not self._external_bus:
             self.bus.open()
 
-        self._set_buffer()
         self._open()
+        self._set_source_buffer()
 
         self._fire_thread = Thread(
             target=self._fire_loop, daemon=True, name=f"{self.name}-fire-loop"
@@ -124,8 +124,8 @@ class BaseSource(BaseModel, ABC):
         if self._publish_thread.is_alive():
             self._publish_thread.join()
 
+        self._del_source_buffer()
         self._close()
-        self._del_buffer()
 
         if not self._external_bus:
             self.bus.close()
@@ -150,7 +150,7 @@ class BaseSource(BaseModel, ABC):
             msg = f"{type(self).__name__} needs to be opened first"
             raise RuntimeError(msg)
 
-    def _set_buffer(self) -> None:
+    def _set_source_buffer(self) -> None:
         self._set_buffer_dtype()
         dt = dtype(self._source_buffer_dtype)
 
@@ -162,7 +162,7 @@ class BaseSource(BaseModel, ABC):
         self._source_buffer_idx = 0
         self._source_buffer_needle = 0
 
-    def _del_buffer(self) -> None:
+    def _del_source_buffer(self) -> None:
         if hasattr(self, "_source_buffer"):
             del self._source_buffer
 
@@ -269,12 +269,9 @@ class BaseSource(BaseModel, ABC):
             if not self._stimuli:
                 self._done_fire.set()
                 continue
-
             self._calculate_stimulus_duration()
-
             if self._barrier:
                 self._barrier.wait()
-
             self._fire()
             self._done_fire.set()
 

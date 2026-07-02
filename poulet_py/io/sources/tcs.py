@@ -13,14 +13,11 @@ Missing 'sources' module. Install options:
     raise ImportError(msg) from e
 
 
-class TCSSource(TCS, BaseSource):
+class TCSSource(BaseSource,TCS):
     _temp_buffer: ndarray = PrivateAttr()
 
     def _set_buffer_dtype(self):
-        self._source_buffer_dtype = [
-            ("timestamp", "uint64"),
-            *((f"s{i}", "float64") for i in range(5)),
-        ]
+        self._source_buffer_dtype = self._tcs_buffer.dtype
 
     def _open(self):
         TCS.open(self)
@@ -66,6 +63,3 @@ class TCSSource(TCS, BaseSource):
                     self._tcs_buffer_needle = needle + count
 
         return True
-
-
-x

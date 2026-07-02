@@ -2,7 +2,7 @@ from time import time_ns
 
 import cv2
 import numpy as np
-
+from time import sleep
 from poulet_py import (
     DCAM,
     CounterSource,
@@ -14,6 +14,8 @@ from poulet_py import (
     StimulatorTrial,
     StimuliMetadataSource,
     TCSSource,
+    TCSStimulus,
+    AcquisitionType
 )
 
 
@@ -31,7 +33,7 @@ cv2.namedWindow(
     cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO | cv2.WINDOW_GUI_NORMAL,
 )
 
-with DCAM(device_index=0) as dcam:
+with DCAM(device_index=0,acquisition_type=AcquisitionType.CONTINUOUS) as dcam:
     while True:
         sample = dcam.read_sample()
         if sample is not None:
@@ -43,19 +45,24 @@ with DCAM(device_index=0) as dcam:
 
 cv2.destroyAllWindows()
 
+sleep(1)
 sources = [
     CounterSource(name="counter"),
     StimuliMetadataSource(name="meta"),
-    DCAMSource(name="dcam", device_index=0),
-    TCSSource(name="tcs", port="/dev"),
+    DCAMSource(name="dcam", device_index=0,acquisition_type=AcquisitionType.FINITE),
+    # TCSSource(name="tcs", port="/dev/ttyUSB0"),
 ]
-sinks = [HDFSink(name="h5sink", file=f"widefield_{time_ns}.h5", meta={"timestamp": time_ns()})]
+sinks = [HDFSink(name="h5sink", file=f"widefield_{time_ns()}.h5", meta={"timestamp": time_ns()})]
 
-empty_stim = EmptyStimulus(duration=3000, pre_delay=100)
-
+empty_stim = EmptyStimulus(duration=3000, pre_delay=100, post_delay=300)
+# tcs_stim = TCSStimulus(duration=5000, pre_delay=100, post_delay=300)
 blocks = [
     StimulatorBlock(
-        trials=[StimulatorTrial(stimuli=empty_stim)], trial_repetitions=30, isi=range(500, 4000)
+        trials=[
+            StimulatorTrial(stimuli=empty_stim),
+            # StimulatorTrial(stimuli=tcs_stim),
+        ],
+        trial_repetitions=5,
     )
 ]
 exp = StimulatorRuntime(name="widefield", sources=sources, sinks=sinks, blocks=blocks)

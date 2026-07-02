@@ -644,7 +644,6 @@ class TCS(BaseModel, validate_assignment=True):
                 write_timeout=2,
             )
         except Exception as e:
-            self.close()
             msg = "Serial initialization failed"
             raise RuntimeError(msg) from e
 
@@ -673,7 +672,6 @@ class TCS(BaseModel, validate_assignment=True):
             self._tcs_buffer_idx = 0
             self._tcs_buffer_needle = 0
         except Exception as e:
-            self.close()
             msg = "Buffer initialization failed"
             raise RuntimeError(msg) from e
 
@@ -691,7 +689,6 @@ class TCS(BaseModel, validate_assignment=True):
             )
             self._acquisition_thread.start()
         except Exception as e:
-            self.close()
             msg = "Acquisition thread failed to start"
             raise RuntimeError(msg) from e
 

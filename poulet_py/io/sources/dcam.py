@@ -15,24 +15,15 @@ Missing 'sources' module. Install options:
     raise ImportError(msg) from e
 
 
-class DCAMSource(DCAM, BaseSource):
+class DCAMSource(BaseSource,DCAM):
     _temp_buffer: ndarray = PrivateAttr()
 
     def _set_buffer_dtype(self):
-        height = self._dcam_internal_buffer.height * self.framebundle_number * self.number_of_view
-
-        self._source_buffer_dtype = [
-            ("timestamp", "uint64"),
-            (
-                "dcam",
-                self.DTYPE_MAP.get(self.pixel_type, "float32"),
-                (height, self._dcam_internal_buffer.width),
-            ),
-        ]
+        self._source_buffer_dtype = self._dcam_buffer.dtype
 
     def _open(self):
         DCAM.open(self)
-        self._temp_buffer = zeros(self.buffer_size, dtype=self._source_buffer.dtype)
+        self._temp_buffer = zeros(self.buffer_size, dtype=self._dcam_buffer.dtype)
 
     def _close(self):
         DCAM.close(self)
@@ -51,10 +42,8 @@ class DCAMSource(DCAM, BaseSource):
                 self._write_samples(sample)
         else:
             precise_sleep(self._max_stimulus_duration_ms / 1000.0)
-
         if self.acquisition_type == AcquisitionType.CONTINUOUS:
-            samples = self.read_many_sample(data=self._temp_buffer, n=self.buffer_size, timeout=-1)
-
+            samples = self.read_many_sample(data=self._temp_buffer, n=-1, timeout=-1)
             if samples > 0:
                 self._write_samples(self._temp_buffer[:samples])
 

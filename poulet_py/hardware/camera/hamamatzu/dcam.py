@@ -165,18 +165,16 @@ class DCAM(BaseModel):
             self._set_dcam_internal_buffer()
             self._set_buffer()
 
-            if self.acquisition_type == AcquisitionType.CONTINUOUS:
-                self._start_acquisition_thread()
-
             self._set_timeout()
             self._trigger_policy()
             self._open_dcam_wait()
             self._start_capture()
             self._software_trigger()
 
+            if self.acquisition_type == AcquisitionType.CONTINUOUS:
+                self._start_acquisition_thread()
             self._is_open = True
         except Exception as e:
-            self.close()
             raise RuntimeError("Failed to open Dcam") from e
 
     def close(self) -> None:
@@ -185,11 +183,11 @@ class DCAM(BaseModel):
 
         self._is_open = False
 
-        self._stop_capture()
-        self._close_dcam_wait()
-
         if self.acquisition_type == AcquisitionType.CONTINUOUS:
             self._stop_acquisition_thread()
+
+        self._stop_capture()
+        self._close_dcam_wait()
 
         self._release_buffer()
         self._release_dcam_internal_buffer()
