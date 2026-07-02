@@ -77,7 +77,7 @@ class Max31856Source(BaseSource):
     _stop_acquisition_event: Event = PrivateAttr(default_factory=Event)
 
     def _set_buffer_dtype(self):
-        self._buffer_dtype = [
+        self._source_buffer_dtype = [
             ("timestamp", "uint64"),
             ("temperature", "float32"),
             ("reference", "float32"),

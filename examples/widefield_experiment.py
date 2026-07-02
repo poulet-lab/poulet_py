@@ -1,21 +1,17 @@
-import signal
-from time import sleep
+from poulet_py import (
+    DCAM,
+    CounterSource,
+    DCAMSource,
+    EmptyStimulus,
+    HDFSink,
+    StimulatorBlock,
+    StimulatorRuntime,
+    StimulatorTrial,
+    TCSSource,
+)
 
 import cv2
 import numpy as np
-
-from poulet_py import DCAM
-
-NAME = "dcam_example"
-running = True
-
-
-def handler(sig, frame):
-    global running
-    running = True
-
-
-signal.signal(signal.SIGINT, handler)
 
 
 def show_framedata(data):
@@ -24,23 +20,16 @@ def show_framedata(data):
         imul = int(65535 / maxval)
         data = data * imul
 
-    cv2.imshow(NAME, data)
+    cv2.imshow("dcam", data)
 
-
-devices = DCAM.get_available_devices()
-
-if devices:
-    print(devices)
-else:
-    raise RuntimeError("No Devices")
 
 cv2.namedWindow(
-    NAME,
+    "dcam",
     cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO | cv2.WINDOW_GUI_NORMAL,
 )
 
 with DCAM(device_index=0) as dcam:
-    while running:
+    while True:
         sample = dcam.read_sample()
         show_framedata(sample["dcam"])
 
@@ -48,6 +37,7 @@ with DCAM(device_index=0) as dcam:
         key = cv2.waitKey(1) & 0xFF
         if key == ord("q"):
             break
-        sleep(0.001)
 
 cv2.destroyAllWindows()
+
+sources = [DCAMSource()]

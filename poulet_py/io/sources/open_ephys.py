@@ -28,7 +28,7 @@ class OpenEphysSource(BaseSource):
     _thread: Thread = PrivateAttr()
 
     def _set_buffer_dtype(self):
-        self._buffer_dtype = [
+        self._source_buffer_dtype = [
             ("timestamp", uint64),
             ("channel_data", float64, (self.num_channels,)),
         ]

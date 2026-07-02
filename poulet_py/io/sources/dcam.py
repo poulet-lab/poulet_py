@@ -1,5 +1,7 @@
 try:
-    from poulet_py import DCAM, BaseSource, precise_sleep
+    from time import monotonic_ns
+
+    from poulet_py import DCAM, LOGGER, AcquisitionType, BaseSource, precise_sleep
 except ImportError as e:
     msg = """
 Missing 'sources' module. Install options:
@@ -12,7 +14,7 @@ Missing 'sources' module. Install options:
 
 class DCAMSource(DCAM, BaseSource):
     def _set_buffer_dtype(self):
-        self._buffer_dtype = [
+        self._source_buffer_dtype = [
             ("timestamp", "uint64"),
             (
                 "dcam",
@@ -23,10 +25,24 @@ class DCAMSource(DCAM, BaseSource):
 
     def _open(self):
         DCAM.open(self)
+        if self.acquisition_type == AcquisitionType.CONTINUOUS:
+            # pointers
+            self._source_buffer = self._dcam_buffer
+            self._source_buffer_idx = self._dcam_buffer_idx
+            self._source_buffer_needle = self._dcam_buffer_needle
 
     def _close(self):
         DCAM.close(self)
 
     def _trigger(self) -> bool:
-        precise_sleep(self._max_stimulus_duration_ms / 1000.0)
+        if self.acquisition_type == AcquisitionType.FINITE:
+            deadline = monotonic_ns() + self._max_stimulus_duration_ms * 1000000
+            while monotonic_ns() < deadline:
+                sample = self.read_sample()
+                if sample is None:
+                    LOGGER.error("DcamSource error in reading sample")
+                self._source_buffer[self._source_buffer_idx % self.buffer_size] = sample
+        else:
+            precise_sleep(self._max_stimulus_duration_ms / 1000.0)
+
         return True

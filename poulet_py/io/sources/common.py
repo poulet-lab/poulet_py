@@ -45,10 +45,10 @@ class BaseSource(BaseModel, ABC):
     _is_open: bool = PrivateAttr(default=False)
 
     _lock: Lock = PrivateAttr(default_factory=Lock)
-    _buffer: ndarray = PrivateAttr()
-    _buffer_idx: int = PrivateAttr(default=0)
-    _last_publish_idx: int = PrivateAttr(default=0)
-    _buffer_dtype: DTypeLike = PrivateAttr()
+    _source_buffer: ndarray = PrivateAttr()
+    _source_buffer_idx: int = PrivateAttr(default=0)
+    _source_buffer_needle: int = PrivateAttr(default=0)
+    _source_buffer_dtype: DTypeLike = PrivateAttr()
     _total_written: int = PrivateAttr(default=0)
     _last_published_written: int = PrivateAttr(default=0)
 
@@ -155,51 +155,51 @@ class BaseSource(BaseModel, ABC):
 
     def _set_buffer(self) -> None:
         self._set_buffer_dtype()
-        dt = dtype(self._buffer_dtype)
+        dt = dtype(self._source_buffer_dtype)
 
         if not dt.names or "timestamp" not in dt.names:
             msg = "Buffer dtype must include a 'timestamp' field of type uint64"
             raise ValueError(msg)
 
-        self._buffer = zeros(self.buffer_size, dtype=dt)
-        self._buffer_idx = 0
-        self._last_publish_idx = 0
+        self._source_buffer = zeros(self.buffer_size, dtype=dt)
+        self._source_buffer_idx = 0
+        self._source_buffer_needle = 0
 
     def _del_buffer(self) -> None:
-        if hasattr(self, "_buffer"):
-            del self._buffer
+        if hasattr(self, "_source_buffer"):
+            del self._source_buffer
 
-        self._buffer_idx = 0
-        self._last_publish_idx = 0
+        self._source_buffer_idx = 0
+        self._source_buffer_needle = 0
 
     def _write_sample(self, sample: tuple | dict) -> None:
         with self._lock:
-            idx = self._buffer_idx % self.buffer_size
+            idx = self._source_buffer_idx % self.buffer_size
 
             if isinstance(sample, dict):
                 for k, v in sample.items():
-                    self._buffer[idx][k] = v
+                    self._source_buffer[idx][k] = v
             else:
-                self._buffer[idx] = sample
+                self._source_buffer[idx] = sample
 
-            self._buffer_idx += 1
+            self._source_buffer_idx += 1
 
     def _write_samples(self, samples: ndarray) -> None:
         n = len(samples)
 
         with self._lock:
-            start = self._buffer_idx % self.buffer_size
+            start = self._source_buffer_idx % self.buffer_size
             end = start + n
 
             if end <= self.buffer_size:
-                self._buffer[start:end] = samples
+                self._source_buffer[start:end] = samples
             else:
                 split = self.buffer_size - start
 
-                self._buffer[start:] = samples[:split]
-                self._buffer[: end % self.buffer_size] = samples[split:]
+                self._source_buffer[start:] = samples[:split]
+                self._source_buffer[: end % self.buffer_size] = samples[split:]
 
-            self._buffer_idx += n
+            self._source_buffer_idx += n
 
     def _supports(self) -> None:
         if self.trigger_on == "all":
@@ -234,8 +234,8 @@ class BaseSource(BaseModel, ABC):
 
     def _get_new_chunk(self) -> ndarray | None:
         with self._lock:
-            current = self._buffer_idx
-            last = self._last_publish_idx
+            current = self._source_buffer_idx
+            last = self._source_buffer_needle
 
             if current == last:
                 return None
@@ -249,17 +249,17 @@ class BaseSource(BaseModel, ABC):
             end = current % self.buffer_size
 
             chunk = (
-                self._buffer[start:end]
+                self._source_buffer[start:end]
                 if start < end
                 else concatenate(
                     (
-                        self._buffer[start:],
-                        self._buffer[:end],
+                        self._source_buffer[start:],
+                        self._source_buffer[:end],
                     )
                 )
             )
 
-            self._last_publish_idx = current
+            self._source_buffer_needle = current
 
             return chunk.copy()
 

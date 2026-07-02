@@ -37,7 +37,7 @@ class SPISource(BaseSource):
     _stop_acquisition: bool = PrivateAttr(default=False)
 
     def _set_buffer_dtype(self):
-        self._buffer_dtype = [("timestamp", "uint64"), ("data", "uint8", self.read_size)]
+        self._source_buffer_dtype = [("timestamp", "uint64"), ("data", "uint8", self.read_size)]
 
     def _open(self):
         try:

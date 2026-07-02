@@ -18,7 +18,7 @@ class CounterSource(BaseSource):
     _counter: int = PrivateAttr(default=0)
 
     def _set_buffer_dtype(self):
-        self._buffer_dtype = [("timestamp", "uint64"), ("counter", "uint64")]
+        self._source_buffer_dtype = [("timestamp", "uint64"), ("counter", "uint64")]
 
     def _open(self):
         self._counter = 0

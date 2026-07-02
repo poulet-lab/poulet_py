@@ -35,7 +35,7 @@ class NIDaQSource(BaseSource, NIDaQ):
                 for ch in task.channels:
                     dtype.append((f"{task.name}_{ch.name}", "uint32"))
 
-        self._buffer_dtype = dtype
+        self._source_buffer_dtype = dtype
 
     def _open(self):
         NIDaQ.open(self)
@@ -71,7 +71,7 @@ class NIDaQSource(BaseSource, NIDaQ):
 
             if lengths:
                 n = min(lengths)
-                samples = empty(n, dtype=self._buffer_dtype)
+                samples = empty(n, dtype=self._source_buffer_dtype)
 
                 t_prev = 0
                 task_name = ""

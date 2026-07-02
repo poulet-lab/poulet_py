@@ -100,9 +100,9 @@ class DCAM(BaseModel):
     _dcam_wait: DCAMWAIT_OPEN = PrivateAttr(default_factory=DCAMWAIT_OPEN)
     _dcam_wait_event: DCAMWAIT_START = PrivateAttr(default_factory=DCAMWAIT_START)
 
-    _buffer: ndarray = PrivateAttr()
-    _buffer_idx: int = PrivateAttr(0)
-    _buffer_needle: int = PrivateAttr(0)
+    _dcam_buffer: ndarray = PrivateAttr()
+    _dcam_buffer_idx: int = PrivateAttr(0)
+    _dcam_buffer_needle: int = PrivateAttr(0)
 
     _timeout: int = PrivateAttr(default=2)
     _software_trigger_cycle: int = PrivateAttr(default=0)
@@ -222,9 +222,9 @@ class DCAM(BaseModel):
             return sample
 
         with self._acquisition_cond:
-            idx = (self._buffer_idx - 1) % self.buffer_size
-            sample = self._buffer[idx]
-            self._buffer_needle = self._buffer_idx
+            idx = (self._dcam_buffer_idx - 1) % self.buffer_size
+            sample = self._dcam_buffer[idx]
+            self._dcam_buffer_needle = self._dcam_buffer_idx
 
         return sample
 
@@ -252,27 +252,27 @@ class DCAM(BaseModel):
                     remaining = (deadline - monotonic_ns()) / 1e9
                     self._acquisition_cond.wait(remaining)
                 elif n != -1 and deadline is None:
-                    while self._buffer_idx - self._buffer_needle < n:
+                    while self._dcam_buffer_idx - self._dcam_buffer_needle < n:
                         self._acquisition_cond.wait()
                 elif n != -1 and deadline is not None:
                     remaining = (deadline - monotonic_ns()) / 1e9
-                    while self._buffer_idx - self._buffer_needle < n and remaining > 0:
+                    while self._dcam_buffer_idx - self._dcam_buffer_needle < n and remaining > 0:
                         self._acquisition_cond.wait(remaining)
                         remaining = (deadline - monotonic_ns()) / 1e9
 
         with self._acquisition_cond:
-            avail = self._buffer_idx - self._buffer_needle
+            avail = self._dcam_buffer_idx - self._dcam_buffer_needle
             if avail <= 0:
                 return 0
 
             count = avail if n < 0 else min(avail, n)
 
             size = self.buffer_size
-            buffer = self._buffer
-            needle = self._buffer_needle
+            buffer = self._dcam_buffer
+            needle = self._dcam_buffer_needle
 
             if count > size:
-                needle = self._buffer_idx - size
+                needle = self._dcam_buffer_idx - size
                 count = size
 
             start = needle % size
@@ -285,7 +285,7 @@ class DCAM(BaseModel):
                 data[:first] = buffer[start:]
                 data[first:count] = buffer[: count - first]
 
-            self._buffer_needle = needle + count
+            self._dcam_buffer_needle = needle + count
 
             return count
 
@@ -387,7 +387,7 @@ class DCAM(BaseModel):
     def _set_buffer(self) -> None:
         height = self._dcam_internal_buffer.height * self.framebundle_number * self.number_of_view
 
-        self._buffer = zeros(
+        self._dcam_buffer = zeros(
             self.buffer_size,
             dtype=[
                 ("timestamp", "uint64"),
@@ -400,8 +400,8 @@ class DCAM(BaseModel):
         )
 
     def _release_buffer(self) -> None:
-        del self._buffer
-        self._buffer_idx = 0
+        del self._dcam_buffer
+        self._dcam_buffer_idx = 0
 
     def _start_acquisition_thread(self) -> None:
         self._acquisition_thread = Thread(
@@ -503,17 +503,17 @@ class DCAM(BaseModel):
 
     def _dcam_frames_to_buffer(self) -> None:
         with self._acquisition_cond:
-            idx = self._buffer_idx % self.buffer_size
+            idx = self._dcam_buffer_idx % self.buffer_size
 
-            ptr = self._buffer[idx]["dcam"].ctypes.data
+            ptr = self._dcam_buffer[idx]["dcam"].ctypes.data
             self._dcam_frame.buf = c_void_p(ptr)
-            self._buffer[idx]["timestamp"] = monotonic_ns()
+            self._dcam_buffer[idx]["timestamp"] = monotonic_ns()
 
             err = dcambuf_copyframe(self._dcam_device.hdcam, byref(self._dcam_frame))
             if err.is_failed():
                 raise RuntimeError(f"Failed to copy data: {DCAMERR(err).name}")
 
-            self._buffer_idx += 1
+            self._dcam_buffer_idx += 1
 
             self._acquisition_cond.notify_all()
 
