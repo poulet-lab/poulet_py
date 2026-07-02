@@ -1,17 +1,10 @@
-from poulet_py import (
-    DCAM,
-    CounterSource,
-    DCAMSource,
-    EmptyStimulus,
-    HDFSink,
-    StimulatorBlock,
-    StimulatorRuntime,
-    StimulatorTrial,
-    TCSSource,
-)
-
 import cv2
 import numpy as np
+
+from poulet_py import (
+    DCAM,
+    DCAMSource,
+)
 
 
 def show_framedata(data):
@@ -32,7 +25,6 @@ with DCAM(device_index=0) as dcam:
     while True:
         sample = dcam.read_sample()
         show_framedata(sample["dcam"])
-
 
         key = cv2.waitKey(1) & 0xFF
         if key == ord("q"):

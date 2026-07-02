@@ -44,7 +44,6 @@ with DCAM(device_index=0) as dcam:
         sample = dcam.read_sample()
         show_framedata(sample["dcam"])
 
-
         key = cv2.waitKey(1) & 0xFF
         if key == ord("q"):
             break

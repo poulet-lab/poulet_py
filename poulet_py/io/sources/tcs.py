@@ -17,7 +17,10 @@ Missing 'sources' module. Install options:
 
 class TCSSource(TCS, BaseSource):
     def _set_buffer_dtype(self):
-        self._source_buffer_dtype = [("timestamp", "uint64"), *((f"s{i}", "float64") for i in range(5))]
+        self._source_buffer_dtype = [
+            ("timestamp", "uint64"),
+            *((f"s{i}", "float64") for i in range(5)),
+        ]
 
     def _open(self):
         TCS.open(self)

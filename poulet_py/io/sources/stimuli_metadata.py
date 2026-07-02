@@ -23,7 +23,10 @@ class StimuliMetadataSource(BaseSource):
     )
 
     def _set_buffer_dtype(self):
-        self._source_buffer_dtype = [("timestamp", "uint64"), ("metadata", f"S{self.max_string_length}")]
+        self._source_buffer_dtype = [
+            ("timestamp", "uint64"),
+            ("metadata", f"S{self.max_string_length}"),
+        ]
 
     def _open(self):
         pass
