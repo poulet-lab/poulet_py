@@ -65,7 +65,7 @@ seq = [
   "flirpy<=0.6.2",
   "zstandard<=0.25.0",
   "pandas<=3.0.2",
-  "pillow<=12.2.0",
+  "pillow<=12.3.0",
   "h5py<=3.16.0",
 ]
 # Hardware
