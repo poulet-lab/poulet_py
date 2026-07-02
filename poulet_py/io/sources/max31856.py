@@ -1,7 +1,7 @@
 try:
     from enum import Enum
     from threading import Event, Thread
-    from time import time_ns
+    from time import monotonic_ns
     from typing import Literal
 
     from adafruit_blinka.microcontroller.generic_linux.rpi_gpio_pin import Pin
@@ -77,7 +77,7 @@ class Max31856Source(BaseSource):
     _stop_acquisition_event: Event = PrivateAttr(default_factory=Event)
 
     def _set_buffer_dtype(self):
-        self._buffer_dtype = [
+        self._source_buffer_dtype = [
             ("timestamp", "uint64"),
             ("temperature", "float32"),
             ("reference", "float32"),
@@ -144,7 +144,7 @@ class Max31856Source(BaseSource):
             try:
                 faults = self._max31856._read_register(_MAX31856_SR_REG, 1)[0]
                 self._max31856._perform_one_shot_measurement()
-                timestamp = time_ns()
+                timestamp = monotonic_ns()
                 temperature = self._max31856.read_high_res_temp()
                 reference = self._max31856.unpack_reference_temperature()
 

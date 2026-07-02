@@ -2,7 +2,8 @@ try:
     from abc import ABC, abstractmethod
     from collections.abc import Callable
     from enum import Enum
-    from threading import Lock
+    from threading import Barrier, Event, Lock, Thread
+    from time import sleep
     from typing import Literal
 
     from numpy import concatenate, dtype, ndarray, zeros
@@ -28,13 +29,10 @@ class AcquisitionType(str, Enum):
 
 class BaseSource(BaseModel, ABC):
     name: str = Field(..., description="Name of the data source")
-    acquisition_type: AcquisitionType = Field(
-        default=AcquisitionType.FINITE, description="Type of data acquisition, continuous or finite"
-    )
-    fire_on: Literal["all"] | list[type[BaseStimulus]] = Field(
+    fire_on: Literal["all"] | tuple[type[BaseStimulus]] = Field(
         default="all", description="List of stimuli to fire on, or 'all' for all stimuli"
     )
-    buffer_size: int = Field(default=500, description="Size of the circular buffer", ge=1)
+    buffer_size: int = Field(default=100, description="Size of the circular buffer", ge=1)
 
     _bus: EventBus = PrivateAttr(default_factory=EventBus)
     _external_bus: bool = PrivateAttr(default=False)
@@ -44,12 +42,19 @@ class BaseSource(BaseModel, ABC):
     _is_open: bool = PrivateAttr(default=False)
 
     _lock: Lock = PrivateAttr(default_factory=Lock)
-    _buffer: ndarray = PrivateAttr()
-    _buffer_idx: int = PrivateAttr(default=0)
-    _last_publish_idx: int = PrivateAttr(default=0)
-    _buffer_dtype: DTypeLike = PrivateAttr()
+    _source_buffer: ndarray = PrivateAttr()
+    _source_buffer_idx: int = PrivateAttr(default=0)
+    _source_buffer_needle: int = PrivateAttr(default=0)
+    _source_buffer_dtype: DTypeLike = PrivateAttr()
     _total_written: int = PrivateAttr(default=0)
     _last_published_written: int = PrivateAttr(default=0)
+
+    _fire_thread: Thread = PrivateAttr()
+    _publish_thread: Thread = PrivateAttr()
+    _start_fire: Event = PrivateAttr(default_factory=Event)
+    _done_fire: Event = PrivateAttr(default_factory=Event)
+    _stop_thread: Event = PrivateAttr(default_factory=Event)
+    _barrier: Barrier | None = PrivateAttr(default=None)
 
     @abstractmethod
     def _open(self): ...
@@ -79,21 +84,48 @@ class BaseSource(BaseModel, ABC):
         self._bus = value
         self._external_bus = True
 
-    def open(self):
+    @property
+    def barrier(self) -> Barrier | None:
+        return self._barrier
+
+    @barrier.setter
+    def barrier(self, value: Barrier | None):
+        self._barrier = value
+
+    def open(self) -> None:
         if self._is_open:
             return
 
         if not self._external_bus:
             self.bus.open()
 
-        self._set_buffer()
         self._open()
+        self._set_source_buffer()
+
+        self._fire_thread = Thread(
+            target=self._fire_loop, daemon=True, name=f"{self.name}-fire-loop"
+        )
+        self._fire_thread.start()
+
+        self._publish_thread = Thread(
+            target=self._publish_loop, daemon=True, name=f"{self.name}-publish-loop"
+        )
+        self._publish_thread.start()
+
         self._is_open = True
 
-    def close(self):
+    def close(self) -> None:
+        self._stop_thread.set()
+        self._start_fire.set()
 
+        if self._fire_thread.is_alive():
+            self._fire_thread.join()
+
+        if self._publish_thread.is_alive():
+            self._publish_thread.join()
+
+        self._del_source_buffer()
         self._close()
-        self._del_buffer()
 
         if not self._external_bus:
             self.bus.close()
@@ -102,90 +134,74 @@ class BaseSource(BaseModel, ABC):
 
     def fire(self, stimuli: tuple[BaseStimulus, ...]) -> bool:
         self._ensure_open()
-
         self._stimuli = stimuli
-        self._supports()
 
-        if not self._stimuli and self.acquisition_type == AcquisitionType.FINITE:
-            return False
-
-        self._calculate_stimulus_duration()
-
-        if self.acquisition_type == AcquisitionType.FINITE:
-            with self._lock:
-                self._last_publish_idx = self._buffer_idx
-
-        self._fire()
-        self._publish()
+        self._done_fire.clear()
+        self._start_fire.set()
 
         return True
 
-    def _ensure_open(self):
+    def wait(self) -> bool:
+        self._done_fire.wait()
+        return True
+
+    def _ensure_open(self) -> None:
         if not self._is_open:
             msg = f"{type(self).__name__} needs to be opened first"
             raise RuntimeError(msg)
 
-    def _set_buffer(self):
-        if self.acquisition_type == AcquisitionType.NONE:
-            return
-
+    def _set_source_buffer(self) -> None:
         self._set_buffer_dtype()
-        dt = dtype(self._buffer_dtype)
+        dt = dtype(self._source_buffer_dtype)
 
         if not dt.names or "timestamp" not in dt.names:
             msg = "Buffer dtype must include a 'timestamp' field of type uint64"
             raise ValueError(msg)
 
-        self._buffer = zeros(self.buffer_size, dtype=dt)
-        self._buffer_idx = 0
-        self._last_publish_idx = 0
+        self._source_buffer = zeros(self.buffer_size, dtype=dt)
+        self._source_buffer_idx = 0
+        self._source_buffer_needle = 0
 
-    def _del_buffer(self):
-        if hasattr(self, "_buffer"):
-            del self._buffer
+    def _del_source_buffer(self) -> None:
+        if hasattr(self, "_source_buffer"):
+            del self._source_buffer
 
-        self._buffer_idx = 0
-        self._last_publish_idx = 0
+        self._source_buffer_idx = 0
+        self._source_buffer_needle = 0
 
-    def _write_sample(self, sample: tuple | dict):
-        if self.acquisition_type == AcquisitionType.NONE:
-            return
-
+    def _write_sample(self, sample: tuple | dict) -> None:
         with self._lock:
-            idx = self._buffer_idx % self.buffer_size
+            idx = self._source_buffer_idx % self.buffer_size
 
             if isinstance(sample, dict):
                 for k, v in sample.items():
-                    self._buffer[idx][k] = v
+                    self._source_buffer[idx][k] = v
             else:
-                self._buffer[idx] = sample
+                self._source_buffer[idx] = sample
 
-            self._buffer_idx += 1
+            self._source_buffer_idx += 1
 
-    def _write_samples(self, samples: ndarray):
-        if self.acquisition_type == AcquisitionType.NONE:
-            return
-
+    def _write_samples(self, samples: ndarray) -> None:
         n = len(samples)
 
         with self._lock:
-            start = self._buffer_idx % self.buffer_size
+            start = self._source_buffer_idx % self.buffer_size
             end = start + n
 
             if end <= self.buffer_size:
-                self._buffer[start:end] = samples
+                self._source_buffer[start:end] = samples
             else:
                 split = self.buffer_size - start
 
-                self._buffer[start:] = samples[:split]
-                self._buffer[: end % self.buffer_size] = samples[split:]
+                self._source_buffer[start:] = samples[:split]
+                self._source_buffer[: end % self.buffer_size] = samples[split:]
 
-            self._buffer_idx += n
+            self._source_buffer_idx += n
 
-    def _supports(self):
+    def _supports(self) -> None:
         if self.fire_on == "all":
             return
-        self._stimuli = tuple(st for st in self._stimuli if isinstance(st, tuple(self.fire_on)))
+        self._stimuli = tuple(st for st in self._stimuli if isinstance(st, self.fire_on))
 
     def _calculate_stimulus_duration(self):
         pre_delay = 0
@@ -200,26 +216,19 @@ class BaseSource(BaseModel, ABC):
         self._max_stimulus_duration_ms = pre_delay + duration + post_delay
 
     def _publish(self) -> bool:
-        if self.acquisition_type == AcquisitionType.NONE:
-            return False
-
         chunk = self._get_new_chunk()
 
         if chunk is None or chunk.size == 0:
             return False
 
-        self.bus.emit(
-            SinkEvent(
-                name=self.name, payload=chunk, meta={"acquisition": self.acquisition_type.value}
-            )
-        )
+        self.bus.emit(SinkEvent(name=self.name, payload=chunk))
 
         return True
 
     def _get_new_chunk(self) -> ndarray | None:
         with self._lock:
-            current = self._buffer_idx
-            last = self._last_publish_idx
+            current = self._source_buffer_idx
+            last = self._source_buffer_needle
 
             if current == last:
                 return None
@@ -227,26 +236,49 @@ class BaseSource(BaseModel, ABC):
             unread = current - last
 
             if unread > self.buffer_size:
-                # overflow: unread data overwritten
                 last = current - self.buffer_size
 
             start = last % self.buffer_size
             end = current % self.buffer_size
 
             chunk = (
-                self._buffer[start:end]
+                self._source_buffer[start:end]
                 if start < end
                 else concatenate(
                     (
-                        self._buffer[start:],
-                        self._buffer[:end],
+                        self._source_buffer[start:],
+                        self._source_buffer[:end],
                     )
                 )
             )
 
-            self._last_publish_idx = current
+            self._source_buffer_needle = current
 
             return chunk.copy()
+
+    def _fire_loop(self):
+        while not self._stop_thread.is_set():
+            self._start_fire.wait()
+            self._start_fire.clear()
+
+            if self._stop_thread.is_set():
+                break
+
+            self._supports()
+
+            if not self._stimuli:
+                self._done_fire.set()
+                continue
+            self._calculate_stimulus_duration()
+            if self._barrier:
+                self._barrier.wait()
+            self._fire()
+            self._done_fire.set()
+
+    def _publish_loop(self):
+        while not self._stop_thread.is_set():
+            self._publish()
+            sleep(0.01)
 
     def __enter__(self):
         self.open()

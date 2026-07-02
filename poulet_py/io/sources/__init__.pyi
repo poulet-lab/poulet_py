@@ -8,6 +8,7 @@ from .max31856 import Max31856Source, ThermocoupleType
 from .ina228minimal import INA228Source_minimal
 from .ina228 import INA228Source
 from .stimuli_metadata import StimuliMetadataSource
+from .dcam import DCAMSource
 
 __all__ = [
     "BaseSource",
@@ -20,4 +21,5 @@ __all__ = [
     "TCSSource",
     "AcquisitionType",
     "OpenEphysSource",
+    "DCAMSource",
 ]

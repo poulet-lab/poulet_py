@@ -24,7 +24,7 @@ try:
     from abc import ABC, abstractmethod
     from collections.abc import Sequence
     from concurrent.futures import ThreadPoolExecutor, as_completed
-    from time import time_ns
+    from time import monotonic_ns
     from typing import Self
 
     from nidaqmx import Task
@@ -155,7 +155,7 @@ class NIBaseTask(BaseModel, ABC):
 
     _requires_clock: bool = PrivateAttr(default=True)
     _clock_handle: NIClockHandle | None = PrivateAttr(None)
-    _task: Task | None = PrivateAttr(default=None)
+    _task: Task = PrivateAttr()
     _is_open: bool = PrivateAttr(default=False)
 
     @abstractmethod
@@ -206,7 +206,7 @@ class NIBaseTask(BaseModel, ABC):
         RuntimeError
             If the task has not been opened.
         """
-        if not self._is_open or not self._task:
+        if not self._is_open:
             msg = f"Task '{self.name}' not opened"
             raise RuntimeError(msg)
 
@@ -232,7 +232,7 @@ class NIBaseTask(BaseModel, ABC):
         """
         if self._task:
             self._task.close()
-            self._task = None
+            del self._task
 
         self._is_open = False
 
@@ -250,7 +250,7 @@ class NIBaseTask(BaseModel, ABC):
         bool
             True if the task is running, False otherwise.
         """
-        return not self._task.is_task_done() if self._task else False
+        return not self._task.is_task_done()
 
     @property
     def is_open(self) -> bool:
@@ -313,10 +313,6 @@ class NIClockTask(NIBaseTask):
 
         Creates a counter output channel configured as a pulse train.
         """
-        if not self._task:
-            msg = "Task not created"
-            raise RuntimeError(msg)
-
         self._clock_handle = NIClockHandle(
             terminal=f"/{self.device}/Ctr{self.line}InternalOutput",
             rate=self.rate,
@@ -337,11 +333,7 @@ class NIClockTask(NIBaseTask):
     def clock_handle(self) -> NIClockHandle | None:
         return self._clock_handle
 
-    def wait(self, timeout: float = 10.0):
-        if not self._task:
-            msg = "NIClockTask not opened"
-            raise RuntimeError(msg)
-
+    def wait_until_done(self, timeout: float = 10.0):
         self._task.wait_until_done(timeout=timeout)
 
 
@@ -360,15 +352,11 @@ class NIAnalogInputTask(NIBaseTask):
         default=Edge.RISING, description="The active edge for sampling (RISING or FALLING)."
     )
 
-    _reader: AnalogMultiChannelReader | None = PrivateAttr(None)
-    _ai_buffer: ndarray | None = PrivateAttr(None)
-    _buffer: ndarray | None = PrivateAttr(None)
+    _reader: AnalogMultiChannelReader = PrivateAttr()
+    _ai_buffer: ndarray = PrivateAttr()
+    _buffer: ndarray = PrivateAttr()
 
     def _ensure_buffer(self, samples: int):
-        if not self._reader or self._ai_buffer is None:
-            msg = "Task not opened"
-            raise RuntimeError(msg)
-
         capacity = self._ai_buffer.shape[1]
 
         if samples > capacity:
@@ -382,7 +370,7 @@ class NIAnalogInputTask(NIBaseTask):
             )
 
     def _open(self) -> None:
-        if not self._task or not self._clock_handle:
+        if not self._clock_handle:
             msg = "Task not created"
             raise RuntimeError(msg)
 
@@ -432,12 +420,7 @@ class NIAnalogInputTask(NIBaseTask):
         RuntimeError
             If the task has not been opened.
         """
-        if (
-            not self._reader
-            or not self._clock_handle
-            or self._ai_buffer is None
-            or self._buffer is None
-        ):
+        if not self._clock_handle:
             msg = "Task not opened"
             raise RuntimeError(msg)
 
@@ -449,7 +432,7 @@ class NIAnalogInputTask(NIBaseTask):
             for idx, col in enumerate(self._buffer.dtype.names[1:]):
                 self._buffer[col][:n] = data[idx]
 
-            t_read = time_ns()
+            t_read = monotonic_ns()
             dt = uint64(1e9 / self._clock_handle.rate)
             t0 = t_read - (n - 1) * dt
 
@@ -475,10 +458,10 @@ class NIAnalogOutputTask(NIBaseTask):
         default=Edge.RISING, description="The active edge for sampling (RISING or FALLING)."
     )
 
-    _writer: AnalogMultiChannelWriter | None = PrivateAttr(None)
+    _writer: AnalogMultiChannelWriter = PrivateAttr()
 
     def _open(self) -> None:
-        if not self._task or not self._clock_handle:
+        if not self._clock_handle:
             msg = "Task not created"
             raise RuntimeError(msg)
 
@@ -513,16 +496,7 @@ class NIAnalogOutputTask(NIBaseTask):
             Shape should be (num_channels, num_samples).
         timeout : float, optional
             Timeout in seconds to wait for write completion. Defaults to 10.0.
-
-        Raises
-        ------
-        RuntimeError
-            If the task has not been opened.
         """
-        if not self._writer:
-            msg = "Task not opened"
-            raise RuntimeError(msg)
-
         self._writer.write_many_sample(data, timeout=timeout)
 
 
@@ -544,15 +518,11 @@ class NIDigitalInputTask(NIBaseTask):
         description="How to group digital lines (CHAN_PER_LINE or CHAN_FOR_ALL_LINES).",
     )
 
-    _reader: DigitalMultiChannelReader | None = PrivateAttr(None)
-    _di_buffer: ndarray | None = PrivateAttr(None)
-    _buffer: ndarray | None = PrivateAttr(None)
+    _reader: DigitalMultiChannelReader = PrivateAttr()
+    _di_buffer: ndarray = PrivateAttr()
+    _buffer: ndarray = PrivateAttr()
 
     def _ensure_buffer(self, samples: int):
-        if not self._reader or self._di_buffer is None:
-            msg = "Task not opened"
-            raise RuntimeError(msg)
-
         capacity = self._di_buffer.shape[1]
 
         if samples > capacity:
@@ -566,7 +536,7 @@ class NIDigitalInputTask(NIBaseTask):
             )
 
     def _open(self) -> None:
-        if not self._task or not self._clock_handle:
+        if not self._clock_handle:
             msg = "Task not created"
             raise RuntimeError(msg)
 
@@ -615,12 +585,7 @@ class NIDigitalInputTask(NIBaseTask):
         RuntimeError
             If the task has not been opened.
         """
-        if (
-            not self._reader
-            or not self._clock_handle
-            or self._di_buffer is None
-            or self._buffer is None
-        ):
+        if not self._clock_handle:
             msg = "Task not opened"
             raise RuntimeError(msg)
 
@@ -633,7 +598,7 @@ class NIDigitalInputTask(NIBaseTask):
             for idx, col in enumerate(self._buffer.dtype.names[1:]):
                 self._buffer[col][:n] = data[idx]
 
-            t_read = time_ns()
+            t_read = monotonic_ns()
             dt = uint64(1e9 / self._clock_handle.rate)
             t0 = t_read - (n - 1) * dt
 
@@ -662,10 +627,10 @@ class NIDigitalOutputTask(NIBaseTask):
         description="How to group digital lines (CHAN_PER_LINE or CHAN_FOR_ALL_LINES).",
     )
 
-    _writer: DigitalMultiChannelWriter | None = PrivateAttr(None)
+    _writer: DigitalMultiChannelWriter = PrivateAttr()
 
     def _open(self) -> None:
-        if not self._task or not self._clock_handle:
+        if not self._clock_handle:
             msg = "Task not created"
             raise RuntimeError(msg)
 
@@ -705,9 +670,6 @@ class NIDigitalOutputTask(NIBaseTask):
         RuntimeError
             If the task has not been opened.
         """
-        if not self._writer:
-            msg = "Task not opened"
-            raise RuntimeError(msg)
 
         self._writer.write_many_sample_port_uint32(data, timeout=timeout)
 
@@ -724,7 +686,7 @@ class NIDaQ(BaseModel):
     device: str = Field(..., description='The device name (e.g., "Dev1") used by all tasks.')
     tasks: Sequence[NIBaseTask] = Field(...)
 
-    _clock_task: NIClockTask | None = PrivateAttr(None)
+    _clock_task: NIClockTask = PrivateAttr()
     _read_tasks: Sequence[NIAnalogInputTask | NIDigitalInputTask] = PrivateAttr(
         default_factory=list
     )
@@ -732,7 +694,7 @@ class NIDaQ(BaseModel):
         default_factory=list
     )
     _is_open: bool = PrivateAttr(default=False)
-    _executor: ThreadPoolExecutor = PrivateAttr(None)
+    _executor: ThreadPoolExecutor = PrivateAttr()
 
     @staticmethod
     def get_available_devices() -> Sequence:
@@ -806,12 +768,12 @@ class NIDaQ(BaseModel):
             self._clock_task._task.wait_until_done(-1)
         return ret
 
-    def wait(self, timeout: float = 10.0):
+    def wait_until_done(self, timeout: float = 10.0):
         if not self._is_open or not self._clock_task:
             msg = "NIDaQ must be first opened"
             raise RuntimeError(msg)
 
-        self._clock_task.wait(timeout)
+        self._clock_task.wait_until_done(timeout)
 
     def open(self) -> None:
         """
@@ -837,8 +799,8 @@ class NIDaQ(BaseModel):
         for task in self.tasks:
             if task != self._clock_task:
                 task.open(self._clock_task.clock_handle)
-
-        self._executor = ThreadPoolExecutor(len(self._read_tasks)) if self._read_tasks else None
+        if self._read_tasks:
+            self._executor = ThreadPoolExecutor(len(self._read_tasks))
 
         self._is_open = True
 
@@ -893,7 +855,7 @@ class NIDaQ(BaseModel):
 
         if self._executor:
             self._executor.shutdown(wait=True)
-            self._executor = None
+            del self._executor
 
         self._is_open = False
 

@@ -13,14 +13,14 @@ from .sources import (
     Max31856Source,
     ThermocoupleType,
     StimuliMetadataSource,
-    INA228Source_minimal
+    INA228Source_minimal,
+    DCAMSource,
 )
 
 __all__ = [
     "AcquisitionType",
     "BaseEvent",
     "StimuliMetadataSource",
-    #"INA228Source",
     "INA228Source_minimal",   
     "BaseSink",
     "ThermocoupleType",
@@ -35,4 +35,5 @@ __all__ = [
     "SinkEvent",
     "TCSSource",
     "OpenEphysSource",
+    "DCAMSource",
 ]

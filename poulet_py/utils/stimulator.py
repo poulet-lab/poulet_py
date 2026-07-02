@@ -13,9 +13,9 @@ StimulatorRuntime
 
 try:
     from collections.abc import Sequence
-    from concurrent.futures import ThreadPoolExecutor, wait
     from secrets import choice
-    from threading import Event
+    from threading import Barrier, Event
+    from time import time_ns
     from typing import Literal, Self
 
     from prompt_toolkit import HTML
@@ -141,6 +141,7 @@ class StimulatorRuntime(BaseModel):
     _stopped: Event = PrivateAttr(default_factory=Event)
 
     _key_bindings: KeyBindings = PrivateAttr()
+    _start_time_of_experiment: int = PrivateAttr(default_factory=time_ns)
 
     @model_validator(mode="after")
     def validate_isi(self) -> Self:
@@ -265,44 +266,58 @@ class StimulatorRuntime(BaseModel):
             return
 
         blocks = self._expand_trials()
-        with ThreadPoolExecutor(max_workers=len(self.sources)) as executor:
-            with ProgressBar(
-                key_bindings=self._key_bindings, bottom_toolbar=self._generate_bottom_toolbar
-            ) as pb:
-                with patch_stdout():
-                    self._wait_not_started()
 
-                    for block, trials in pb(blocks, total=len(blocks), label="Blocks"):
-                        for trial_idx, trial in pb(
-                            enumerate(trials), total=len(trials), label="Trials"
-                        ):
-                            if self._aborted.is_set():
-                                break
+        barrier = Barrier(len(self.sources))
+        for s in self.sources:
+            s.barrier = barrier
 
-                            if block.trigger and not block.trigger.wait():
-                                if block.trigger_policy == "skip":
-                                    LOGGER.warning(
-                                        f"Trigger failed for trial {trial.name} in block {block.name}, skipping trial."
-                                    )
-                                    continue
+        with ProgressBar(
+            key_bindings=self._key_bindings, bottom_toolbar=self._generate_bottom_toolbar
+        ) as pb:
+            with patch_stdout():
+                self._wait_not_started()
 
-                                msg = f"Trigger failed for trial {trial.name} in block {block.name}"
-                                raise RuntimeError(msg)
+                for block, trials in pb(blocks, total=len(blocks), label="Blocks"):
+                    for trial_idx, trial in pb(
+                        enumerate(trials), total=len(trials), label="Trials"
+                    ):
+                        if self._aborted.is_set():
+                            break
 
-                            st_info = {
-                                f"{type(st).__name__}": st.model_dump(
-                                    exclude_unset=True, exclude_none=True
+                        if block.trigger and not block.trigger.wait():
+                            if block.trigger_policy == "skip":
+                                LOGGER.warning(
+                                    f"Trigger failed for trial {trial.name} in block {block.name}, skipping trial."
                                 )
-                                for st in trial.stimuli
-                            }
-                            LOGGER.info("Trial %d: %s", trial_idx, st_info)
-                            futures = [executor.submit(s.fire, trial.stimuli) for s in self.sources]
-                            wait(futures)
+                                continue
 
-                            isi = self.get_isi(block.isi or self.isi)
-                            precise_sleep(isi / 1000.0)
+                            msg = f"Trigger failed for trial {trial.name} in block {block.name}"
+                            raise RuntimeError(msg)
 
-                            self._wait_paused()
+                        # TODO write isi to metadata
+                        isi = self.get_isi(block.isi or self.isi)
+
+                        st_info = {
+                            f"{type(st).__name__}": st.model_dump(
+                                exclude_unset=True, exclude_none=True
+                            )
+                            for st in trial.stimuli
+                        }
+                        st_info["isi"] = isi
+
+                        LOGGER.info("Trial %d: %s", trial_idx, st_info)
+
+                        for s in self.sources:
+                            s.fire(trial.stimuli)
+
+                        for s in self.sources:
+                            s.wait()
+
+                        precise_sleep(isi / 1000.0)
+                        self._wait_paused()
+
+        for s in self.sources:
+            s.barrier = None
 
     def _ensure_open(self):
         if not self._is_open:

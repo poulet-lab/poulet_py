@@ -15,8 +15,8 @@ Missing 'triggers' module. Install options:
 class BaseTrigger(BaseModel, ABC):
     """Abstract base class for trigger devices."""
 
-    name: str = Field("", description="Name of the trigger device")
-    timeout: float | None = Field(None, description="Timeout in seconds for waiting")
+    name: str = Field(default="", description="Name of the trigger device")
+    timeout: float | None = Field(default=None, description="Timeout in seconds for waiting")
 
     @abstractmethod
     def wait(self) -> bool:
