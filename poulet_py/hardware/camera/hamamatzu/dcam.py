@@ -7,7 +7,7 @@ from typing import Literal
 from numpy import ndarray, zeros
 from pydantic import BaseModel, Field, PrivateAttr
 
-from poulet_py import LOGGER
+from poulet_py import LOGGER, AcquisitionType
 from poulet_py.hardware.camera.hamamatzu._api import (
     DCAM_IDPROP,
     DCAM_IDSTR,
@@ -50,6 +50,9 @@ class DCAM(BaseModel):
     }
 
     device_index: int = Field(default=0, description="")
+    acquisition_type: AcquisitionType = Field(
+        default=AcquisitionType.FINITE, description="Type of data acquisition, continuous or finite"
+    )
     pixel_type: DCAM_PIXELTYPE = Field(
         default=DCAM_PIXELTYPE.MONO16, description="The pixel type of the camera."
     )
@@ -89,26 +92,26 @@ class DCAM(BaseModel):
     timeout: int | Literal["auto"] = Field(default="auto", description="handle timeout in ms")
     capture_mode: DCAMCAP_START = Field(default=DCAMCAP_START.SEQUENCE, description="")
 
-    __is_open: bool = PrivateAttr(default=False)
-    __dcam_api: DCAMAPI_INIT = PrivateAttr(default_factory=DCAMAPI_INIT)
-    __dcam_device: DCAMDEV_OPEN = PrivateAttr(default_factory=DCAMDEV_OPEN)
-    __dcam_internal_buffer: DCAMBUF_FRAME = PrivateAttr(default_factory=DCAMBUF_FRAME)
-    __dcam_frame: DCAMBUF_FRAME = PrivateAttr(default_factory=DCAMBUF_FRAME)
-    __dcam_wait: DCAMWAIT_OPEN = PrivateAttr(default_factory=DCAMWAIT_OPEN)
-    __dcam_wait_event: DCAMWAIT_START = PrivateAttr(default_factory=DCAMWAIT_START)
+    _is_open: bool = PrivateAttr(default=False)
+    _dcam_api: DCAMAPI_INIT = PrivateAttr(default_factory=DCAMAPI_INIT)
+    _dcam_device: DCAMDEV_OPEN = PrivateAttr(default_factory=DCAMDEV_OPEN)
+    _dcam_internal_buffer: DCAMBUF_FRAME = PrivateAttr(default_factory=DCAMBUF_FRAME)
+    _dcam_frame: DCAMBUF_FRAME = PrivateAttr(default_factory=DCAMBUF_FRAME)
+    _dcam_wait: DCAMWAIT_OPEN = PrivateAttr(default_factory=DCAMWAIT_OPEN)
+    _dcam_wait_event: DCAMWAIT_START = PrivateAttr(default_factory=DCAMWAIT_START)
 
-    __buffer: ndarray = PrivateAttr()
-    __buffer_idx: int = PrivateAttr(0)
-    __buffer_needle: int = PrivateAttr(0)
+    _buffer: ndarray = PrivateAttr()
+    _buffer_idx: int = PrivateAttr(0)
+    _buffer_needle: int = PrivateAttr(0)
 
-    __timeout: int = PrivateAttr(default=2)
-    __software_trigger_cycle: int = PrivateAttr(default=0)
-    __framecount_till_software_trigger: int = PrivateAttr(default=0)
-    __acquisition_thread: Thread = PrivateAttr()
-    __stop_acquisition_event: Event = PrivateAttr(default_factory=Event)
-    __acquisition_cond: Condition = PrivateAttr(default_factory=Condition)
+    _timeout: int = PrivateAttr(default=2)
+    _software_trigger_cycle: int = PrivateAttr(default=0)
+    _framecount_till_software_trigger: int = PrivateAttr(default=0)
+    _acquisition_thread: Thread = PrivateAttr()
+    _stop_acquisition_event: Event = PrivateAttr(default_factory=Event)
+    _acquisition_cond: Condition = PrivateAttr(default_factory=Condition)
 
-    __timeout_errors: int = PrivateAttr(default=0)
+    _timeout_errors: int = PrivateAttr(default=0)
 
     @staticmethod
     def get_available_devices() -> list[dict[str, str]]:
@@ -150,38 +153,51 @@ class DCAM(BaseModel):
 
     @property
     def is_open(self):
-        return self.__is_open
+        return self._is_open
 
     def open(self) -> None:
-        if self.__is_open:
+        if self._is_open:
             return
         try:
-            self.__set_dcam_api()
-            self.__set_dcam_device()
-            self.__set_params()
-            self.__set_dcam_internal_buffer()
-            self.__set_buffer()
-            self.__start_acquisition_thread()
+            self._set_dcam_api()
+            self._set_dcam_device()
+            self._set_params()
+            self._set_dcam_internal_buffer()
+            self._set_buffer()
 
-            self.__is_open = True
+            if self.acquisition_type == AcquisitionType.CONTINUOUS:
+                self._start_acquisition_thread()
+
+            self._set_timeout()
+            self._trigger_policy()
+            self._open_dcam_wait()
+            self._start_capture()
+            self._software_trigger()
+
+            self._is_open = True
         except Exception as e:
             self.close()
             raise RuntimeError("Failed to open Dcam") from e
 
     def close(self) -> None:
-        if not self.__is_open:
+        if not self._is_open:
             return
 
-        self.__is_open = False
+        self._is_open = False
 
-        self.__stop_acquisition_thread()
-        self.__release_buffer()
-        self.__release_dcam_internal_buffer()
-        self.__release_dcam_device()
-        self.__release_dcam_api()
+        self._stop_capture()
+        self._close_dcam_wait()
+
+        if self.acquisition_type == AcquisitionType.CONTINUOUS:
+            self._stop_acquisition_thread()
+
+        self._release_buffer()
+        self._release_dcam_internal_buffer()
+        self._release_dcam_device()
+        self._release_dcam_api()
 
     def info(self) -> dict[str, str]:
-        self.__ensure_open()
+        self._ensure_open()
 
         dcam_info = {}
         for idstr in DCAM_IDSTR:
@@ -189,7 +205,7 @@ class DCAM(BaseModel):
             dev_str.iString = idstr
             dev_str.alloctext(256)
 
-            err = dcamdev_getstring(self.__dcam_device.hdcam, byref(dev_str))
+            err = dcamdev_getstring(self._dcam_device.hdcam, byref(dev_str))
             if err.is_failed():
                 raise RuntimeError(
                     f"Failed to get device information for {idstr}: {DCAMERR(err).name}"
@@ -198,103 +214,120 @@ class DCAM(BaseModel):
             dcam_info[idstr.name] = dev_str.text.decode()
         return dcam_info
 
-    def read_last_sample(self) -> ndarray:
-        self.__ensure_open()
-
+    def read_sample(self) -> ndarray | None:
+        self._ensure_open()
         sample = None
-        with self.__acquisition_cond:
-            idx = (self.__buffer_idx - 1) % self.buffer_size
-            sample = self.__buffer[idx]
-            self.__buffer_needle = self.__buffer_idx
+
+        if self.acquisition_type == AcquisitionType.FINITE and not self._acquire_sample():
+            return sample
+
+        with self._acquisition_cond:
+            idx = (self._buffer_idx - 1) % self.buffer_size
+            sample = self._buffer[idx]
+            self._buffer_needle = self._buffer_idx
 
         return sample
 
     def read_many_sample(self, data: ndarray, n: int = -1, timeout: float = -1) -> int:
-        self.__ensure_open()
+        self._ensure_open()
+        deadline = monotonic_ns() + int(timeout * 1e9) if timeout >= 0 else None
 
-        def available():
-            return self.__buffer_idx - self.__buffer_needle
+        if self.acquisition_type == AcquisitionType.FINITE:
+            if n < 0 and timeout < 0:
+                raise ValueError("For finite acquisition, either n or timeout must be specified.")
 
-        with self.__acquisition_cond:
-            if n > 0:
-                deadline = None if timeout < 0 else monotonic_ns() + timeout
+            acquired = 0
+            while (
+                (n < 0 or acquired < n)
+                and (deadline is None or monotonic_ns() < deadline)
+                and self._acquire_sample()
+            ):
+                acquired += 1
 
-                while available() < n:
-                    if deadline is None:
-                        self.__acquisition_cond.wait()
-                    else:
-                        remaining = deadline - monotonic_ns()
-                        if remaining <= 0:
-                            break
+        elif self.acquisition_type == AcquisitionType.CONTINUOUS:
+            with self._acquisition_cond:
+                if n == -1 and deadline is None:
+                    pass
+                elif n == -1 and deadline is not None:
+                    remaining = (deadline - monotonic_ns()) / 1e9
+                    self._acquisition_cond.wait(remaining)
+                elif n != -1 and deadline is None:
+                    while self._buffer_idx - self._buffer_needle < n:
+                        self._acquisition_cond.wait()
+                elif n != -1 and deadline is not None:
+                    remaining = (deadline - monotonic_ns()) / 1e9
+                    while self._buffer_idx - self._buffer_needle < n and remaining > 0:
+                        self._acquisition_cond.wait(remaining)
+                        remaining = (deadline - monotonic_ns()) / 1e9
 
-                        self.__acquisition_cond.wait(remaining)
-
-            avail = available()
-
+        with self._acquisition_cond:
+            avail = self._buffer_idx - self._buffer_needle
             if avail <= 0:
                 return 0
 
             count = avail if n < 0 else min(avail, n)
 
-            if count > self.buffer_size:
-                self.__buffer_needle = self.__buffer_idx - self.buffer_size
-                count = self.buffer_size
+            size = self.buffer_size
+            buffer = self._buffer
+            needle = self._buffer_needle
 
-            start = self.__buffer_needle % self.buffer_size
+            if count > size:
+                needle = self._buffer_idx - size
+                count = size
+
+            start = needle % size
             end = start + count
 
-            if end <= self.buffer_size:
-                data[:count] = self.__buffer[start:end]
+            if end <= size:
+                data[:count] = buffer[start:end]
             else:
-                first = self.buffer_size - start
-                second = count - first
+                first = size - start
+                data[:first] = buffer[start:]
+                data[first:count] = buffer[: count - first]
 
-                data[:first] = self.__buffer[start:]
-                data[first:count] = self.__buffer[:second]
+            self._buffer_needle = needle + count
 
-            self.__buffer_needle += count
+            return count
 
-        return count
-
-    def __ensure_open(self) -> None:
-        if not self.__is_open:
+    def _ensure_open(self) -> None:
+        if not self._is_open:
             raise RuntimeError("DCAM is not open")
 
-    def __set_dcam_api(self) -> None:
-        err = dcamapi_init(byref(self.__dcam_api))
+    def _set_dcam_api(self) -> None:
+        err = dcamapi_init(byref(self._dcam_api))
         if err.is_failed():
             raise RuntimeError(f"Failed to initialize DCAM-API: {DCAMERR(err).name}")
 
-    def __release_dcam_api(self) -> None:
+    def _release_dcam_api(self) -> None:
         dcamapi_uninit()
-        self.__dcam_api = DCAMAPI_INIT()
+        self._dcam_api = DCAMAPI_INIT()
 
-    def __set_dcam_device(self) -> None:
-        self.__dcam_device.index = self.device_index
+    def _set_dcam_device(self) -> None:
+        self._dcam_device.index = self.device_index
 
-        err = dcamdev_open(byref(self.__dcam_device))
+        err = dcamdev_open(byref(self._dcam_device))
         if err.is_failed():
             raise RuntimeError(f"Failed to initialize DCAM device: {DCAMERR(err).name}")
 
-    def __release_dcam_device(self) -> None:
-        dcamdev_close(self.__dcam_device.hdcam)
-        self.__dcam_device = DCAMDEV_OPEN()
+    def _release_dcam_device(self) -> None:
+        dcamdev_close(self._dcam_device.hdcam)
+        self._dcam_device = DCAMDEV_OPEN()
 
-    def __get_property(self, prop: DCAM_IDPROP) -> float:
+    def _get_property(self, prop: DCAM_IDPROP) -> float:
         value = c_double()
-        err = dcamprop_getvalue(self.__dcam_device.hdcam, prop, byref(value))
+        err = dcamprop_getvalue(self._dcam_device.hdcam, prop, byref(value))
         if err.is_failed():
             raise RuntimeError(f"Failed to get property {prop}: {DCAMERR(err).name}")
 
         return value.value
 
-    def __set_property(
+    def _set_property(
         self,
         prop: DCAM_IDPROP,
         value: float | int | Enum,
         errors: Literal["ignore", "raise", "log"] = "log",
     ) -> None:
-        err = dcamprop_setvalue(self.__dcam_device.hdcam, prop, value)
+        err = dcamprop_setvalue(self._dcam_device.hdcam, prop, value)
         if err.is_failed():
             msg = f"Failed to set property {DCAM_IDPROP(prop).name}[{prop}]: {DCAMERR(err).name}[{err}]"
             if errors == "raise":
@@ -304,208 +337,205 @@ class DCAM(BaseModel):
             else:
                 pass
 
-    def __set_params(self) -> None:
-        # TODO handle non excisting
-        self.__set_property(DCAM_IDPROP.IMAGE_PIXELTYPE, self.pixel_type)
-        self.__set_property(DCAM_IDPROP.SENSORMODE, self.sensor_mode)
-        self.__set_property(DCAM_IDPROP.SHUTTER_MODE, self.shutter_mode)
-        self.__set_property(DCAM_IDPROP.READOUTSPEED, self.readout_speed)
-        self.__set_property(DCAM_IDPROP.READOUT_DIRECTION, self.readout_direction)
-        self.__set_property(DCAM_IDPROP.TRIGGERSOURCE, self.trigger_source)
-        self.__set_property(DCAM_IDPROP.TRIGGER_MODE, self.trigger_mode)
-        self.__set_property(DCAM_IDPROP.TRIGGERACTIVE, self.trigger_active)
-        self.__set_property(DCAM_IDPROP.TRIGGERPOLARITY, self.trigger_polarity)
-        self.__set_property(DCAM_IDPROP.BINNING, self.binning)
-        self.__set_property(DCAM_IDPROP.EXPOSURETIME, self.exposure_time / 1000)
-        self.__set_property(DCAM_IDPROP.CONTRASTGAIN, self.contrast_gain)
-        self.__set_property(DCAM_IDPROP.FRAMEBUNDLE_MODE, self.framebundle_mode)
+    def _set_params(self) -> None:
+        self._set_property(DCAM_IDPROP.IMAGE_PIXELTYPE, self.pixel_type)
+        self._set_property(DCAM_IDPROP.SENSORMODE, self.sensor_mode)
+        self._set_property(DCAM_IDPROP.SHUTTER_MODE, self.shutter_mode)
+        self._set_property(DCAM_IDPROP.READOUTSPEED, self.readout_speed)
+        self._set_property(DCAM_IDPROP.READOUT_DIRECTION, self.readout_direction)
+        self._set_property(DCAM_IDPROP.TRIGGERSOURCE, self.trigger_source)
+        self._set_property(DCAM_IDPROP.TRIGGER_MODE, self.trigger_mode)
+        self._set_property(DCAM_IDPROP.TRIGGERACTIVE, self.trigger_active)
+        self._set_property(DCAM_IDPROP.TRIGGERPOLARITY, self.trigger_polarity)
+        self._set_property(DCAM_IDPROP.BINNING, self.binning)
+        self._set_property(DCAM_IDPROP.EXPOSURETIME, self.exposure_time / 1000)
+        self._set_property(DCAM_IDPROP.CONTRASTGAIN, self.contrast_gain)
+        self._set_property(DCAM_IDPROP.FRAMEBUNDLE_MODE, self.framebundle_mode)
 
         if self.framebundle_mode == DCAMPROP.MODE.ON:
-            self.__set_property(DCAM_IDPROP.FRAMEBUNDLE_NUMBER, self.framebundle_number)
-        self.__set_property(DCAM_IDPROP.NUMBEROF_VIEW, self.number_of_view)
+            self._set_property(DCAM_IDPROP.FRAMEBUNDLE_NUMBER, self.framebundle_number)
+        self._set_property(DCAM_IDPROP.NUMBEROF_VIEW, self.number_of_view)
 
-    def __set_dcam_internal_buffer(self) -> None:
+    def _set_dcam_internal_buffer(self) -> None:
         buffer_size = c_int32(self.dcam_internal_buffer_size)
-        err = dcambuf_alloc(self.__dcam_device.hdcam, buffer_size)
+        err = dcambuf_alloc(self._dcam_device.hdcam, buffer_size)
         if err.is_failed():
             raise RuntimeError(f"Failed to set device internal buffer: {DCAMERR(err).name}")
 
-        self.__dcam_internal_buffer.type = self.pixel_type
-        self.__dcam_internal_buffer.width = int(self.__get_property(DCAM_IDPROP.IMAGE_WIDTH))
-        self.__dcam_internal_buffer.height = int(self.__get_property(DCAM_IDPROP.IMAGE_HEIGHT))
-        self.__dcam_internal_buffer.rowbytes = int(
-            self.__get_property(
+        self._dcam_internal_buffer.type = self.pixel_type
+        self._dcam_internal_buffer.width = int(self._get_property(DCAM_IDPROP.IMAGE_WIDTH))
+        self._dcam_internal_buffer.height = int(self._get_property(DCAM_IDPROP.IMAGE_HEIGHT))
+        self._dcam_internal_buffer.rowbytes = int(
+            self._get_property(
                 DCAM_IDPROP.FRAMEBUNDLE_ROWBYTES
                 if self.framebundle_mode == DCAMPROP.MODE.ON
                 else DCAM_IDPROP.IMAGE_ROWBYTES
             )
         )
 
-        self.__dcam_frame.iFrame = -1
-        self.__dcam_frame.rowbytes = self.__dcam_internal_buffer.rowbytes
-        self.__dcam_frame.type = self.__dcam_internal_buffer.type
-        self.__dcam_frame.width = self.__dcam_internal_buffer.width
-        self.__dcam_frame.height = self.__dcam_internal_buffer.height
+        self._dcam_frame.iFrame = -1
+        self._dcam_frame.rowbytes = self._dcam_internal_buffer.rowbytes
+        self._dcam_frame.type = self._dcam_internal_buffer.type
+        self._dcam_frame.width = self._dcam_internal_buffer.width
+        self._dcam_frame.height = self._dcam_internal_buffer.height
 
-    def __release_dcam_internal_buffer(self) -> None:
-        err = dcambuf_release(self.__dcam_device.hdcam, c_int32(0))
+    def _release_dcam_internal_buffer(self) -> None:
+        err = dcambuf_release(self._dcam_device.hdcam, c_int32(0))
         if err.is_failed():
             LOGGER.error(f"Failed to release device internal buffer: {DCAMERR(err).name}")
 
-    def __set_buffer(self) -> None:
-        height = self.__dcam_internal_buffer.height * self.framebundle_number * self.number_of_view
+    def _set_buffer(self) -> None:
+        height = self._dcam_internal_buffer.height * self.framebundle_number * self.number_of_view
 
-        self.__buffer = zeros(
+        self._buffer = zeros(
             self.buffer_size,
             dtype=[
                 ("timestamp", "uint64"),
                 (
                     "dcam",
                     self.DTYPE_MAP.get(self.pixel_type, "float32"),
-                    (height, self.__dcam_internal_buffer.width),
+                    (height, self._dcam_internal_buffer.width),
                 ),
             ],
         )
 
-    def __release_buffer(self) -> None:
-        del self.__buffer
-        self.__buffer_idx = 0
+    def _release_buffer(self) -> None:
+        del self._buffer
+        self._buffer_idx = 0
 
-    def __start_acquisition_thread(self) -> None:
-        self.__set_timeout()
-        self.__trigger_policy()
-        self.__open_dcam_wait()
-        self.__start_capture()
-
-        self.__acquisition_thread = Thread(
-            target=self.__acquisition_thread_func, name="DCAM Acquisition Thread", daemon=True
+    def _start_acquisition_thread(self) -> None:
+        self._acquisition_thread = Thread(
+            target=self._acquisition_thread_func, name="DCAM Acquisition Thread", daemon=True
         )
-        self.__acquisition_thread.start()
+        self._acquisition_thread.start()
 
-    def __stop_acquisition_thread(self) -> None:
-        self.__stop_acquisition_event.set()
+    def _stop_acquisition_thread(self) -> None:
+        self._stop_acquisition_event.set()
 
-        self.__acquisition_thread.join(timeout=5)
-        if self.__acquisition_thread.is_alive():
+        self._acquisition_thread.join(timeout=5)
+        if self._acquisition_thread.is_alive():
             LOGGER.warning("Streaming thread did not stop gracefully")
 
-        del self.__acquisition_thread
-        self.__stop_acquisition_event.clear()
+        del self._acquisition_thread
+        self._stop_acquisition_event.clear()
 
-        self.__stop_capture()
-        self.__close_dcam_wait()
-
-    def __set_timeout(self) -> None:
+    def _set_timeout(self) -> None:
         if self.timeout == "auto":
-            frame_interval = self.__get_property(DCAM_IDPROP.INTERNAL_FRAMEINTERVAL) or 0
-            self.__timeout = max(
-                self.__timeout, int((self.exposure_time + frame_interval) * 1000.0) + 500
+            frame_interval = self._get_property(DCAM_IDPROP.INTERNAL_FRAMEINTERVAL) or 0
+            self._timeout = max(
+                self._timeout, int((self.exposure_time + frame_interval) * 1000.0) + 500
             )
 
-    def __start_capture(self) -> None:
-        err = dcamcap_start(self.__dcam_device.hdcam, self.capture_mode)
+    def _start_capture(self) -> None:
+        err = dcamcap_start(self._dcam_device.hdcam, self.capture_mode)
         if err.is_failed():
             raise RuntimeError(f"Failed to start device capture: {DCAMERR(err).name}")
 
-    def __capture_status(self) -> DCAMCAP_STATUS:
+    def _capture_status(self) -> DCAMCAP_STATUS:
         status = c_int32()
-        err = dcamcap_status(self.__dcam_device.hdcam, byref(status))
+        err = dcamcap_status(self._dcam_device.hdcam, byref(status))
         if err.is_failed():
             raise RuntimeError(f"Failed to get device capture status: {DCAMERR(err).name}")
 
         return DCAMCAP_STATUS(status.value)
 
-    def __stop_capture(self) -> None:
-        err = dcamcap_stop(self.__dcam_device.hdcam)
+    def _stop_capture(self) -> None:
+        err = dcamcap_stop(self._dcam_device.hdcam)
         if err.is_failed():
             LOGGER.error(f"Failed to stop device capture: {DCAMERR(err).name}")
 
-    def __trigger_policy(self) -> None:
-        self.__framecount_till_software_trigger = 0
+    def _trigger_policy(self) -> None:
+        self._framecount_till_software_trigger = 0
 
         if self.trigger_mode == DCAMPROP.TRIGGER_MODE.START:
-            self.__software_trigger_cycle = 0
+            self._software_trigger_cycle = 0
         elif self.trigger_mode == DCAMPROP.TRIGGER_MODE.PIV:
-            self.__software_trigger_cycle = 2
+            self._software_trigger_cycle = 2
         else:  # NORMAL
-            self.__software_trigger_cycle = 1
+            self._software_trigger_cycle = 1
 
-    def __software_trigger(self) -> None:
+    def _software_trigger(self) -> None:
         if self.trigger_source == DCAMPROP.TRIGGERSOURCE.SOFTWARE:
-            if self.__framecount_till_software_trigger > 0:
-                self.__framecount_till_software_trigger -= 1
+            if self._framecount_till_software_trigger > 0:
+                self._framecount_till_software_trigger -= 1
 
-            if self.__framecount_till_software_trigger == 0:
-                err = dcamcap_firetrigger(self.__dcam_device.hdcam, c_int32(0))
+            if self._framecount_till_software_trigger == 0:
+                err = dcamcap_firetrigger(self._dcam_device.hdcam, c_int32(0))
                 if err.is_failed():
                     raise RuntimeError(f"Failed to software trigger: {DCAMERR(err).name}")
 
-                self.__framecount_till_software_trigger = self.__software_trigger_cycle
+                self._framecount_till_software_trigger = self._software_trigger_cycle
 
-    def __open_dcam_wait(self) -> None:
-        self.__dcam_wait.hdcam = self.__dcam_device.hdcam
-        err = dcamwait_open(byref(self.__dcam_wait))
+    def _open_dcam_wait(self) -> None:
+        self._dcam_wait.hdcam = self._dcam_device.hdcam
+        err = dcamwait_open(byref(self._dcam_wait))
         if err.is_failed():
             raise RuntimeError(f"Failed to open dcam wait: {DCAMERR(err).name}")
 
-        if self.__dcam_wait.hwait == 0:
+        if self._dcam_wait.hwait == 0:
             raise RuntimeError(f"Failed to open dcam wait: {DCAMERR.INVALIDWAITHANDLE.name}")
 
-    def __close_dcam_wait(self) -> None:
-        err = dcamwait_close(self.__dcam_wait.hwait)
+    def _close_dcam_wait(self) -> None:
+        err = dcamwait_close(self._dcam_wait.hwait)
         if err.is_failed():
             LOGGER.error(f"Failed to close dcam wait: {DCAMERR(err).name}")
 
-        self.__dcam_wait = DCAMWAIT_OPEN()
+        self._dcam_wait = DCAMWAIT_OPEN()
 
-    def __wait_event(self, eventmask: DCAMWAIT_CAPEVENT, timeout):
-        self.__dcam_wait_event.eventmask = eventmask
-        self.__dcam_wait_event.timeout = timeout
+    def _wait_event(self, eventmask: DCAMWAIT_CAPEVENT, timeout):
+        self._dcam_wait_event.eventmask = eventmask
+        self._dcam_wait_event.timeout = timeout
 
-        err = dcamwait_start(self.__dcam_wait.hwait, byref(self.__dcam_wait_event))
+        err = dcamwait_start(self._dcam_wait.hwait, byref(self._dcam_wait_event))
         if err.is_failed() and err != DCAMERR.TIMEOUT:
             raise RuntimeError(f"Failed to start dcam wait event: {DCAMERR(err).name}")
 
         if err == DCAMERR.TIMEOUT:
-            self.__timeout_errors += 1
+            self._timeout_errors += 1
+            LOGGER.warning(
+                f"Timeout waiting for frame ready event. Timeout errors: {self._timeout_errors}"
+            )
             # TODO do something with errors
             return False
 
-        self.__timeout_errors = 0
-        return self.__dcam_wait_event.eventhappened
+        self._timeout_errors = 0
+        return self._dcam_wait_event.eventhappened
 
-    def __dcam_frames_to_buffer(self) -> None:
-        with self.__acquisition_cond:
-            idx = self.__buffer_idx % self.buffer_size
+    def _dcam_frames_to_buffer(self) -> None:
+        with self._acquisition_cond:
+            idx = self._buffer_idx % self.buffer_size
 
-            ptr = self.__buffer[idx]["dcam"].ctypes.data
-            self.__dcam_frame.buf = c_void_p(ptr)
-            self.__buffer[idx]["timestamp"] = monotonic_ns()
+            ptr = self._buffer[idx]["dcam"].ctypes.data
+            self._dcam_frame.buf = c_void_p(ptr)
+            self._buffer[idx]["timestamp"] = monotonic_ns()
 
-            err = dcambuf_copyframe(self.__dcam_device.hdcam, byref(self.__dcam_frame))
+            err = dcambuf_copyframe(self._dcam_device.hdcam, byref(self._dcam_frame))
             if err.is_failed():
                 raise RuntimeError(f"Failed to copy data: {DCAMERR(err).name}")
 
-            self.__buffer_idx += 1
+            self._buffer_idx += 1
 
-            self.__acquisition_cond.notify_all()
+            self._acquisition_cond.notify_all()
 
-    def __acquisition_thread_func(self) -> None:
-        self.__software_trigger()
-        while not self.__stop_acquisition_event.is_set():
+    def _acquire_sample(self) -> bool:
+        if not self._wait_event(DCAMWAIT_CAPEVENT.FRAMEREADY, self._timeout):
+            return False
+
+        self._dcam_frames_to_buffer()
+        self._software_trigger()
+        return True
+
+    def _acquisition_thread_func(self) -> None:
+        while not self._stop_acquisition_event.is_set():
             try:
-                if not self.__wait_event(DCAMWAIT_CAPEVENT.FRAMEREADY, self.__timeout):
-                    continue
-
-                self.__dcam_frames_to_buffer()
-                self.__software_trigger()
+                self._acquire_sample()
             except Exception as e:
-                self.__stop_acquisition_event.set()
+                self._stop_acquisition_event.set()
                 raise e
 
-    def __enter__(self):
+    def _enter_(self):
         self.open()
         return self
 
-    def __exit__(self, exc_type, exc, tb):
+    def _exit_(self, exc_type, exc, tb):
         self.close()

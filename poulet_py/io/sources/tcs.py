@@ -25,7 +25,7 @@ class TCSSource(TCS, BaseSource):
     def _close(self):
         TCS.close(self)
 
-    def _fire(self) -> bool:
+    def _trigger(self) -> bool:
         for st in self._stimuli:
             if isinstance(st, TCSStimulus):
                 precise_sleep(st.pre_delay / 1000.0)

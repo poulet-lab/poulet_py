@@ -2,7 +2,8 @@ try:
     from abc import ABC, abstractmethod
     from collections.abc import Callable
     from enum import Enum
-    from threading import Lock
+    from threading import Barrier, Event, Lock, Thread
+    from time import sleep
     from typing import Literal
 
     from numpy import concatenate, dtype, ndarray, zeros
@@ -31,8 +32,8 @@ class BaseSource(BaseModel, ABC):
     acquisition_type: AcquisitionType = Field(
         default=AcquisitionType.FINITE, description="Type of data acquisition, continuous or finite"
     )
-    fire_on: Literal["all"] | list[type[BaseStimulus]] = Field(
-        default="all", description="List of stimuli to fire on, or 'all' for all stimuli"
+    trigger_on: Literal["all"] | tuple[type[BaseStimulus]] = Field(
+        default="all", description="List of stimuli to trigger on, or 'all' for all stimuli"
     )
     buffer_size: int = Field(default=500, description="Size of the circular buffer", ge=1)
 
@@ -51,6 +52,13 @@ class BaseSource(BaseModel, ABC):
     _total_written: int = PrivateAttr(default=0)
     _last_published_written: int = PrivateAttr(default=0)
 
+    _trigger_thread: Thread = PrivateAttr()
+    _publish_thread: Thread = PrivateAttr()
+    _start_trigger: Event = PrivateAttr(default_factory=Event)
+    _done_trigger: Event = PrivateAttr(default_factory=Event)
+    _stop_thread: Event = PrivateAttr(default_factory=Event)
+    _barrier: Barrier | None = PrivateAttr(default=None)
+
     @abstractmethod
     def _open(self): ...
 
@@ -61,7 +69,7 @@ class BaseSource(BaseModel, ABC):
     def _close(self): ...
 
     @abstractmethod
-    def _fire(self) -> bool: ...
+    def _trigger(self) -> bool: ...
 
     def _keyboard_controls(self) -> dict[str, tuple[str, Callable]]:
         return {}
@@ -79,6 +87,14 @@ class BaseSource(BaseModel, ABC):
         self._bus = value
         self._external_bus = True
 
+    @property
+    def barrier(self) -> Barrier | None:
+        return self._barrier
+
+    @barrier.setter
+    def barrier(self, value: Barrier | None):
+        self._barrier = value
+
     def open(self) -> None:
         if self._is_open:
             return
@@ -88,9 +104,28 @@ class BaseSource(BaseModel, ABC):
 
         self._set_buffer()
         self._open()
+
+        self._trigger_thread = Thread(
+            target=self._trigger_loop, daemon=True, name=f"{self.name}-trigger-loop"
+        )
+        self._trigger_thread.start()
+
+        self._publish_thread = Thread(
+            target=self._publish_loop, daemon=True, name=f"{self.name}-publish-loop"
+        )
+        self._publish_thread.start()
+
         self._is_open = True
 
     def close(self) -> None:
+        self._stop_thread.set()
+        self._start_trigger.set()
+
+        if self._trigger_thread.is_alive():
+            self._trigger_thread.join()
+
+        if self._publish_thread.is_alive():
+            self._publish_thread.join()
 
         self._close()
         self._del_buffer()
@@ -100,24 +135,17 @@ class BaseSource(BaseModel, ABC):
 
         self._is_open = False
 
-    def fire(self, stimuli: tuple[BaseStimulus, ...]) -> bool:
+    def trigger(self, stimuli: tuple[BaseStimulus, ...]) -> bool:
         self._ensure_open()
-
         self._stimuli = stimuli
-        self._supports()
 
-        if not self._stimuli and self.acquisition_type == AcquisitionType.FINITE:
-            return False
+        self._done_trigger.clear()
+        self._start_trigger.set()
 
-        self._calculate_stimulus_duration()
+        return True
 
-        if self.acquisition_type == AcquisitionType.FINITE:
-            with self._lock:
-                self._last_publish_idx = self._buffer_idx
-
-        self._fire()
-        self._publish()
-
+    def wait(self) -> bool:
+        self._done_trigger.wait()
         return True
 
     def _ensure_open(self) -> None:
@@ -126,9 +154,6 @@ class BaseSource(BaseModel, ABC):
             raise RuntimeError(msg)
 
     def _set_buffer(self) -> None:
-        if self.acquisition_type == AcquisitionType.NONE:
-            return
-
         self._set_buffer_dtype()
         dt = dtype(self._buffer_dtype)
 
@@ -148,9 +173,6 @@ class BaseSource(BaseModel, ABC):
         self._last_publish_idx = 0
 
     def _write_sample(self, sample: tuple | dict) -> None:
-        if self.acquisition_type == AcquisitionType.NONE:
-            return
-
         with self._lock:
             idx = self._buffer_idx % self.buffer_size
 
@@ -163,9 +185,6 @@ class BaseSource(BaseModel, ABC):
             self._buffer_idx += 1
 
     def _write_samples(self, samples: ndarray) -> None:
-        if self.acquisition_type == AcquisitionType.NONE:
-            return
-
         n = len(samples)
 
         with self._lock:
@@ -183,9 +202,9 @@ class BaseSource(BaseModel, ABC):
             self._buffer_idx += n
 
     def _supports(self) -> None:
-        if self.fire_on == "all":
+        if self.trigger_on == "all":
             return
-        self._stimuli = tuple(st for st in self._stimuli if isinstance(st, tuple(self.fire_on)))
+        self._stimuli = tuple(st for st in self._stimuli if isinstance(st, self.trigger_on))
 
     def _calculate_stimulus_duration(self):
         pre_delay = 0
@@ -200,9 +219,6 @@ class BaseSource(BaseModel, ABC):
         self._max_stimulus_duration_ms = pre_delay + duration + post_delay
 
     def _publish(self) -> bool:
-        if self.acquisition_type == AcquisitionType.NONE:
-            return False
-
         chunk = self._get_new_chunk()
 
         if chunk is None or chunk.size == 0:
@@ -227,7 +243,6 @@ class BaseSource(BaseModel, ABC):
             unread = current - last
 
             if unread > self.buffer_size:
-                # overflow: unread data overwritten
                 last = current - self.buffer_size
 
             start = last % self.buffer_size
@@ -247,6 +262,33 @@ class BaseSource(BaseModel, ABC):
             self._last_publish_idx = current
 
             return chunk.copy()
+
+    def _trigger_loop(self):
+        while not self._stop_thread.is_set():
+            self._start_trigger.wait()
+            self._start_trigger.clear()
+
+            if self._stop_thread.is_set():
+                break
+
+            self._supports()
+
+            if not self._stimuli:
+                self._done_trigger.set()
+                continue
+
+            self._calculate_stimulus_duration()
+
+            if self._barrier:
+                self._barrier.wait()
+
+            self._trigger()
+            self._done_trigger.set()
+
+    def _publish_loop(self):
+        while not self._stop_thread.is_set():
+            self._publish()
+            sleep(0.01)
 
     def __enter__(self):
         self.open()

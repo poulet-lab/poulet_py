@@ -84,7 +84,7 @@ class OpenEphysSource(BaseSource):
 
         self._buffer_idx = (self._buffer_idx + 1) % self.buffer_size
 
-    def _fire(self) -> bool:
+    def _trigger(self) -> bool:
         if self.acquisition_type == AcquisitionType.FINITE:
             self._control.acquire()
             precise_sleep(self._max_stimulus_duration_ms / 1000.0)

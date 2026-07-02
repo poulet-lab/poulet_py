@@ -27,6 +27,6 @@ class DCAMSource(DCAM, BaseSource):
     def _close(self):
         DCAM.close(self)
 
-    def _fire(self) -> bool:
+    def _trigger(self) -> bool:
         precise_sleep(self._max_stimulus_duration_ms / 1000.0)
         return True

@@ -102,7 +102,7 @@ class SPISource(BaseSource):
                 LOGGER.error(f"SPI acquisition error: {e}")
                 break
 
-    def _fire(self) -> bool:
+    def _trigger(self) -> bool:
         for st in self._stimuli:
             if isinstance(st, SPIStimulus):
                 if st.pre_delay > 0:
