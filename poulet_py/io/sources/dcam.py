@@ -15,7 +15,7 @@ Missing 'sources' module. Install options:
     raise ImportError(msg) from e
 
 
-class DCAMSource(BaseSource,DCAM):
+class DCAMSource(BaseSource, DCAM):
     _temp_buffer: ndarray = PrivateAttr()
 
     def _set_buffer_dtype(self):

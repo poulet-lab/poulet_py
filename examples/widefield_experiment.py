@@ -1,10 +1,11 @@
-from time import time_ns
+from time import sleep, time_ns
 
 import cv2
 import numpy as np
-from time import sleep
+
 from poulet_py import (
     DCAM,
+    AcquisitionType,
     CounterSource,
     DCAMSource,
     EmptyStimulus,
@@ -13,9 +14,6 @@ from poulet_py import (
     StimulatorRuntime,
     StimulatorTrial,
     StimuliMetadataSource,
-    TCSSource,
-    TCSStimulus,
-    AcquisitionType
 )
 
 
@@ -33,7 +31,7 @@ cv2.namedWindow(
     cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO | cv2.WINDOW_GUI_NORMAL,
 )
 
-with DCAM(device_index=0,acquisition_type=AcquisitionType.CONTINUOUS) as dcam:
+with DCAM(device_index=0, acquisition_type=AcquisitionType.CONTINUOUS) as dcam:
     while True:
         sample = dcam.read_sample()
         if sample is not None:
@@ -49,7 +47,7 @@ sleep(1)
 sources = [
     CounterSource(name="counter"),
     StimuliMetadataSource(name="meta"),
-    DCAMSource(name="dcam", device_index=0,acquisition_type=AcquisitionType.FINITE),
+    DCAMSource(name="dcam", device_index=0, acquisition_type=AcquisitionType.FINITE),
     # TCSSource(name="tcs", port="/dev/ttyUSB0"),
 ]
 sinks = [HDFSink(name="h5sink", file=f"widefield_{time_ns()}.h5", meta={"timestamp": time_ns()})]

@@ -13,7 +13,7 @@ Missing 'sources' module. Install options:
     raise ImportError(msg) from e
 
 
-class TCSSource(BaseSource,TCS):
+class TCSSource(BaseSource, TCS):
     _temp_buffer: ndarray = PrivateAttr()
 
     def _set_buffer_dtype(self):
