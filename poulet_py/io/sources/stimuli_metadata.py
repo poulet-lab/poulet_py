@@ -34,7 +34,7 @@ class StimuliMetadataSource(BaseSource):
     def _close(self):
         pass
 
-    def _trigger(self) -> bool:
+    def _fire(self) -> bool:
         timestamp = monotonic_ns()
         meta = [
             {type(st).__name__: st.model_dump(exclude_unset=True, exclude_none=True)}

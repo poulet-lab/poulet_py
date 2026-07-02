@@ -48,7 +48,7 @@ class NIDaQSource(BaseSource, NIDaQ):
 
         NIDaQ.close(self)
 
-    def _trigger(self) -> bool:
+    def _fire(self) -> bool:
         for st in self._stimuli:
             if isinstance(
                 st,

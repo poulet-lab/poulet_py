@@ -87,7 +87,7 @@ class DCAM(BaseModel):
     framebundle_number: int = Field(default=1, description="")
     number_of_view: int = Field(default=1, description="")
 
-    buffer_size: int = Field(default=200, description="")
+    buffer_size: int = Field(default=100, description="")
     dcam_internal_buffer_size: int = Field(default=10, description="")
     timeout: int | Literal["auto"] = Field(default="auto", description="handle timeout in ms")
     capture_mode: DCAMCAP_START = Field(default=DCAMCAP_START.SEQUENCE, description="")
@@ -533,9 +533,9 @@ class DCAM(BaseModel):
                 self._stop_acquisition_event.set()
                 raise e
 
-    def _enter_(self):
+    def __enter__(self):
         self.open()
         return self
 
-    def _exit_(self, exc_type, exc, tb):
+    def __exit__(self, exc_type, exc, tb):
         self.close()

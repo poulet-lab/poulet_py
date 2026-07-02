@@ -93,16 +93,16 @@ class SPISource(BaseSource):
                 timestamp = monotonic_ns()
 
                 with self._lock:
-                    idx = self._buffer_idx % self.buffer_size
-                    self._buffer[idx]["timestamp"] = timestamp
-                    self._buffer[idx]["data"] = data  # Store the list of ints
+                    idx = self._source_buffer_idx % self.buffer_size
+                    self._source_buffer[idx]["timestamp"] = timestamp
+                    self._source_buffer[idx]["data"] = data  # Store the list of ints
                     self._buffer_idx += 1
 
             except Exception as e:
                 LOGGER.error(f"SPI acquisition error: {e}")
                 break
 
-    def _trigger(self) -> bool:
+    def _fire(self) -> bool:
         for st in self._stimuli:
             if isinstance(st, SPIStimulus):
                 if st.pre_delay > 0:

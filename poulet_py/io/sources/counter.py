@@ -26,7 +26,7 @@ class CounterSource(BaseSource):
     def _close(self):
         pass
 
-    def _trigger(self) -> bool:
+    def _fire(self) -> bool:
         timestamp = monotonic_ns()
         self._counter += 1
 

@@ -29,13 +29,10 @@ class AcquisitionType(str, Enum):
 
 class BaseSource(BaseModel, ABC):
     name: str = Field(..., description="Name of the data source")
-    acquisition_type: AcquisitionType = Field(
-        default=AcquisitionType.FINITE, description="Type of data acquisition, continuous or finite"
+    fire_on: Literal["all"] | tuple[type[BaseStimulus]] = Field(
+        default="all", description="List of stimuli to fire on, or 'all' for all stimuli"
     )
-    trigger_on: Literal["all"] | tuple[type[BaseStimulus]] = Field(
-        default="all", description="List of stimuli to trigger on, or 'all' for all stimuli"
-    )
-    buffer_size: int = Field(default=500, description="Size of the circular buffer", ge=1)
+    buffer_size: int = Field(default=100, description="Size of the circular buffer", ge=1)
 
     _bus: EventBus = PrivateAttr(default_factory=EventBus)
     _external_bus: bool = PrivateAttr(default=False)
@@ -52,10 +49,10 @@ class BaseSource(BaseModel, ABC):
     _total_written: int = PrivateAttr(default=0)
     _last_published_written: int = PrivateAttr(default=0)
 
-    _trigger_thread: Thread = PrivateAttr()
+    _fire_thread: Thread = PrivateAttr()
     _publish_thread: Thread = PrivateAttr()
-    _start_trigger: Event = PrivateAttr(default_factory=Event)
-    _done_trigger: Event = PrivateAttr(default_factory=Event)
+    _start_fire: Event = PrivateAttr(default_factory=Event)
+    _done_fire: Event = PrivateAttr(default_factory=Event)
     _stop_thread: Event = PrivateAttr(default_factory=Event)
     _barrier: Barrier | None = PrivateAttr(default=None)
 
@@ -69,7 +66,7 @@ class BaseSource(BaseModel, ABC):
     def _close(self): ...
 
     @abstractmethod
-    def _trigger(self) -> bool: ...
+    def _fire(self) -> bool: ...
 
     def _keyboard_controls(self) -> dict[str, tuple[str, Callable]]:
         return {}
@@ -105,10 +102,10 @@ class BaseSource(BaseModel, ABC):
         self._set_buffer()
         self._open()
 
-        self._trigger_thread = Thread(
-            target=self._trigger_loop, daemon=True, name=f"{self.name}-trigger-loop"
+        self._fire_thread = Thread(
+            target=self._fire_loop, daemon=True, name=f"{self.name}-fire-loop"
         )
-        self._trigger_thread.start()
+        self._fire_thread.start()
 
         self._publish_thread = Thread(
             target=self._publish_loop, daemon=True, name=f"{self.name}-publish-loop"
@@ -119,10 +116,10 @@ class BaseSource(BaseModel, ABC):
 
     def close(self) -> None:
         self._stop_thread.set()
-        self._start_trigger.set()
+        self._start_fire.set()
 
-        if self._trigger_thread.is_alive():
-            self._trigger_thread.join()
+        if self._fire_thread.is_alive():
+            self._fire_thread.join()
 
         if self._publish_thread.is_alive():
             self._publish_thread.join()
@@ -135,17 +132,17 @@ class BaseSource(BaseModel, ABC):
 
         self._is_open = False
 
-    def trigger(self, stimuli: tuple[BaseStimulus, ...]) -> bool:
+    def fire(self, stimuli: tuple[BaseStimulus, ...]) -> bool:
         self._ensure_open()
         self._stimuli = stimuli
 
-        self._done_trigger.clear()
-        self._start_trigger.set()
+        self._done_fire.clear()
+        self._start_fire.set()
 
         return True
 
     def wait(self) -> bool:
-        self._done_trigger.wait()
+        self._done_fire.wait()
         return True
 
     def _ensure_open(self) -> None:
@@ -202,9 +199,9 @@ class BaseSource(BaseModel, ABC):
             self._source_buffer_idx += n
 
     def _supports(self) -> None:
-        if self.trigger_on == "all":
+        if self.fire_on == "all":
             return
-        self._stimuli = tuple(st for st in self._stimuli if isinstance(st, self.trigger_on))
+        self._stimuli = tuple(st for st in self._stimuli if isinstance(st, self.fire_on))
 
     def _calculate_stimulus_duration(self):
         pre_delay = 0
@@ -224,11 +221,7 @@ class BaseSource(BaseModel, ABC):
         if chunk is None or chunk.size == 0:
             return False
 
-        self.bus.emit(
-            SinkEvent(
-                name=self.name, payload=chunk, meta={"acquisition": self.acquisition_type.value}
-            )
-        )
+        self.bus.emit(SinkEvent(name=self.name, payload=chunk))
 
         return True
 
@@ -263,10 +256,10 @@ class BaseSource(BaseModel, ABC):
 
             return chunk.copy()
 
-    def _trigger_loop(self):
+    def _fire_loop(self):
         while not self._stop_thread.is_set():
-            self._start_trigger.wait()
-            self._start_trigger.clear()
+            self._start_fire.wait()
+            self._start_fire.clear()
 
             if self._stop_thread.is_set():
                 break
@@ -274,7 +267,7 @@ class BaseSource(BaseModel, ABC):
             self._supports()
 
             if not self._stimuli:
-                self._done_trigger.set()
+                self._done_fire.set()
                 continue
 
             self._calculate_stimulus_duration()
@@ -282,8 +275,8 @@ class BaseSource(BaseModel, ABC):
             if self._barrier:
                 self._barrier.wait()
 
-            self._trigger()
-            self._done_trigger.set()
+            self._fire()
+            self._done_fire.set()
 
     def _publish_loop(self):
         while not self._stop_thread.is_set():

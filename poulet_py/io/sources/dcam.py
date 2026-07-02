@@ -1,6 +1,9 @@
 try:
     from time import monotonic_ns
 
+    from numpy import ndarray, zeros
+    from pydantic import PrivateAttr
+
     from poulet_py import DCAM, LOGGER, AcquisitionType, BaseSource, precise_sleep
 except ImportError as e:
     msg = """
@@ -13,36 +16,46 @@ Missing 'sources' module. Install options:
 
 
 class DCAMSource(DCAM, BaseSource):
+    _temp_buffer: ndarray = PrivateAttr()
+
     def _set_buffer_dtype(self):
+        height = self._dcam_internal_buffer.height * self.framebundle_number * self.number_of_view
+
         self._source_buffer_dtype = [
             ("timestamp", "uint64"),
             (
                 "dcam",
                 self.DTYPE_MAP.get(self.pixel_type, "float32"),
-                (self.__dcam_internal_buffer.height, self.__dcam_internal_buffer.width),
+                (height, self._dcam_internal_buffer.width),
             ),
         ]
 
     def _open(self):
         DCAM.open(self)
-        if self.acquisition_type == AcquisitionType.CONTINUOUS:
-            # pointers
-            self._source_buffer = self._dcam_buffer
-            self._source_buffer_idx = self._dcam_buffer_idx
-            self._source_buffer_needle = self._dcam_buffer_needle
+        self._temp_buffer = zeros(self.buffer_size, dtype=self._source_buffer.dtype)
 
     def _close(self):
         DCAM.close(self)
 
-    def _trigger(self) -> bool:
+    def _fire(self) -> bool:
         if self.acquisition_type == AcquisitionType.FINITE:
             deadline = monotonic_ns() + self._max_stimulus_duration_ms * 1000000
+
             while monotonic_ns() < deadline:
                 sample = self.read_sample()
+
                 if sample is None:
-                    LOGGER.error("DcamSource error in reading sample")
-                self._source_buffer[self._source_buffer_idx % self.buffer_size] = sample
+                    LOGGER.error("DcamSource error in reading sample, drop frame")
+                    continue
+
+                self._write_samples(sample)
         else:
             precise_sleep(self._max_stimulus_duration_ms / 1000.0)
+
+        if self.acquisition_type == AcquisitionType.CONTINUOUS:
+            samples = self.read_many_sample(data=self._temp_buffer, n=self.buffer_size, timeout=-1)
+
+            if samples > 0:
+                self._write_samples(self._temp_buffer[:samples])
 
         return True

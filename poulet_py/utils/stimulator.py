@@ -294,23 +294,26 @@ class StimulatorRuntime(BaseModel):
                             msg = f"Trigger failed for trial {trial.name} in block {block.name}"
                             raise RuntimeError(msg)
 
+                        # TODO write isi to metadata
+                        isi = self.get_isi(block.isi or self.isi)
+
                         st_info = {
                             f"{type(st).__name__}": st.model_dump(
                                 exclude_unset=True, exclude_none=True
                             )
                             for st in trial.stimuli
                         }
+                        st_info["isi"] = isi
+
                         LOGGER.info("Trial %d: %s", trial_idx, st_info)
 
                         for s in self.sources:
-                            s.trigger(trial.stimuli)
+                            s.fire(trial.stimuli)
 
                         for s in self.sources:
                             s.wait()
 
-                        isi = self.get_isi(block.isi or self.isi)
                         precise_sleep(isi / 1000.0)
-
                         self._wait_paused()
 
         for s in self.sources:

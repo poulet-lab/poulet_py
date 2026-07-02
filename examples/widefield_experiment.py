@@ -1,9 +1,19 @@
+from time import time_ns
+
 import cv2
 import numpy as np
 
 from poulet_py import (
     DCAM,
+    CounterSource,
     DCAMSource,
+    EmptyStimulus,
+    HDFSink,
+    StimulatorBlock,
+    StimulatorRuntime,
+    StimulatorTrial,
+    StimuliMetadataSource,
+    TCSSource,
 )
 
 
@@ -24,7 +34,8 @@ cv2.namedWindow(
 with DCAM(device_index=0) as dcam:
     while True:
         sample = dcam.read_sample()
-        show_framedata(sample["dcam"])
+        if sample is not None:
+            show_framedata(sample["dcam"])
 
         key = cv2.waitKey(1) & 0xFF
         if key == ord("q"):
@@ -32,4 +43,23 @@ with DCAM(device_index=0) as dcam:
 
 cv2.destroyAllWindows()
 
-sources = [DCAMSource()]
+sources = [
+    CounterSource(name="counter"),
+    StimuliMetadataSource(name="meta"),
+    DCAMSource(name="dcam", device_index=0),
+    TCSSource(name="tcs", port="/dev"),
+]
+sinks = [HDFSink(name="h5sink", file=f"widefield_{time_ns}.h5", meta={"timestamp": time_ns()})]
+
+empty_stim = EmptyStimulus(duration=3000, pre_delay=100)
+
+blocks = [
+    StimulatorBlock(
+        trials=[StimulatorTrial(stimuli=empty_stim)], trial_repetitions=30, isi=range(500, 4000)
+    )
+]
+exp = StimulatorRuntime(name="widefield", sources=sources, sinks=sinks, blocks=blocks)
+
+
+with exp:
+    exp.run()

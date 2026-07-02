@@ -79,12 +79,12 @@ class OpenEphysSource(BaseSource):
         )
 
     def _store_sample(self, timestamp: int, channel_data: ndarray):
-        self._buffer[self._buffer_idx]["timestamp"] = timestamp
-        self._buffer[self._buffer_idx]["channel_data"] = channel_data
+        self._source_buffer[self._source_buffer_idx]["timestamp"] = timestamp
+        self._source_buffer[self._source_buffer_idx]["channel_data"] = channel_data
 
-        self._buffer_idx = (self._buffer_idx + 1) % self.buffer_size
+        self._source_buffer_idx = (self._source_buffer_idx + 1) % self.buffer_size
 
-    def _trigger(self) -> bool:
+    def _fire(self) -> bool:
         if self.acquisition_type == AcquisitionType.FINITE:
             self._control.acquire()
             precise_sleep(self._max_stimulus_duration_ms / 1000.0)

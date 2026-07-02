@@ -157,7 +157,7 @@ class Max31856Source(BaseSource):
                 LOGGER.error(f"MAX31856 acquisition error: {e}")
                 break
 
-    def _trigger(self) -> bool:
+    def _fire(self) -> bool:
         precise_sleep(self._max_stimulus_duration_ms / 1000.0)
 
         return True
