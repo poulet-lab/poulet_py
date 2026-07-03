@@ -194,9 +194,9 @@ class TCS(BaseModel, validate_assignment=True):
         if self._is_open:
             return
 
-        self._open_serial()
-        self._set_buffer()
-        self._start_acquisition_thread()
+        self._tcs_open_serial()
+        self._tcs_set_buffer()
+        self._tcs_start_acquisition_thread()
 
         self.execute_command(TCSCommand.SET_MAX_TEMPERATURE, int(self.maximum_temperature * 10))
 
@@ -219,9 +219,9 @@ class TCS(BaseModel, validate_assignment=True):
 
     def close(self):
         """Close the serial connection and clean up resources."""
-        self._stop_acquisition_thread()
-        self._close_serial()
-        self._delete_buffer()
+        self._tcs_stop_acquisition_thread()
+        self._tcs_close_serial()
+        self._tcs_delete_buffer()
         self._is_open = False
 
     def info(self) -> str:
@@ -312,7 +312,7 @@ class TCS(BaseModel, validate_assignment=True):
         -----
         This method flushes the serial buffer before writing.
         """
-        self._ensure_open()
+        self._tcs_ensure_open()
 
         self._serial.flush()
         LOGGER.debug(f"Sending command: {command}")
@@ -357,7 +357,7 @@ class TCS(BaseModel, validate_assignment=True):
         RuntimeError
             If serial connection is not open.
         """
-        self._ensure_open()
+        self._tcs_ensure_open()
 
         request = TCSSerialSearchRequest(pattern=expected_pattern)
         event = request.event
@@ -399,9 +399,9 @@ class TCS(BaseModel, validate_assignment=True):
         This method starts a timer thread for stimulus duration and optionally
         activates buzzer and trigger output.
         """
-        self._ensure_open()
+        self._tcs_ensure_open()
 
-        self._validate_stimulus(stimulus)
+        self._tcs_validate_stimulus(stimulus)
 
         for command in stimulus.build():
             self.write(command)
@@ -409,7 +409,7 @@ class TCS(BaseModel, validate_assignment=True):
         self.execute_command(TCSCommand.TRIGGER_STIMULATION)
 
         Thread(
-            target=self._stimulus_timer, args=(stimulus.duration,), name="TCS-stimulus-timer"
+            target=self._tcs_stimulus_timer, args=(stimulus.duration,), name="TCS-stimulus-timer"
         ).start()
 
         if self.beep:
@@ -441,7 +441,7 @@ class TCS(BaseModel, validate_assignment=True):
             If serial connection is not open, calibration fails, or
             response format is invalid.
         """
-        self._ensure_open()
+        self._tcs_ensure_open()
 
         match = self.execute_command(
             command=TCSCommand.AUTOMATIC_CALIBRATION,
@@ -463,7 +463,7 @@ class TCS(BaseModel, validate_assignment=True):
 
     def reset(self):
         """Reset the TCS device to its initial state."""
-        self._ensure_open()
+        self._tcs_ensure_open()
 
         self.execute_command(TCSCommand.RESET)
         LOGGER.info("Reset successfully")
@@ -488,7 +488,7 @@ class TCS(BaseModel, validate_assignment=True):
         The returned array has dtype with fields: 'timestamp' (uint64) and
         's0' through 's4' (float64) for the 5 temperature channels.
         """
-        self._ensure_open()
+        self._tcs_ensure_open()
 
         with self._sampling_cond:
             if self._tcs_buffer_idx == 0:
@@ -531,7 +531,7 @@ class TCS(BaseModel, validate_assignment=True):
         This method reads the most recent samples from the circular buffer,
         returning them in chronological order (oldest to newest).
         """
-        self._ensure_open()
+        self._tcs_ensure_open()
 
         if data.shape[0] < n:
             msg = f"Provided array has {data.shape[0]} rows, need at least {n}"
@@ -563,7 +563,7 @@ class TCS(BaseModel, validate_assignment=True):
 
             return count
 
-    def _validate_stimulus(self, stimulus: TCSStimulus) -> None:
+    def _tcs_validate_stimulus(self, stimulus: TCSStimulus) -> None:
         """
         Validate stimulus parameters.
 
@@ -596,7 +596,7 @@ class TCS(BaseModel, validate_assignment=True):
             )
             raise ValueError(msg)
 
-    def _stimulus_timer(self, duration_ms: int):
+    def _tcs_stimulus_timer(self, duration_ms: int):
         """
         Timer function for stimulus duration.
 
@@ -611,7 +611,7 @@ class TCS(BaseModel, validate_assignment=True):
         finally:
             self._stimulus_running = False
 
-    def _ensure_open(self):
+    def _tcs_ensure_open(self):
         """
         Check if serial connection is open.
 
@@ -624,7 +624,7 @@ class TCS(BaseModel, validate_assignment=True):
             msg = "TCS serial connection is not open. Call open() first."
             raise RuntimeError(msg)
 
-    def _open_serial(self):
+    def _tcs_open_serial(self):
         """
         Open serial connection with TCS-specific parameters.
 
@@ -647,7 +647,7 @@ class TCS(BaseModel, validate_assignment=True):
             msg = "Serial initialization failed"
             raise RuntimeError(msg) from e
 
-    def _close_serial(self):
+    def _tcs_close_serial(self):
         """
         Close serial connection safely.
 
@@ -662,7 +662,7 @@ class TCS(BaseModel, validate_assignment=True):
             self._serial.reset_output_buffer()
             self._serial.close()
 
-    def _set_buffer(self):
+    def _tcs_set_buffer(self):
         """Initialize the circular buffer for temperature samples."""
         try:
             self._tcs_buffer = zeros(
@@ -675,24 +675,24 @@ class TCS(BaseModel, validate_assignment=True):
             msg = "Buffer initialization failed"
             raise RuntimeError(msg) from e
 
-    def _delete_buffer(self):
+    def _tcs_delete_buffer(self):
         """Delete the circular buffer and reset index."""
         del self._tcs_buffer
 
-    def _start_acquisition_thread(self):
+    def _tcs_start_acquisition_thread(self):
         """Start the background acquisition thread."""
         try:
             self.execute_command(TCSCommand.DISPLAY_TEMPERATURES_DURING_STIMULATION)
 
             self._acquisition_thread = Thread(
-                target=self._acquisition_thread_func, name="TCS Acquisition Thread", daemon=True
+                target=self._tcs_acquisition_thread_func, name="TCS Acquisition Thread", daemon=True
             )
             self._acquisition_thread.start()
         except Exception as e:
             msg = "Acquisition thread failed to start"
             raise RuntimeError(msg) from e
 
-    def _stop_acquisition_thread(self):
+    def _tcs_stop_acquisition_thread(self):
         """Stop the background acquisition thread."""
         self._stop_acquisition_event.set()
         self._acquisition_thread.join(timeout=5)
@@ -704,7 +704,7 @@ class TCS(BaseModel, validate_assignment=True):
 
         self._stop_acquisition_event.clear()
 
-    def _acquisition_thread_func(self):
+    def _tcs_acquisition_thread_func(self):
         """
         Background thread function for continuous data acquisition.
 
