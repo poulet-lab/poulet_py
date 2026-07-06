@@ -1,3 +1,10 @@
+"""Drop-in DCAM class for poulet_py Hamamatsu ORCA Flash 4.0 V3.
+
+Adds camera-native 10 fps acquisition via Master Pulse and global-exposure
+output on the timing connector. Designed to replace the existing DCAM class
+module in poulet_py while preserving the original public read_sample/read_many_sample
+workflow.
+"""
 from ctypes import byref, c_double, c_int32, c_void_p
 from enum import Enum
 from threading import Condition, Event, Thread
@@ -75,13 +82,64 @@ class DCAM(BaseModel):
     trigger_active: DCAMPROP.TRIGGERACTIVE = Field(
         default=DCAMPROP.TRIGGERACTIVE.EDGE, description=""
     )
-    trigger_polarity: DCAMPROP.TRIGGERENABLE_POLARITY = Field(
-        default=DCAMPROP.TRIGGERENABLE_POLARITY.NEGATIVE, description=""
+    trigger_polarity: DCAMPROP.TRIGGERPOLARITY = Field(
+        default=DCAMPROP.TRIGGERPOLARITY.POSITIVE, description=""
     )
+    trigger_global_exposure: DCAMPROP.TRIGGER_GLOBALEXPOSURE | None = Field(
+        default=DCAMPROP.TRIGGER_GLOBALEXPOSURE.DELAYED,
+        description=(
+            "Global-exposure timing mode. DELAYED is usually appropriate for rolling-shutter "
+            "CMOS cameras; set None to leave the camera default unchanged."
+        ),
+    )
+
+    # Output trigger / rear timing connector configuration.
+    # For first electrical testing, HIGH should hold the selected output line high.
+    # For LED gating during exposure, use OUTPUTTRIGGER_KIND.GLOBALEXPOSURE.
+    # For a short pulse per frame, use OUTPUTTRIGGER_KIND.PROGRAMABLE with SOURCE=VSYNC.
+    output_trigger_connector: int = Field(default=1, ge=1, le=16, description="")
+    output_trigger_kind: DCAMPROP.OUTPUTTRIGGER_KIND = Field(
+        default=DCAMPROP.OUTPUTTRIGGER_KIND.GLOBALEXPOSURE, description=""
+    )
+    output_trigger_source: DCAMPROP.OUTPUTTRIGGER_SOURCE = Field(
+        default=DCAMPROP.OUTPUTTRIGGER_SOURCE.VSYNC, description=""
+    )
+    output_trigger_polarity: DCAMPROP.OUTPUTTRIGGER_POLARITY = Field(
+        default=DCAMPROP.OUTPUTTRIGGER_POLARITY.POSITIVE, description=""
+    )
+    output_trigger_active: DCAMPROP.OUTPUTTRIGGER_ACTIVE = Field(
+        default=DCAMPROP.OUTPUTTRIGGER_ACTIVE.EDGE, description=""
+    )
+    output_trigger_basesensor: DCAMPROP.OUTPUTTRIGGER_BASESENSOR | None = Field(
+        default=DCAMPROP.OUTPUTTRIGGER_BASESENSOR.VIEW1,
+        description="Base sensor/view for global-exposure output trigger. Usually VIEW1 for single-view capture.",
+    )
+    output_trigger_delay: float = Field(default=0.0, description="in seconds", ge=0)
+    output_trigger_period: float = Field(default=0.001, description="in seconds", gt=0)
+    debug_output: bool = Field(default=False, description="Print requested/applied DCAM settings.")
+
     # TODO check
     binning: DCAMPROP.BINNING = Field(default=DCAMPROP.BINNING._1, description="")
     # subarray_mode: TODO
-    exposure_time: int = Field(default=9, description="in ms", gt=1, lt=10000)
+    exposure_time: int = Field(default=50, description="Exposure time in ms", gt=1, lt=10000)
+    frame_rate: float | None = Field(
+        default=10.0,
+        description="Requested acquisition frame rate in frames per second. For timing_mode='masterpulse', this becomes MASTERPULSE_INTERVAL = 1/frame_rate.",
+        gt=0,
+    )
+    timing_mode: Literal["internal", "masterpulse"] = Field(
+        default="masterpulse",
+        description="Use 'masterpulse' for camera-native fixed-rate acquisition when INTERNALFRAMERATE is not writable.",
+    )
+    masterpulse_mode: DCAMPROP.MASTERPULSE_MODE = Field(
+        default=DCAMPROP.MASTERPULSE_MODE.CONTINUOUS,
+        description="Master pulse mode. CONTINUOUS gives a continuous fixed-rate acquisition clock.",
+    )
+    masterpulse_triggersource: DCAMPROP.MASTERPULSE_TRIGGERSOURCE = Field(
+        default=DCAMPROP.MASTERPULSE_TRIGGERSOURCE.SOFTWARE,
+        description="Master pulse trigger source. In CONTINUOUS mode this is normally not used, but is kept explicit.",
+    )
+    masterpulse_bursttimes: int = Field(default=1, description="Only relevant for MASTERPULSE_MODE.BURST.", ge=1)
     contrast_gain: int = Field(default=10, description="in ms")
     framebundle_mode: DCAMPROP.MODE = Field(default=DCAMPROP.MODE.OFF, description="")
     framebundle_number: int = Field(default=1, description="")
@@ -159,6 +217,22 @@ class DCAM(BaseModel):
         if self._is_open:
             return
         try:
+            if self.debug_output:
+                print("\n--- Requested DCAM configuration before dcamapi_init ---", flush=True)
+                for name in (
+                    "device_index", "pixel_type", "sensor_mode", "shutter_mode",
+                    "readout_speed", "readout_direction", "trigger_source",
+                    "trigger_mode", "trigger_active", "trigger_polarity",
+                    "trigger_global_exposure", "exposure_time", "frame_rate", "timing_mode",
+                    "masterpulse_mode", "masterpulse_triggersource", "masterpulse_bursttimes",
+                    "capture_mode", "output_trigger_connector", "output_trigger_kind", "output_trigger_source",
+                    "output_trigger_polarity", "output_trigger_active", "output_trigger_basesensor",
+                    "output_trigger_delay", "output_trigger_period",
+                ):
+                    value = getattr(self, name)
+                    print(f"{name}: {value.name if isinstance(value, Enum) else value}", flush=True)
+                print("--- end requested configuration ---\n", flush=True)
+
             self._set_dcam_api()
             self._set_dcam_device()
             self._set_params()
@@ -324,9 +398,9 @@ class DCAM(BaseModel):
         dcamdev_close(self._dcam_device.hdcam)
         self._dcam_device = DCAMDEV_OPEN()
 
-    def _get_property(self, prop: DCAM_IDPROP) -> float:
+    def _get_property(self, prop: DCAM_IDPROP | int) -> float:
         value = c_double()
-        err = dcamprop_getvalue(self._dcam_device.hdcam, prop, byref(value))
+        err = dcamprop_getvalue(self._dcam_device.hdcam, c_int32(int(prop)), byref(value))
         if err.is_failed():
             raise RuntimeError(f"Failed to get property {prop}: {DCAMERR(err).name}")
 
@@ -334,19 +408,42 @@ class DCAM(BaseModel):
 
     def _set_property(
         self,
-        prop: DCAM_IDPROP,
+        prop: DCAM_IDPROP | int,
         value: float | int | Enum,
         errors: Literal["ignore", "raise", "log"] = "log",
-    ) -> None:
-        err = dcamprop_setvalue(self._dcam_device.hdcam, prop, value)
+    ) -> float | None:
+        if isinstance(value, Enum):
+            value = value.value
+
+        err = dcamprop_setvalue(
+            self._dcam_device.hdcam,
+            c_int32(int(prop)),
+            c_double(float(value)),
+        )
         if err.is_failed():
-            msg = f"Failed to set property {DCAM_IDPROP(prop).name}[{prop}]: {DCAMERR(err).name}[{err}]"
+            try:
+                prop_name = DCAM_IDPROP(int(prop)).name
+            except ValueError:
+                prop_name = f"0x{int(prop):08X}"
+
+            msg = f"Failed to set property {prop_name}[{int(prop)}] to {value}: {DCAMERR(err).name}[{err}]"
             if errors == "raise":
                 raise RuntimeError(msg)
             elif errors == "log":
                 LOGGER.error(msg)
-            else:
-                pass
+            return None
+
+        readback = c_double()
+        err = dcamprop_getvalue(self._dcam_device.hdcam, c_int32(int(prop)), byref(readback))
+        if err.is_failed():
+            msg = f"Set property {prop}[{int(prop)}] to {value}, but readback failed: {DCAMERR(err).name}[{err}]"
+            if errors == "raise":
+                raise RuntimeError(msg)
+            elif errors == "log":
+                LOGGER.error(msg)
+            return None
+
+        return readback.value
 
     def _set_params(self) -> None:
         self._set_property(DCAM_IDPROP.IMAGE_PIXELTYPE, self.pixel_type)
@@ -354,18 +451,321 @@ class DCAM(BaseModel):
         self._set_property(DCAM_IDPROP.SHUTTER_MODE, self.shutter_mode)
         self._set_property(DCAM_IDPROP.READOUTSPEED, self.readout_speed)
         self._set_property(DCAM_IDPROP.READOUT_DIRECTION, self.readout_direction)
-        self._set_property(DCAM_IDPROP.TRIGGERSOURCE, self.trigger_source)
+
+        # For fixed-rate acquisition on this ORCA model, INTERNALFRAMERATE/INTERNAL_FRAMEINTERVAL
+        # may be read-only. In timing_mode='masterpulse', use the camera's Master Pulse engine
+        # as the acquisition trigger source and set MASTERPULSE_INTERVAL below.
+        effective_trigger_source = (
+            DCAMPROP.TRIGGERSOURCE.MASTERPULSE
+            if self.timing_mode == "masterpulse"
+            else self.trigger_source
+        )
+        self._set_property(DCAM_IDPROP.TRIGGERSOURCE, effective_trigger_source, errors="raise")
         self._set_property(DCAM_IDPROP.TRIGGER_MODE, self.trigger_mode)
         self._set_property(DCAM_IDPROP.TRIGGERACTIVE, self.trigger_active)
         self._set_property(DCAM_IDPROP.TRIGGERPOLARITY, self.trigger_polarity)
+        if self.trigger_global_exposure is not None:
+            self._set_property(
+                DCAM_IDPROP.TRIGGER_GLOBALEXPOSURE,
+                self.trigger_global_exposure,
+                errors="ignore",
+            )
         self._set_property(DCAM_IDPROP.BINNING, self.binning)
-        self._set_property(DCAM_IDPROP.EXPOSURETIME, self.exposure_time / 1000)
-        self._set_property(DCAM_IDPROP.CONTRASTGAIN, self.contrast_gain)
+
+        timing_readbacks = {
+            "REQUESTED_EXPOSURE_MS": self.exposure_time,
+            "EXPOSURETIME_SET_SEC": self._set_property(
+                DCAM_IDPROP.EXPOSURETIME, self.exposure_time / 1000, errors="raise"
+            ),
+        }
+
+        # Frame-rate control.
+        # INTERNALFRAMERATE/INTERNAL_FRAMEINTERVAL were observed to be NOTWRITABLE on this setup.
+        # Therefore timing_mode='masterpulse' uses MASTERPULSE_INTERVAL = 1 / frame_rate.
+        if self.frame_rate is not None:
+            timing_readbacks["REQUESTED_FRAMERATE_FPS"] = self.frame_rate
+            requested_interval = 1.0 / self.frame_rate
+            timing_readbacks["REQUESTED_FRAME_INTERVAL_SEC"] = requested_interval
+            timing_readbacks["REQUESTED_FRAME_INTERVAL_MS"] = requested_interval * 1000.0
+
+            if self.timing_mode == "masterpulse":
+                min_trigger_interval = None
+                try:
+                    min_trigger_interval = self._get_property(DCAM_IDPROP.TIMING_MINTRIGGERINTERVAL)
+                    timing_readbacks["TIMING_MINTRIGGERINTERVAL_BEFORE_MASTERPULSE_SEC"] = min_trigger_interval
+                    timing_readbacks["TIMING_MINTRIGGERINTERVAL_BEFORE_MASTERPULSE_MS"] = min_trigger_interval * 1000.0
+                except Exception as exc:
+                    timing_readbacks["TIMING_MINTRIGGERINTERVAL_BEFORE_MASTERPULSE_SEC"] = f"unavailable: {exc}"
+
+                masterpulse_interval = requested_interval
+                if isinstance(min_trigger_interval, float) and masterpulse_interval <= min_trigger_interval:
+                    # Leave a small margin rather than requesting an interval the camera cannot obey.
+                    masterpulse_interval = min_trigger_interval + 0.001
+                    timing_readbacks["MASTERPULSE_INTERVAL_ADJUSTED_REASON"] = (
+                        "requested interval was <= TIMING_MINTRIGGERINTERVAL; added 1 ms margin"
+                    )
+
+                timing_readbacks["MASTERPULSE_INTERVAL_REQUESTED_SEC"] = masterpulse_interval
+                timing_readbacks["MASTERPULSE_INTERVAL_REQUESTED_MS"] = masterpulse_interval * 1000.0
+                timing_readbacks["MASTERPULSE_EFFECTIVE_REQUESTED_FPS"] = 1.0 / masterpulse_interval
+
+                timing_readbacks["MASTERPULSE_MODE_SET"] = self._set_property(
+                    DCAM_IDPROP.MASTERPULSE_MODE,
+                    self.masterpulse_mode,
+                    errors="raise",
+                )
+                timing_readbacks["MASTERPULSE_TRIGGERSOURCE_SET"] = self._set_property(
+                    DCAM_IDPROP.MASTERPULSE_TRIGGERSOURCE,
+                    self.masterpulse_triggersource,
+                    errors="ignore",
+                )
+                timing_readbacks["MASTERPULSE_INTERVAL_SET_SEC"] = self._set_property(
+                    DCAM_IDPROP.MASTERPULSE_INTERVAL,
+                    masterpulse_interval,
+                    errors="raise",
+                )
+                timing_readbacks["MASTERPULSE_BURSTTIMES_SET"] = self._set_property(
+                    DCAM_IDPROP.MASTERPULSE_BURSTTIMES,
+                    self.masterpulse_bursttimes,
+                    errors="ignore",
+                )
+            else:
+                frame_rate_readback = self._set_property(
+                    DCAM_IDPROP.INTERNALFRAMERATE,
+                    self.frame_rate,
+                    errors="ignore",
+                )
+                if frame_rate_readback is None:
+                    timing_readbacks["INTERNALFRAMERATE_SET"] = "not writable; trying INTERNAL_FRAMEINTERVAL"
+                    frame_interval_readback = self._set_property(
+                        DCAM_IDPROP.INTERNAL_FRAMEINTERVAL,
+                        requested_interval,
+                        errors="ignore",
+                    )
+                    if frame_interval_readback is None:
+                        timing_readbacks["INTERNAL_FRAMEINTERVAL_SET"] = "not writable; leaving frame timing unchanged"
+                    else:
+                        timing_readbacks["INTERNAL_FRAMEINTERVAL_SET_SEC"] = frame_interval_readback
+                else:
+                    timing_readbacks["INTERNALFRAMERATE_SET_FPS"] = frame_rate_readback
+
+        # Read current/applied timing values back from the camera. These are printed
+        # before live capture starts, so you can verify the actual accepted timing.
+        current_timing_props = (
+            ("EXPOSURETIME_READBACK_SEC", DCAM_IDPROP.EXPOSURETIME),
+            ("INTERNALFRAMERATE_READBACK_FPS", DCAM_IDPROP.INTERNALFRAMERATE),
+            ("INTERNAL_FRAMEINTERVAL_READBACK_SEC", DCAM_IDPROP.INTERNAL_FRAMEINTERVAL),
+            ("MASTERPULSE_MODE_READBACK", DCAM_IDPROP.MASTERPULSE_MODE),
+            ("MASTERPULSE_TRIGGERSOURCE_READBACK", DCAM_IDPROP.MASTERPULSE_TRIGGERSOURCE),
+            ("MASTERPULSE_INTERVAL_READBACK_SEC", DCAM_IDPROP.MASTERPULSE_INTERVAL),
+            ("MASTERPULSE_BURSTTIMES_READBACK", DCAM_IDPROP.MASTERPULSE_BURSTTIMES),
+            ("TIMING_READOUTTIME_SEC", DCAM_IDPROP.TIMING_READOUTTIME),
+            ("TIMING_CYCLICTRIGGERPERIOD_SEC", DCAM_IDPROP.TIMING_CYCLICTRIGGERPERIOD),
+            ("TIMING_MINTRIGGERBLANKING_SEC", DCAM_IDPROP.TIMING_MINTRIGGERBLANKING),
+            ("TIMING_MINTRIGGERINTERVAL_SEC", DCAM_IDPROP.TIMING_MINTRIGGERINTERVAL),
+            ("TIMING_EXPOSURE_MODE", DCAM_IDPROP.TIMING_EXPOSURE),
+            ("TIMING_INVALIDEXPOSUREPERIOD_SEC", DCAM_IDPROP.TIMING_INVALIDEXPOSUREPERIOD),
+            ("TIMING_GLOBALEXPOSUREDELAY_SEC", DCAM_IDPROP.TIMING_GLOBALEXPOSUREDELAY),
+            ("TRIGGER_GLOBALEXPOSURE_READBACK", DCAM_IDPROP.TRIGGER_GLOBALEXPOSURE),
+        )
+        for name, prop in current_timing_props:
+            try:
+                timing_readbacks[name] = self._get_property(prop)
+            except Exception as exc:
+                timing_readbacks[name] = f"unavailable: {exc}"
+
+        exposure_sec = timing_readbacks.get("EXPOSURETIME_READBACK_SEC")
+        if isinstance(exposure_sec, float):
+            timing_readbacks["EXPOSURETIME_READBACK_MS"] = exposure_sec * 1000.0
+
+        frame_interval_sec = timing_readbacks.get("INTERNAL_FRAMEINTERVAL_READBACK_SEC")
+        if isinstance(frame_interval_sec, float) and frame_interval_sec > 0:
+            timing_readbacks["EFFECTIVE_FPS_FROM_INTERNAL_FRAMEINTERVAL"] = 1.0 / frame_interval_sec
+            timing_readbacks["INTERNAL_FRAMEINTERVAL_READBACK_MS"] = frame_interval_sec * 1000.0
+import signal
+from time import sleep
+
+import cv2
+import numpy as np
+
+from poulet_py import DCAM
+from poulet_py.hardware.camera.hamamatzu._api import DCAMPROP
+
+NAME = "dcam_example"
+running = True
+from time import sleep
+
+import cv2
+import numpy as np
+
+from poulet_py import DCAM
+from poulet_py.hardware.camera.hamamatzu._api import DCAMPROP
+
+NAME = "dcam_example"
+running = True
+
+
+
+
+def handler(sig, frame):
+    global running
+    running = False
+
+
+signal.signal(signal.SIGINT, handler)
+
+
+def show_framedata(data):
+    maxval = np.amax(data)
+    if data.dtype == np.uint16 and maxval > 0:
+        imul = int(65535 / maxval)
+        data = data * imul
+
+    cv2.imshow(NAME, data)
+
+
+devices = DCAM.get_available_devices()
+
+if devices:
+    print(devices)
+else:
+    raise RuntimeError("No Devices")
+
+cv2.namedWindow(
+    NAME,
+    cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO | cv2.WINDOW_GUI_NORMAL,
+)
+
+with DCAM(
+    device_index=0,
+    debug_output=True,
+
+    # First hardware test: the selected rear timing output should be held high.
+    output_trigger_connector=1,
+    output_trigger_kind=DCAMPROP.OUTPUTTRIGGER_KIND.HIGH,
+
+    # For LED during exposure after the HIGH test works, use:
+    # output_trigger_kind=DCAMPROP.OUTPUTTRIGGER_KIND.GLOBALEXPOSURE,
+
+    # For a short frame-synchronous pulse after the HIGH test works, use:
+    # output_trigger_kind=DCAMPROP.OUTPUTTRIGGER_KIND.PROGRAMABLE,
+    # output_trigger_source=DCAMPROP.OUTPUTTRIGGER_SOURCE.VSYNC,
+    # output_trigger_period=0.001,
+    # output_trigger_delay=0.0,
+) as dcam:
+    input("Camera is open and output trigger is configured. Measure the timing output now, then press Enter.")
+
+    while running:
+        sample = dcam.read_sample()
+        if sample is None:
+            continue
+
+        show_framedata(sample["dcam"])
+
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord("q"):
+            break
+        sleep(0.001)
+
+cv2.destroyAllWindows()
+        masterpulse_interval_sec = timing_readbacks.get("MASTERPULSE_INTERVAL_READBACK_SEC")
+        if isinstance(masterpulse_interval_sec, float) and masterpulse_interval_sec > 0:
+            timing_readbacks["MASTERPULSE_INTERVAL_READBACK_MS"] = masterpulse_interval_sec * 1000.0
+            timing_readbacks["EFFECTIVE_FPS_FROM_MASTERPULSE_INTERVAL"] = 1.0 / masterpulse_interval_sec
+
+        cyclic_period_sec = timing_readbacks.get("TIMING_CYCLICTRIGGERPERIOD_SEC")
+        if isinstance(cyclic_period_sec, float) and cyclic_period_sec > 0:
+            timing_readbacks["EFFECTIVE_FPS_FROM_CYCLICTRIGGERPERIOD"] = 1.0 / cyclic_period_sec
+            timing_readbacks["TIMING_CYCLICTRIGGERPERIOD_MS"] = cyclic_period_sec * 1000.0
+
+        min_trigger_interval_sec = timing_readbacks.get("TIMING_MINTRIGGERINTERVAL_SEC")
+        if isinstance(min_trigger_interval_sec, float) and min_trigger_interval_sec > 0:
+            timing_readbacks["MAX_FPS_FROM_MINTRIGGERINTERVAL"] = 1.0 / min_trigger_interval_sec
+            timing_readbacks["TIMING_MINTRIGGERINTERVAL_MS"] = min_trigger_interval_sec * 1000.0
+
+        readout_sec = timing_readbacks.get("TIMING_READOUTTIME_SEC")
+        if isinstance(readout_sec, float):
+            timing_readbacks["TIMING_READOUTTIME_MS"] = readout_sec * 1000.0
+
+        global_exposure_delay_sec = timing_readbacks.get("TIMING_GLOBALEXPOSUREDELAY_SEC")
+        if isinstance(global_exposure_delay_sec, float):
+            timing_readbacks["TIMING_GLOBALEXPOSUREDELAY_MS"] = global_exposure_delay_sec * 1000.0
+
+        invalid_exposure_period_sec = timing_readbacks.get("TIMING_INVALIDEXPOSUREPERIOD_SEC")
+        if isinstance(invalid_exposure_period_sec, float):
+            timing_readbacks["TIMING_INVALIDEXPOSUREPERIOD_MS"] = invalid_exposure_period_sec * 1000.0
+
+        if isinstance(exposure_sec, float) and isinstance(global_exposure_delay_sec, float):
+            # For rolling-shutter global-exposure timing, the useful global-exposure window
+            # is often roughly exposure time minus the global-exposure delay. If this is <= 0,
+            # OUTPUTTRIGGER_KIND.GLOBALEXPOSURE may read back correctly but produce no visible pulse.
+            global_window_sec = exposure_sec - global_exposure_delay_sec
+            timing_readbacks["EST_GLOBAL_EXPOSURE_WINDOW_SEC"] = global_window_sec
+            timing_readbacks["EST_GLOBAL_EXPOSURE_WINDOW_MS"] = global_window_sec * 1000.0
+            if global_window_sec <= 0:
+                timing_readbacks["GLOBAL_EXPOSURE_WARNING"] = (
+                    "estimated global-exposure window <= 0; increase exposure_time "
+                    "or use PROGRAMABLE+EXPOSURE/VSYNC instead"
+                )
+
+        if self.debug_output:
+            print("--- Current/applied acquisition timing before live capture ---", flush=True)
+            for name, value in timing_readbacks.items():
+                print(f"{name}: {value}", flush=True)
+            print("--- end current/applied acquisition timing ---\n", flush=True)
+
+        self._set_property(DCAM_IDPROP.CONTRASTGAIN, self.contrast_gain, errors="ignore")
         self._set_property(DCAM_IDPROP.FRAMEBUNDLE_MODE, self.framebundle_mode)
 
         if self.framebundle_mode == DCAMPROP.MODE.ON:
             self._set_property(DCAM_IDPROP.FRAMEBUNDLE_NUMBER, self.framebundle_number)
         self._set_property(DCAM_IDPROP.NUMBEROF_VIEW, self.number_of_view)
+
+        output_offset = (self.output_trigger_connector - 1) * int(DCAM_IDPROP._OUTPUTTRIGGER)
+        output_trigger_kind_prop = int(DCAM_IDPROP.OUTPUTTRIGGER_KIND) + output_offset
+        output_trigger_polarity_prop = int(DCAM_IDPROP.OUTPUTTRIGGER_POLARITY) + output_offset
+        output_trigger_source_prop = int(DCAM_IDPROP.OUTPUTTRIGGER_SOURCE) + output_offset
+        output_trigger_active_prop = int(DCAM_IDPROP.OUTPUTTRIGGER_ACTIVE) + output_offset
+        output_trigger_basesensor_prop = int(DCAM_IDPROP.OUTPUTTRIGGER_BASESENSOR) + output_offset
+        output_trigger_delay_prop = int(DCAM_IDPROP.OUTPUTTRIGGER_DELAY) + output_offset
+        output_trigger_period_prop = int(DCAM_IDPROP.OUTPUTTRIGGER_PERIOD) + output_offset
+
+        output_readbacks = {
+            "OUTPUTTRIGGER_KIND": self._set_property(
+                output_trigger_kind_prop, self.output_trigger_kind, errors="raise"
+            ),
+            "OUTPUTTRIGGER_POLARITY": self._set_property(
+                output_trigger_polarity_prop, self.output_trigger_polarity, errors="raise"
+            ),
+        }
+
+        if self.output_trigger_kind in (
+            DCAMPROP.OUTPUTTRIGGER_KIND.GLOBALEXPOSURE,
+            DCAMPROP.OUTPUTTRIGGER_KIND.ANYROWEXPOSURE,
+        ) and self.output_trigger_basesensor is not None:
+            output_readbacks["OUTPUTTRIGGER_BASESENSOR"] = self._set_property(
+                output_trigger_basesensor_prop, self.output_trigger_basesensor, errors="ignore"
+            )
+
+        if self.output_trigger_kind == DCAMPROP.OUTPUTTRIGGER_KIND.PROGRAMABLE:
+            output_readbacks["OUTPUTTRIGGER_SOURCE"] = self._set_property(
+                output_trigger_source_prop, self.output_trigger_source, errors="raise"
+            )
+            output_readbacks["OUTPUTTRIGGER_ACTIVE"] = self._set_property(
+                output_trigger_active_prop, self.output_trigger_active, errors="log"
+            )
+            output_readbacks["OUTPUTTRIGGER_DELAY"] = self._set_property(
+                output_trigger_delay_prop, self.output_trigger_delay, errors="raise"
+            )
+            output_readbacks["OUTPUTTRIGGER_PERIOD"] = self._set_property(
+                output_trigger_period_prop, self.output_trigger_period, errors="raise"
+            )
+
+        if self.debug_output:
+            print(f"--- Applied output trigger connector {self.output_trigger_connector} ---", flush=True)
+            for name, value in output_readbacks.items():
+                print(f"{name}: {value}", flush=True)
+            print("--- end applied output trigger ---\n", flush=True)
 
     def _set_dcam_internal_buffer(self) -> None:
         buffer_size = c_int32(self.dcam_internal_buffer_size)
@@ -432,16 +832,49 @@ class DCAM(BaseModel):
 
     def _set_timeout(self) -> None:
         if self.timeout == "auto":
-            frame_interval = self._get_property(DCAM_IDPROP.INTERNAL_FRAMEINTERVAL) or 0
+            interval_sec = 0.0
+            if self.timing_mode == "masterpulse":
+                try:
+                    interval_sec = self._get_property(DCAM_IDPROP.MASTERPULSE_INTERVAL) or 0.0
+                except Exception:
+                    interval_sec = 0.0
+            if interval_sec <= 0:
+                try:
+                    interval_sec = self._get_property(DCAM_IDPROP.INTERNAL_FRAMEINTERVAL) or 0.0
+                except Exception:
+                    interval_sec = 0.0
+
+            exposure_sec = self.exposure_time / 1000.0
             self._timeout = max(
-                self._timeout, int((self.exposure_time + frame_interval) * 1000.0) + 500
+                self._timeout,
+                int(max(interval_sec, exposure_sec) * 1000.0) + 500,
             )
+            if self.debug_output:
+                print(f"FRAME_WAIT_TIMEOUT_MS: {self._timeout}", flush=True)
 
     def _start_capture(self) -> None:
         err = dcamcap_start(self._dcam_device.hdcam, self.capture_mode)
         if err.is_failed():
             raise RuntimeError(f"Failed to start device capture: {DCAMERR(err).name}")
         self._software_trigger()
+
+        if self.debug_output:
+            print("--- Capture started; measuring output trigger during active live capture ---", flush=True)
+            output_offset = (self.output_trigger_connector - 1) * int(DCAM_IDPROP._OUTPUTTRIGGER)
+            for name, prop in (
+                ("OUTPUTTRIGGER_KIND", int(DCAM_IDPROP.OUTPUTTRIGGER_KIND) + output_offset),
+                ("OUTPUTTRIGGER_POLARITY", int(DCAM_IDPROP.OUTPUTTRIGGER_POLARITY) + output_offset),
+                ("TRIGGER_GLOBALEXPOSURE", DCAM_IDPROP.TRIGGER_GLOBALEXPOSURE),
+                ("TIMING_GLOBALEXPOSUREDELAY", DCAM_IDPROP.TIMING_GLOBALEXPOSUREDELAY),
+                ("TIMING_INVALIDEXPOSUREPERIOD", DCAM_IDPROP.TIMING_INVALIDEXPOSUREPERIOD),
+                ("EXPOSURETIME", DCAM_IDPROP.EXPOSURETIME),
+                ("INTERNAL_FRAMEINTERVAL", DCAM_IDPROP.INTERNAL_FRAMEINTERVAL),
+            ):
+                try:
+                    print(f"{name}: {self._get_property(prop)}", flush=True)
+                except Exception as exc:
+                    print(f"{name}: unavailable: {exc}", flush=True)
+            print("--- end capture-start timing/output readback ---\n", flush=True)
 
     def _capture_status(self) -> DCAMCAP_STATUS:
         status = c_int32()

@@ -12,7 +12,7 @@ from poulet_py import (
 sources = [
     CounterSource(name="trial"),
     StimuliMetadataSource(name="metadata"),
-    TCSSource(name="tcs", port="/dev/tty.usbmodem1403", maximum_temperature=50),
+    TCSSource(name="tcs", port="/dev/ttyUSB0", maximum_temperature=50),
 ]
 sinks = [HDFSink(file="./temp.h5")]
 
