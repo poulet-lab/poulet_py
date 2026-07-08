@@ -45,12 +45,7 @@ class DRV2605Stimulus(BaseStimulus):
         default=400_000, 
         description="Fast I2C clock speed in Hz")
 
-    repeats: int = Field(
-        default=5,
-        description="Number of repeats for the effect sequence (1-8)",
-        ge=1,
-        le=8,
-    )
+
     waveform: int = Field(
         default=16,
         description="100% intensity 1000ms 'Alert' waveform effect (#16)",
@@ -70,6 +65,12 @@ class DRV2605Stimulus(BaseStimulus):
         description="Drive voltage in volts (0-5.6)",
         ge=0,
         le=5.6,
+    )
+    duration: Literal[0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000] = Field(
+        default=8*1000,
+        description="Stimulation in ms (0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000)",
+        ge=0,
+        le=8000,
     )
 
     i2c: I2C | None = Field(default=None)
@@ -107,6 +108,6 @@ class DRV2605Stimulus(BaseStimulus):
 
     def build(self, *args, **kwargs) -> Sequence[bytes]:
         self.set_drive_voltage(self.voltage)
-        self.set_effect16_repeats(self.repeats)
+        self.set_effect16_repeats(self.duration // 1000)
         self.play()
 
