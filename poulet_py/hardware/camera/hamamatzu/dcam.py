@@ -168,11 +168,11 @@ class DCAM(BaseModel):
             self._set_timeout()
             self._trigger_policy()
             self._open_dcam_wait()
-            self._start_capture()
-            self._software_trigger()
 
             if self.acquisition_type == AcquisitionType.CONTINUOUS:
+                self._start_capture()
                 self._start_acquisition_thread()
+
             self._is_open = True
         except Exception as e:
             raise RuntimeError("Failed to open Dcam") from e
@@ -185,10 +185,9 @@ class DCAM(BaseModel):
 
         if self.acquisition_type == AcquisitionType.CONTINUOUS:
             self._stop_acquisition_thread()
+            self._stop_capture()
 
-        self._stop_capture()
         self._close_dcam_wait()
-
         self._release_buffer()
         self._release_dcam_internal_buffer()
         self._release_dcam_device()
@@ -216,8 +215,11 @@ class DCAM(BaseModel):
         self._ensure_open()
         sample = None
 
-        if self.acquisition_type == AcquisitionType.FINITE and not self._acquire_sample():
-            return sample
+        if self.acquisition_type == AcquisitionType.FINITE:
+            self._start_capture()
+            if not self._acquire_sample():
+                return sample
+            self._stop_capture()
 
         with self._acquisition_cond:
             idx = (self._dcam_buffer_idx - 1) % self.buffer_size
@@ -231,6 +233,8 @@ class DCAM(BaseModel):
         deadline = monotonic_ns() + int(timeout * 1e9) if timeout >= 0 else None
 
         if self.acquisition_type == AcquisitionType.FINITE:
+            self._start_capture()
+
             if n < 0 and timeout < 0:
                 raise ValueError("For finite acquisition, either n or timeout must be specified.")
 
@@ -241,6 +245,8 @@ class DCAM(BaseModel):
                 and self._acquire_sample()
             ):
                 acquired += 1
+
+            self._stop_capture()
 
         elif self.acquisition_type == AcquisitionType.CONTINUOUS:
             with self._acquisition_cond:
@@ -428,6 +434,7 @@ class DCAM(BaseModel):
         err = dcamcap_start(self._dcam_device.hdcam, self.capture_mode)
         if err.is_failed():
             raise RuntimeError(f"Failed to start device capture: {DCAMERR(err).name}")
+        self._software_trigger()
 
     def _capture_status(self) -> DCAMCAP_STATUS:
         status = c_int32()
@@ -505,12 +512,12 @@ class DCAM(BaseModel):
 
             ptr = self._dcam_buffer[idx]["dcam"].ctypes.data
             self._dcam_frame.buf = c_void_p(ptr)
-            self._dcam_buffer[idx]["timestamp"] = monotonic_ns()
 
             err = dcambuf_copyframe(self._dcam_device.hdcam, byref(self._dcam_frame))
             if err.is_failed():
                 raise RuntimeError(f"Failed to copy data: {DCAMERR(err).name}")
 
+            self._dcam_buffer[idx]["timestamp"] = monotonic_ns()
             self._dcam_buffer_idx += 1
 
             self._acquisition_cond.notify_all()

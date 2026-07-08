@@ -1,12 +1,11 @@
 try:
     from time import monotonic_ns, sleep
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'tools' module. Install options:
 - Module:       pip install poulet_py[tools]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 def precise_sleep(t: float, precision: float = 0.0001):

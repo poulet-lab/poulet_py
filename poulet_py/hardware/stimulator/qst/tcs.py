@@ -19,13 +19,12 @@ try:
 
     from poulet_py import LOGGER, TCSCommand, TCSStimulus, precise_sleep
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'qst' module. Install options:
 - Dedicated:    pip install poulet_py[qst]
 - Module:       pip install poulet_py[hardware]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class TCSSerialSearchRequest(BaseModel):
@@ -246,13 +245,11 @@ class TCS(BaseModel, validate_assignment=True):
         if result:
             _, match = result
             if not match:
-                msg = "Info response did not match expected format"
-                raise RuntimeError(msg)
+                raise RuntimeError("Info response did not match expected format")
 
             return match.group(1).decode().replace("\r", "\n")
 
-        msg = "Device info request timed out"
-        raise RuntimeError(msg)
+        raise RuntimeError("Device info request timed out")
 
     def battery_info(self):
         """
@@ -275,14 +272,12 @@ class TCS(BaseModel, validate_assignment=True):
             expected_pattern=compile(rb"(?P<voltage>\d+\.\d+)v\s+(?P<percent>\d+)%"),
         )
         if not result:
-            msg = "No response from device"
-            raise RuntimeError(msg)
+            raise RuntimeError("No response from device")
 
         _, match = result
 
         if not match:
-            msg = "Battery response did not match expected format"
-            raise RuntimeError(msg)
+            raise RuntimeError("Battery response did not match expected format")
 
         return {
             "voltage": float(match.group("voltage")),
@@ -450,13 +445,11 @@ class TCS(BaseModel, validate_assignment=True):
         )
 
         if match is None:
-            msg = "Calibration failed or timed out without response"
-            raise RuntimeError(msg)
+            raise RuntimeError("Calibration failed or timed out without response")
 
         _, match = match
         if not match:
-            msg = "Calibration response did not match expected format"
-            raise RuntimeError(msg)
+            raise RuntimeError("Calibration response did not match expected format")
 
         neutral_raw = int(match.group(1))
         return neutral_raw / 10.0
@@ -492,8 +485,7 @@ class TCS(BaseModel, validate_assignment=True):
 
         with self._sampling_cond:
             if self._tcs_buffer_idx == 0:
-                msg = "No samples collected yet"
-                raise RuntimeError(msg)
+                raise RuntimeError("No samples collected yet")
 
             idx = (self._tcs_buffer_idx - 1) % self.buffer_size
             self._tcs_buffer_needle = self._tcs_buffer_idx
@@ -534,8 +526,7 @@ class TCS(BaseModel, validate_assignment=True):
         self._tcs_ensure_open()
 
         if data.shape[0] < n:
-            msg = f"Provided array has {data.shape[0]} rows, need at least {n}"
-            raise ValueError(msg)
+            raise ValueError(f"Provided array has {data.shape[0]} rows, need at least {n}")
 
         deadline = monotonic_ns() + timeout
 
@@ -579,22 +570,19 @@ class TCS(BaseModel, validate_assignment=True):
             exceed maximum_temperature.
         """
         if not isinstance(stimulus, TCSStimulus):
-            msg = f"Stimulus must be a TCSStimulus instance, got {type(stimulus)}"
-            raise ValueError(msg)
+            raise ValueError(f"Stimulus must be a TCSStimulus instance, got {type(stimulus)}")
 
         if stimulus.target > self.maximum_temperature:
-            msg = (
+            raise ValueError(
                 f"Target temperature {stimulus.target} exceeds "
                 f"maximum temperature {self.maximum_temperature}"
             )
-            raise ValueError(msg)
 
         if stimulus.baseline > self.maximum_temperature:
-            msg = (
+            raise ValueError(
                 f"Baseline temperature {stimulus.baseline} exceeds "
                 f"maximum temperature {self.maximum_temperature}"
             )
-            raise ValueError(msg)
 
     def _tcs_stimulus_timer(self, duration_ms: int):
         """
@@ -621,8 +609,7 @@ class TCS(BaseModel, validate_assignment=True):
             If serial connection is not open.
         """
         if not self._serial.is_open:
-            msg = "TCS serial connection is not open. Call open() first."
-            raise RuntimeError(msg)
+            raise RuntimeError("TCS serial connection is not open. Call open() first.")
 
     def _tcs_open_serial(self):
         """
@@ -644,8 +631,7 @@ class TCS(BaseModel, validate_assignment=True):
                 write_timeout=2,
             )
         except Exception as e:
-            msg = "Serial initialization failed"
-            raise RuntimeError(msg) from e
+            raise RuntimeError("Serial initialization failed") from e
 
     def _tcs_close_serial(self):
         """
@@ -672,8 +658,7 @@ class TCS(BaseModel, validate_assignment=True):
             self._tcs_buffer_idx = 0
             self._tcs_buffer_needle = 0
         except Exception as e:
-            msg = "Buffer initialization failed"
-            raise RuntimeError(msg) from e
+            raise RuntimeError("Buffer initialization failed") from e
 
     def _tcs_delete_buffer(self):
         """Delete the circular buffer and reset index."""
@@ -689,8 +674,7 @@ class TCS(BaseModel, validate_assignment=True):
             )
             self._acquisition_thread.start()
         except Exception as e:
-            msg = "Acquisition thread failed to start"
-            raise RuntimeError(msg) from e
+            raise RuntimeError("Acquisition thread failed to start") from e
 
     def _tcs_stop_acquisition_thread(self):
         """Stop the background acquisition thread."""
@@ -738,8 +722,7 @@ class TCS(BaseModel, validate_assignment=True):
                         self._sampling_cond.notify_all()
 
         except Exception as e:
-            msg = f"Read loop failed: {e}"
-            LOGGER.exception(msg)
+            LOGGER.exception(f"Read loop failed: {e}")
             self._stop_acquisition_event.set()
 
     def __enter__(self):

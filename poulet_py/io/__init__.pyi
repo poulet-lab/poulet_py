@@ -1,6 +1,4 @@
 # ruff: noqa TID252
-#from poulet_py.io.sources.ina228minimal import INA228Source_minimal
-
 from .eventing import BaseEvent, EventBus, EventHandler, SinkEvent
 from .sinks import BaseSink, HDFSink
 from .sources import (
@@ -13,7 +11,7 @@ from .sources import (
     Max31856Source,
     ThermocoupleType,
     StimuliMetadataSource,
-    INA228Source_minimal,
+    INA228Source,
     DCAMSource,
 )
 
@@ -21,7 +19,7 @@ __all__ = [
     "AcquisitionType",
     "BaseEvent",
     "StimuliMetadataSource",
-    "INA228Source_minimal",   
+    "INA228Source",
     "BaseSink",
     "ThermocoupleType",
     "BaseSource",

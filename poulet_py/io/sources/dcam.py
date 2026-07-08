@@ -6,13 +6,12 @@ try:
 
     from poulet_py import DCAM, LOGGER, AcquisitionType, BaseSource, precise_sleep
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'sources' module. Install options:
 - Dedicated:    pip install poulet_py[sources]
 - Module:       pip install poulet_py[io]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class DCAMSource(BaseSource, DCAM):
@@ -42,6 +41,7 @@ class DCAMSource(BaseSource, DCAM):
                 self._write_samples(sample)
         else:
             precise_sleep(self._max_stimulus_duration_ms / 1000.0)
+
         if self.acquisition_type == AcquisitionType.CONTINUOUS:
             samples = self.read_many_sample(data=self._temp_buffer, n=-1, timeout=-1)
             if samples > 0:

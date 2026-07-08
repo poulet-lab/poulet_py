@@ -37,13 +37,12 @@ try:
     )
 
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'stimulator' module. Install options:
 - Dedicated:    pip install poulet_py[stm]
 - Module:       pip install poulet_py[utils]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class StimulatorTrial(BaseModel):
@@ -56,11 +55,15 @@ class StimulatorTrial(BaseModel):
 
     name: str | None = Field(default=None, description="Name of the trial")
     stimuli: BaseStimulus | Sequence[BaseStimulus] = Field(..., description="Stimuli for the trial")
+    isi: int | Sequence[int] = Field(default=0, description="Inter-stimulus interval")
 
     @model_validator(mode="after")
     def validate_stimuli(self):
         if not isinstance(self.stimuli, Sequence):
             self.stimuli = [self.stimuli]
+
+        if isinstance(self.isi, range):
+            self.isi = list(self.isi)
         return self
 
 
@@ -178,8 +181,7 @@ class StimulatorRuntime(BaseModel):
     @bus.setter
     def bus(self, value: EventBus):
         if self._is_open:
-            msg = "Cannot change bus while stimulator is open"
-            raise RuntimeError(msg)
+            raise RuntimeError("Cannot change bus while stimulator is open")
 
         self._bus = value
         self._external_bus = True
@@ -291,21 +293,15 @@ class StimulatorRuntime(BaseModel):
                                 )
                                 continue
 
-                            msg = f"Trigger failed for trial {trial.name} in block {block.name}"
-                            raise RuntimeError(msg)
-
-                        # TODO write isi to metadata
-                        isi = self.get_isi(block.isi or self.isi)
-
-                        st_info = {
-                            f"{type(st).__name__}": st.model_dump(
-                                exclude_unset=True, exclude_none=True
+                            raise RuntimeError(
+                                f"Trigger failed for trial {trial.name} in block {block.name}"
                             )
-                            for st in trial.stimuli
-                        }
-                        st_info["isi"] = isi
 
-                        LOGGER.info("Trial %d: %s", trial_idx, st_info)
+                        isi = trial.isi
+                        trial.isi = self.get_isi(trial.isi or block.isi or self.isi)
+
+                        trial_info = trial.model_dump(exclude_unset=True, exclude_none=True)
+                        LOGGER.info("Trial %d: %s", trial_idx, trial_info)
 
                         for s in self.sources:
                             s.fire(trial.stimuli)
@@ -313,7 +309,9 @@ class StimulatorRuntime(BaseModel):
                         for s in self.sources:
                             s.wait()
 
-                        precise_sleep(isi / 1000.0)
+                        precise_sleep(trial.isi / 1000.0)
+                        trial.isi = isi
+
                         self._wait_paused()
 
         for s in self.sources:
@@ -321,8 +319,7 @@ class StimulatorRuntime(BaseModel):
 
     def _ensure_open(self):
         if not self._is_open:
-            msg = f"{type(self)} need to be opened first"
-            raise RuntimeError(msg)
+            raise RuntimeError(f"{type(self).__name__} need to be opened first")
 
     def _generate_bottom_toolbar(self):
         shortcuts = "<b>[ctrl-x]</b> Abort"

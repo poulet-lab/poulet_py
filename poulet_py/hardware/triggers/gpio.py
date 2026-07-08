@@ -7,14 +7,13 @@ try:
 
     from poulet_py import LOGGER, BaseTrigger, precise_sleep
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'gpio' module. Install options:
 - Dedicated:    pip install poulet_py[gpio]
 - Sub-Module:   pip install poulet_py[triggers]
 - Module:       pip install poulet_py[hardware]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class GPIOTrigger(BaseTrigger):
@@ -25,32 +24,21 @@ class GPIOTrigger(BaseTrigger):
     edge: Literal["rising", "falling", "both"] = Field("rising", description="Edge to detect")
 
     _triggered: bool = PrivateAttr(default=False)
-    _device: Button | None = PrivateAttr(None)
+    _device: Button = PrivateAttr()
 
-    def __init__(self, **data):
-        super().__init__(**data)
-        self._setup()
-
-    def _setup(self) -> None:
-        """Setup GPIO device."""
+    def _init(self) -> None:
         try:
             self._device = Button(self.pin, pull_up=self.pull_up)
             self._device.when_activated = self._on_rising
             self._device.when_deactivated = self._on_falling
         except Exception as e:
-            msg = f"Failed to initialize GPIO pin {self.pin}: {e}"
-            raise RuntimeError(msg) from e
+            raise RuntimeError(f"Failed to initialize GPIO pin {self.pin}: {e}") from e
 
-    def _on_rising(self):
-        if self.edge in ("rising", "both"):
-            self._triggered = True
+    def _close(self) -> None:
+        self._device.close()
+        del self._device
 
-    def _on_falling(self):
-        if self.edge in ("falling", "both"):
-            self._triggered = True
-
-    def wait(self) -> bool:
-        """Wait for GPIO event."""
+    def _wait(self) -> bool:
         try:
             start = time()
             self._triggered = False
@@ -65,8 +53,10 @@ class GPIOTrigger(BaseTrigger):
             LOGGER.error(f"Error waiting for GPIO event: {e}")
             return False
 
-    def cleanup(self) -> None:
-        """Cleanup GPIO resources."""
-        if self._device is not None:
-            self._device.close()
-            self._device = None
+    def _on_rising(self):
+        if self.edge in ("rising", "both"):
+            self._triggered = True
+
+    def _on_falling(self):
+        if self.edge in ("falling", "both"):
+            self._triggered = True

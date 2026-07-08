@@ -7,13 +7,12 @@ try:
 
     from poulet_py import LOGGER, BaseSource, SPIStimulus, precise_sleep
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'sources' module. Install options:
 - Dedicated:    pip install poulet_py[sources]
 - Module:       pip install poulet_py[io]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class SPISource(BaseSource):
@@ -53,8 +52,9 @@ class SPISource(BaseSource):
             self._spi.read0 = self.read0
             self._spi.mosi_idle_low = self.mosi_idle_low
         except Exception as e:
-            msg = f"Failed to initialize SPI device {self.spi_bus}:{self.spi_cs}: {e}"
-            raise RuntimeError(msg) from e
+            raise RuntimeError(
+                f"Failed to initialize SPI device {self.spi_bus}:{self.spi_cs}: {e}"
+            ) from e
 
         self._stop_acquisition = False
         self._start_acquisition_thread()

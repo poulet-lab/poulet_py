@@ -6,13 +6,12 @@ try:
 
     from poulet_py import LOGGER, BaseSource
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'sources' module. Install options:
 - Dedicated:    pip install poulet_py[sources]
 - Module:       pip install poulet_py[io]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class StimuliMetadataSource(BaseSource):
@@ -35,11 +34,11 @@ class StimuliMetadataSource(BaseSource):
         pass
 
     def _fire(self) -> bool:
-        timestamp = monotonic_ns()
         meta = [
             {type(st).__name__: st.model_dump(exclude_unset=True, exclude_none=True)}
             for st in self._stimuli
         ]
+        timestamp = monotonic_ns()
 
         json_data = dumps(
             meta,

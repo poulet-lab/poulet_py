@@ -77,13 +77,12 @@ try:
         signal.signal(signal.SIGTERM, handle_exit)
         import pythoncom
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'camera' module. Install options:
 - Dedicated:    pip install poulet_py[camera]
 - Module:       pip install poulet_py[hardware]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class ThermalCamera:

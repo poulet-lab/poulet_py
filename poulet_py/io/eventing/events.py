@@ -6,13 +6,12 @@ try:
     from pydantic import BaseModel, Field
 
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'event' module. Install options:
 - Dedicated:    pip install poulet_py[event]
 - Module:       pip install poulet_py[io]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class BaseEvent(BaseModel):

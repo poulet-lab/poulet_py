@@ -5,13 +5,12 @@ try:
 
     from poulet_py import BaseSource, precise_sleep
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'sources' module. Install options:
 - Dedicated:    pip install poulet_py[sources]
 - Module:       pip install poulet_py[io]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class CounterSource(BaseSource):
@@ -27,8 +26,8 @@ class CounterSource(BaseSource):
         pass
 
     def _fire(self) -> bool:
-        timestamp = monotonic_ns()
         self._counter += 1
+        timestamp = monotonic_ns()
 
         self._write_sample((timestamp, self._counter))
         precise_sleep(self._max_stimulus_duration_ms / 1000.0)
