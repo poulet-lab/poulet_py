@@ -2,12 +2,12 @@ try:
     from threading import Event, Thread
     from time import monotonic_ns, sleep
 
-    from adafruit_ina228 import AveragingCount, ConversionTime, INA228, Mode
+    from adafruit_ina228 import INA228, AveragingCount, ConversionTime, Mode
     from board import SCL, SDA
     from busio import I2C
     from pydantic import ConfigDict, Field, PrivateAttr
 
-    from poulet_py import BaseSource, LOGGER, precise_sleep
+    from poulet_py import LOGGER, BaseSource, precise_sleep
 
 except ImportError as e:
     raise ImportError(
@@ -149,8 +149,7 @@ class INA228Source(BaseSource):
         self._ina228.mode = self.mode
 
         LOGGER.info(
-            "INA228 %s at 0x%02X configured: mode=%s, avg=%s, "
-            "vbus_ct=%s, vshunt_ct=%s, temp_ct=%s",
+            "INA228 %s at 0x%02X configured: mode=%s, avg=%s, vbus_ct=%s, vshunt_ct=%s, temp_ct=%s",
             self.name,
             self.address,
             self.mode,
