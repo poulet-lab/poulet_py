@@ -1,4 +1,3 @@
-
 try:
     from time import monotonic_ns
     from typing import Any
@@ -8,7 +7,7 @@ try:
     from busio import I2C
     from pydantic import ConfigDict, Field, PrivateAttr
 
-    from poulet_py import BaseSource, DRV2605Stimulus, LOGGER, precise_sleep
+    from poulet_py import LOGGER, BaseSource, DRV2605Stimulus, precise_sleep
 
 except ImportError as e:
     msg = """
