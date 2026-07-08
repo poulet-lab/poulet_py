@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-version = "0.1.3"
+version = "0.2.0"
 name = "poulet_py"
 description = "A library which hosts various neuroscience python methods"
 readme = "README.md"
@@ -24,12 +24,14 @@ classifiers = [
 ]
 
 dependencies = [
-  "lazy_loader==0.4.*",
-  "pydantic==2.11.*",
-  "pydantic-settings>=2.10,<2.12",
-  "python-dotenv==1.1.*",
-  "rich==14.1.*",
-  "deprecated==1.2.*",
+  "lazy_loader<=0.5",
+  "pydantic<=2.13.4",
+  "pydantic-settings<=2.14.2",
+  "python-dotenv<=1.2.2",
+  "rich<=15.0.0",
+  "deprecated<=1.3.1",
+  "prompt-toolkit<=3.0.52",
+
 ]
 
 keywords = ["poulet_py"]
@@ -44,53 +46,79 @@ Source = "https://github.com/poulet-lab/poulet_py"
 allow-direct-references = true
 constraints-file = "constraints.txt"
 
+[tool.hatch.build.targets.wheel]
+artifacts = [
+  "artifacts/leptonUVC/x64/*.dll",
+  "artifacts/leptonUVC/x64/*.xml",
+  "artifacts/leptonUVC/x86/*.dll",
+  "artifacts/leptonUVC/x86/*.xml",
+]
+
+[tool.hatch.build.targets.wheel.force-include]
+"artifacts" = "poulet_py/artifacts"
+
 [project.optional-dependencies]
 ## Sub-modules ##
 # optional, define them on their corresponding module
 # Converters
 seq = [
-  "setuptools==80.9.*", # needed for flirpy as it depends on pkg_resources
-  "flirpy",             # install it separately from github repo
-  "zstd==1.5.*",
-  "pandas==2.3.*",
-  "tqdm==4.67.*",
-  "pillow==11.3.*",
-  "h5py==3.14.*",
+  "flirpy<=0.6.2",
+  "zstandard<=0.25.0",
+  "pandas<=3.0.2",
+  "pillow<=12.3.0",
+  "h5py<=3.16.0",
 ]
 # Hardware
 camera = [
-  "pypylon==4.2.*",
-  "opencv-python==4.12.*",
-  "numpy==2.2.*",
-  "scipy==1.16.*",
-  "matplotlib==3.10.*",
-  "h5py==3.14.*",
-  "keyboard==0.13.*",
-  "pywin32==311; platform_system == 'Windows'",
-  "pythonnet==3.0.*",
+  "pypylon<=26.6",
+  "opencv-python<=5.0.0.93",
+  "numpy<=2.4.4",
+  "scipy<=1.17.1",
+  "matplotlib<=3.10.9",
+  "h5py<=3.16.0",
+  "keyboard<=0.13.5",
+  "pywin32<=312; platform_system == 'Windows'",
+  "pythonnet<=3.1.0; platform_system == 'Windows'",
 ]
-arduino = ["pyserial==3.5.*"]
-julabo = ["pyserial==3.5.*"]
-qst = ["pandas==2.3.*", "tqdm==4.67.*", "pyserial==3.5.*"]
+daq = ["poulet_py[nidaq]"]
+nidaq = ["nidaqmx<=1.5.0"]
+arduino = ["pyserial<=3.5"]
+julabo = ["pyserial<=3.5"]
+qst = ["pandas<=3.0.2", "pyserial<=3.5"]
 triggers = ["poulet_py[gpio]"]
-gpio = ["gpiozero==2.0.*", "lgpio==0.2.*"]
+gpio = ["gpiozero<=2.0.1", "lgpio<=0.2.2.0; platform_system == 'Linux'"]
+soho = ["pandas<=3.0.2"]
+# IO
+event = ["numpydantic<=1.10.0"]
+sinks = ["poulet_py[event]", "h5py<=3.16.0", "orjson<=3.11.9", "numpy<=2.4.4"]
+sources = [
+  "poulet_py[event]",
+  "numpy<=2.4.4",
+  "open-ephys-python-tools<=1.0.1",
+  "spidev<=3.8; platform_system == 'Linux'",
+  "adafruit-circuitpython-max31856<=0.12.7; platform_system != 'Windows'",
+  "adafruit-circuitpython-ina228<2.0.5; platform_system != 'Windows'",
+]
 # Tools
 
 # Utils
-osc = ["pandas==2.3.*", "matplotlib==3.10.*", "numpy==2.2.*"]
+exp = ["poulet_py[io]"]
+osc = ["pandas<=3.0.2", "matplotlib<=3.10.9", "numpy<=2.4.4"]
 ## Main modules ##
 converters = ["poulet_py[seq]"]
-hardware = ["poulet_py[camera, arduino, julabo, qst, triggers]"]
-tools = ["orjson"]
-utils = ["poulet_py[qst, osc]"]
+hardware = ["poulet_py[camera, daq, arduino, julabo, qst, triggers, soho]"]
+io = ["poulet_py[event, sinks, sources]"]
+stimuli = ["poulet_py[qst, nidaq, io, tools, utils]"]
+tools = ["orjson<=3.11.9"]
+utils = ["poulet_py[exp, osc]"]
 # Install all modules
-all = ["poulet_py[converters, hardware, tools, utils]"]
+all = ["poulet_py[converters, hardware, io, stimuli, tools, utils]"]
 # Docs
 docs = [
-  "sphinx==8.2.*",
-  "pydata-sphinx-theme==0.16.*",
-  "sphinx-autodoc-typehints==3.2.*",
-  "ipython==9.4.*",
+  "sphinx<=9.1.0",
+  "pydata-sphinx-theme<=0.19.0",
+  "sphinx-autodoc-typehints<=3.10.2",
+  "ipython<=9.13.0",
 ]
 
 [tool.hatch.envs.docs]
@@ -115,7 +143,7 @@ python -m http.server --directory docs/build 8000
 """
 
 [tool.hatch.envs.lint]
-dependencies = ["mypy==1.17.*", "ruff==0.12.*"]
+dependencies = ["mypy<=1.20.2", "ruff<=0.15.12"]
 
 [tool.hatch.envs.lint.scripts]
 typing = "mypy --install-types --non-interactive {args:poulet_py tests}"
@@ -188,7 +216,7 @@ select = [
   "YTT",
   "I",
 ]
-ignore = ["ISC001"]
+ignore = ["ISC001", "EM101", "EM102"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["E402"]
@@ -212,19 +240,11 @@ max-args = 15
 ban-relative-imports = "all"
 
 [tool.hatch.envs.hatch-test]
-extra-dependencies = [
-  "pytest==8.4.*",
-  "flirpy @ git+https://github.com/LJMUAstroecology/flirpy.git",
-  "poulet_py[all]",
-]
+extra-dependencies = ["pytest<=9.0.3", "'poulet_py[all]'"]
 
 [[tool.hatch.envs.hatch-test.matrix]]
 python = ["3.11", "3.12", "3.13"]
-dependencies = [
-  "pytest==8.4.*",
-  "flirpy @ git+https://github.com/LJMUAstroecology/flirpy.git",
-  "'poulet_py[all]'",
-]
+dependencies = ["pytest<=9.0.3", "'poulet_py[all]'"]
 
 [tool.coverage.run]
 source_pkgs = ["poulet_py", "tests"]

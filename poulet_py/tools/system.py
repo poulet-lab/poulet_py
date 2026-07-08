@@ -1,0 +1,28 @@
+try:
+    from time import monotonic_ns, sleep
+except ImportError as e:
+    raise ImportError("""
+Missing 'tools' module. Install options:
+- Module:       pip install poulet_py[tools]
+- Full:         pip install poulet_py[all]
+""") from e
+
+
+def precise_sleep(t: float, precision: float = 0.0001):
+    duration_ns = int(t * 1e9)
+    end = monotonic_ns() + duration_ns
+    precision_ns = int(precision * 1e9)
+
+    while True:
+        now = monotonic_ns()
+        remaining = end - now
+
+        if remaining <= 0:
+            break
+
+        if remaining > precision_ns:
+            sleep(precision)
+        else:
+            while monotonic_ns() < end:
+                pass
+            break

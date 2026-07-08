@@ -1,46 +1,17 @@
 try:
     from datetime import datetime, timezone
     from inspect import stack
-    from os import chdir, makedirs
+    from os import chdir
     from pathlib import Path
     from re import sub
 
-    from deprecated import deprecated
-
     from poulet_py import LOGGER
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'tools' module. Install options:
 - Module:       pip install poulet_py[tools]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
-
-
-@deprecated(
-    "This function is deprecated and will be removed in the next release."
-    "Use os.makedirs(path, exists_ok=True) instead.",
-    version="0.0.2",
-)
-def check_or_create(path):
-    """
-    Function to check whether a folder exists.
-    If it does NOT exist, it is created
-    """
-    makedirs(path, exist_ok=True)
-
-
-@deprecated(
-    "This function is deprecated and will be removed in the next release."
-    "Use sanitize_path instead.",
-    version="0.0.2",
-)
-def define_folder_name(name: str, *, add_date: bool = True) -> str:
-    sanitized_name = sub(r"[^\w]", "_", name)
-
-    if add_date:
-        return f"{datetime.now(timezone.utc).strftime('%Y%m%d')}_{sanitized_name}"
-    return sanitized_name
+""") from e
 
 
 def sanitize_path(path: Path | str, *, add_timestamp: bool = False) -> Path:
