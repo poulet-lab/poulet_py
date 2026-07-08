@@ -1,6 +1,3 @@
-
-
-
 try:
     from threading import Event, Thread
     from time import monotonic_ns
@@ -71,54 +68,6 @@ class DRV2605Stimulus(BaseStimulus):
         le=5.6,
     )
 
-
-    # ...existing code...
-    i2c: I2C | None = Field(default=None)
-
-    try:
-        i2c = busio.I2C(board.SCL, board.SDA)
-    except Exception:
-        i2c = None
-
-    # Optional: keep the official driver for init/config/play compatibility
-    # drv = DRV2605(i2c)
-
-    # Raw register access over the same working Adafruit/Blinka I2C bus
-    raw_drv = I2CDevice(i2c, address) if i2c is not None else None
-
-    def write_reg(self, register, value):
-        if self.raw_drv is None:
-            raise RuntimeError("I2C device not initialized")
-        with self.raw_drv as dev:
-            dev.write(bytes([register, value & 0xFF]))
-
-    def write_block(self, start_register, values):
-        if self.raw_drv is None:
-            raise RuntimeError("I2C device not initialized")
-        with self.raw_drv as dev:
-            dev.write(bytes([start_register] + [v & 0xFF for v in values]))
-
-    def od_clamp_from_voltage(self, voltage):
-        return max(0, min(255, round(voltage * 255 / 5.6)))
-
-    def set_effect16_repeats(self, repeats, custom=False):
-        repeats = max(0, min(int(repeats), 7))
-        if custom:
-            slots = [16] * repeats + [0] * (8 - repeats)
-        else:
-            slots = [16] * repeats + [0] * (8 - repeats)
-        self.write_block(REG_WAVESEQ1, slots)
-
-    def set_drive_voltage(self, voltage):
-        self.write_reg(REG_OD_CLAMP, self.od_clamp_from_voltage(voltage))
-
-    def stimulate(self):
-        self.write_reg(REG_GO, 1)
-
-    def build(self, *args, **kwargs) -> Sequence[bytes]:
-        self.set_drive_voltage(self.voltage)
-        self.set_effect16_repeats(self.repeats, self.custom)
-        self.stimulate()
 
     i2c: I2C | None = Field(default=None)
 
