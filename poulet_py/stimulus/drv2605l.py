@@ -83,27 +83,27 @@ class DRV2605Stimulus(BaseStimulus):
 
     raw_drv = I2CDevice(i2c, DRV2605_ADDR)
 
-    def write_reg(register, value):
-        with raw_drv as dev:
+    def write_reg(self, register, value):
+        with self.raw_drv as dev:
             dev.write(bytes([register, value & 0xFF]))
 
-    def write_block(start_register, values):
-        with raw_drv as dev:
+    def write_block(self, start_register, values):
+        with self.raw_drv as dev:
             dev.write(bytes([start_register] + [v & 0xFF for v in values]))
 
-    def od_clamp_from_voltage(voltage):
+    def od_clamp_from_voltage(self, voltage):
         return max(0, min(255, round(voltage * 255 / 5.6)))
 
-    def set_effect16_repeats(repeats):
+    def set_effect16_repeats(self, repeats):
         repeats = max(0, min(int(repeats), 7))
         slots = [16] * repeats + [0] * (8 - repeats)
-        write_block(REG_WAVESEQ1, slots)
+        self.write_block(REG_WAVESEQ1, slots)
 
-    def set_drive_voltage(voltage):
-        write_reg(REG_OD_CLAMP, od_clamp_from_voltage(voltage))
+    def set_drive_voltage(self, voltage):
+        self.write_reg(REG_OD_CLAMP, self.od_clamp_from_voltage(voltage))
 
-    def play():
-        write_reg(REG_GO, 1)
+    def play(self  ):
+        self.write_reg(REG_GO, 1)
 
     def build(self, *args, **kwargs) -> Sequence[bytes]:
         self.set_drive_voltage(self.voltage)
