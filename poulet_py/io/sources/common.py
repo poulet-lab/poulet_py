@@ -261,14 +261,14 @@ class BaseSource(BaseModel, ABC):
                 break
 
             self._supports()
-
-            if not self._stimuli:
-                self._done_fire.set()
-                continue
             self._calculate_stimulus_duration()
+
             if self._barrier:
                 self._barrier.wait()
-            self._fire()
+
+            if self._stimuli:
+                self._fire()
+
             self._done_fire.set()
 
     def _publish_loop(self):

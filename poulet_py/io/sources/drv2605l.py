@@ -41,7 +41,7 @@ class DRV2605Source(BaseSource):
     bus_frequency: int = Field(default=400_000)
 
     ftdi_latency_ms: int | None = Field(
-        default=1,
+        default=None,
         ge=1,
         le=255,
         description=(
@@ -55,11 +55,6 @@ class DRV2605Source(BaseSource):
             "Optional externally supplied I2C bus. If None, the source creates "
             "busio.I2C(board.SCL, board.SDA) in _open()."
         ),
-    )
-
-    fire_on: tuple[type[DRV2605Stimulus], ...] = Field(
-        default=(DRV2605Stimulus,),
-        description="Fire for DRV2605Stimulus objects.",
     )
 
     _device: I2CDevice | None = PrivateAttr(default=None)
