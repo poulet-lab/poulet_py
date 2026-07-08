@@ -53,6 +53,7 @@ trials = [
         )
     ),
     StimulatorTrial(
+<<<<<<< HEAD
         stimuli=TCSStimulus(
             surface=0,
             baseline=32,
@@ -60,6 +61,15 @@ trials = [
             rise_rate=10,
             return_speed=10,
             duration=3000,
+=======
+    stimuli=TCSStimulus(
+        surface=0,
+        baseline=32,
+        target=20,
+        rise_rate=10,
+        return_speed=10,
+        duration=3000,
+>>>>>>> ff6c678 (Refactor TCSStimulus indentation for consistency)
         )
     ),
     StimulatorTrial(
