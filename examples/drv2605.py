@@ -1,15 +1,13 @@
-
 from poulet_py import (
     CounterSource,
     DRV2605Source,
     DRV2605Stimulus,
     HDFSink,
-    StimuliMetadataSource,
     StimulatorBlock,
     StimulatorRuntime,
     StimulatorTrial,
+    StimuliMetadataSource,
 )
-
 
 sources = [
     CounterSource(name="trial"),
