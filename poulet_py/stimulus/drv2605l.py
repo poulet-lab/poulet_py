@@ -105,9 +105,8 @@ class DRV2605Stimulus(BaseStimulus):
     def play():
         write_reg(REG_GO, 1)
 
-    @abstractmethod
     def build(self, *args, **kwargs) -> Sequence[bytes]:
         self.set_drive_voltage(self.voltage)
-        set_effect16_repeats(self.repeats)
-        play()
+        self.set_effect16_repeats(self.repeats)
+        self.play()
 
