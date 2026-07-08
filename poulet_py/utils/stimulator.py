@@ -300,7 +300,13 @@ class StimulatorRuntime(BaseModel):
                         isi = trial.isi
                         trial.isi = self.get_isi(trial.isi or block.isi or self.isi)
 
-                        trial_info = trial.model_dump(exclude_unset=True, exclude_none=True)
+                        trial_info = {
+                            type(st).__name__: st.model_dump(exclude_unset=True, exclude_none=True)
+                            for st in trial.stimuli
+                        }
+                        trial_info["isi"] = trial.isi
+                        trial_info["name"] = trial.name
+
                         LOGGER.info("Trial %d: %s", trial_idx, trial_info)
 
                         for s in self.sources:
