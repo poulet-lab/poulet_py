@@ -8,7 +8,7 @@ from poulet_py import (
     StimulatorTrial,
     StimuliMetadataSource,
     TCSSource,
-    TCSStimulus,   
+    TCSStimulus,
 )
 
 sources = [
@@ -52,7 +52,7 @@ trials = [
             drive_voltage=2.5,
         )
     ),
-        StimulatorTrial(
+    StimulatorTrial(
         stimuli=TCSStimulus(
             surface=0,
             baseline=32,
@@ -72,7 +72,6 @@ trials = [
             duration=3000,
         )
     ),
-
 ]
 
 blocks = [
