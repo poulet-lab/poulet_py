@@ -21,7 +21,7 @@ from .nidaq import (
     NIDigitalCompositeStimulus,
 )
 from .tcs import TCSStimulus
-
+from .drv2605l import DRV2605Stimulus
 __all__ = [
     "BaseStimulus",
     "NIAnalogCompositeStimulus",
