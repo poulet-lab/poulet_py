@@ -107,7 +107,8 @@ class DRV2605Stimulus(BaseStimulus):
         self.write_reg(REG_GO, 1)
 
     def build(self, *args, **kwargs) -> Sequence[bytes]:
+        output = [self.voltage, self.duration]
         self.set_drive_voltage(self.voltage)
-        self.set_effect16_repeats(self.duration // 1000)
+        self.set_effect16_repeats(self.duration / 1000)
         self.play()
 

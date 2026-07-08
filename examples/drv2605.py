@@ -19,7 +19,7 @@ trials = [
         stimuli=DRV2605Stimulus(
             address=0x5A,
             bus_frequency=400000,
-            repeats=5,
+            duration=2000,
             waveform=16,
             random=False,
             custom=False,
@@ -31,7 +31,7 @@ trials = [
         stimuli=DRV2605Stimulus(
             address=0x5A,
             bus_frequency=400000,
-            repeats=5,
+            duration=2000,
             waveform=16,
             random=False,
             custom=False,
@@ -40,7 +40,7 @@ trials = [
     ),
 ]
 
-blocks = [StimulatorBlock(trials=trials, trial_repetitions=5)]
+blocks = [StimulatorBlock(trials=trials, trial_repetitions=2)]
 
 exp = StimulatorRuntime(name="Test DRV2605", sources=sources, sinks=sinks, blocks=blocks)
 
