@@ -1,3 +1,6 @@
+from abc import abstractmethod
+
+
 try:
     from threading import Event, Thread
     from time import monotonic_ns
@@ -30,7 +33,8 @@ REG_WAVESEQ1 = 0x04
 REG_GO = 0x0C
 #drive voltage clamp register, 0-255 corresponds to 0-5.6V
 REG_OD_CLAMP = 0x17
-
+#i2c adress of the DRV2605, default is 0x5A
+DRV2605_ADDR = 0x5A
 
 class DRV2605Stimulus(BaseStimulus):
 
@@ -69,49 +73,39 @@ class DRV2605Stimulus(BaseStimulus):
     )
 
 
-    i2c: I2C | None = Field(default=None)
+    i2c = busio.I2C(board.SCL, board.SDA)
+    #Optional: keep the official driver for init/config/play compatibility
 
-    try:
-        i2c = busio.I2C(board.SCL, board.SDA)
-    except Exception:
-        i2c = None
+    drv = DRV2605(i2c)
+    #Raw register access over the same working Adafruit/Blinka I2C bus
 
-    # Optional: keep the official driver for init/config/play compatibility
-    # drv = DRV2605(i2c)
+    raw_drv = I2CDevice(i2c, DRV2605_ADDR)
 
-    # Raw register access over the same working Adafruit/Blinka I2C bus
-    raw_drv = I2CDevice(i2c, address) if i2c is not None else None
-
-    def write_reg(self, register, value):
-        if self.raw_drv is None:
-            raise RuntimeError("I2C device not initialized")
-        with self.raw_drv as dev:
+    def write_reg(register, value):
+        with raw_drv as dev:
             dev.write(bytes([register, value & 0xFF]))
 
-    def write_block(self, start_register, values):
-        if self.raw_drv is None:
-            raise RuntimeError("I2C device not initialized")
-        with self.raw_drv as dev:
+    def write_block(start_register, values):
+        with raw_drv as dev:
             dev.write(bytes([start_register] + [v & 0xFF for v in values]))
 
-    def od_clamp_from_voltage(self, voltage):
+    def od_clamp_from_voltage(voltage):
         return max(0, min(255, round(voltage * 255 / 5.6)))
 
-    def set_effect16_repeats(self, repeats, custom=False):
+    def set_effect16_repeats(repeats):
         repeats = max(0, min(int(repeats), 7))
-        if custom:
-            slots = [16] * repeats + [0] * (8 - repeats)
-        else:
-            slots = [16] * repeats + [0] * (8 - repeats)
-        self.write_block(REG_WAVESEQ1, slots)
+        slots = [16] * repeats + [0] * (8 - repeats)
+        write_block(REG_WAVESEQ1, slots)
 
-    def set_drive_voltage(self, voltage):
-        self.write_reg(REG_OD_CLAMP, self.od_clamp_from_voltage(voltage))
+    def set_drive_voltage(voltage):
+        write_reg(REG_OD_CLAMP, od_clamp_from_voltage(voltage))
 
-    def stimulate(self):
-        self.write_reg(REG_GO, 1)
+    def play():
+        write_reg(REG_GO, 1)
 
+    @abstractmethod
     def build(self, *args, **kwargs) -> Sequence[bytes]:
         self.set_drive_voltage(self.voltage)
-        self.set_effect16_repeats(self.repeats, self.custom)
-        self.stimulate()
+        set_effect16_repeats(self.repeats)
+        play()
+
