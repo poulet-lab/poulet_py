@@ -36,11 +36,14 @@ class INA228Source(BaseSource):
     _ina228: INA228 = PrivateAttr()
     _internal_i2c: bool = PrivateAttr(default=False)
 
-    _acquisition_thread: Thread = PrivateAttr()
+    _acquisition_thread: Thread = PrivateAttr(default=None)
     _stop_acquisition_event: Event = PrivateAttr(default_factory=Event)
 
     def _set_buffer_dtype(self):
-        self._buffer_dtype = [("timestamp", "uint64"), ("bus_voltage", "float32")]
+        self._source_buffer_dtype = [
+            ("timestamp", "uint64"),
+            ("bus_voltage", "float32"),
+        ]
 
     def _open(self):
         try:
