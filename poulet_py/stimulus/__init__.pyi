@@ -44,4 +44,5 @@ __all__ = [
     "NITriangleAnalogStimulus",
     "NIWhiteNoiseAnalogStimulus",
     "TCSStimulus",
+    "DRV2605Stimulus"
 ]

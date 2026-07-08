@@ -70,6 +70,7 @@ from .stimulus import (
     NITriangleAnalogStimulus,
     NIWhiteNoiseAnalogStimulus,
     TCSStimulus,
+    DRV2605Stimulus,
 )
 from .tools import go_to, json_serializer, repeat, sanitize_path, precise_sleep
 from .utils import StimulatorBlock, StimulatorRuntime, StimulatorTrial, Oscilloscope
@@ -154,4 +155,5 @@ __all__ = [
     "DCAM",
     "DCAMPROP",
     "DCAMSource",
+    "DRV2605Stimulus",
 ]
