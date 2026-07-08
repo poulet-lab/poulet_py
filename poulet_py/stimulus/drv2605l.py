@@ -72,6 +72,7 @@ class DRV2605Stimulus(BaseStimulus):
         le=5.6,
     )
 
+    i2c: I2C | None = Field(default=None)
 
     i2c = busio.I2C(board.SCL, board.SDA)
     #Optional: keep the official driver for init/config/play compatibility
