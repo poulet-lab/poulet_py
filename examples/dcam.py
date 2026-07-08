@@ -27,7 +27,6 @@ from poulet_py import (
 )
 from poulet_py.hardware.camera.hamamatzu._api import DCAMPROP
 
-
 WINDOW_NAME = "dcam"
 
 # Settings verified in the standalone/V5 path:

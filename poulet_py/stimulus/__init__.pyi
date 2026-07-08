@@ -22,6 +22,7 @@ from .nidaq import (
 )
 from .tcs import TCSStimulus
 from .drv2605l import DRV2605Stimulus
+
 __all__ = [
     "BaseStimulus",
     "NIAnalogCompositeStimulus",
@@ -44,5 +45,5 @@ __all__ = [
     "NITriangleAnalogStimulus",
     "NIWhiteNoiseAnalogStimulus",
     "TCSStimulus",
-    "DRV2605Stimulus"
+    "DRV2605Stimulus",
 ]

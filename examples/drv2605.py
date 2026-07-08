@@ -1,11 +1,11 @@
 from poulet_py import (
     CounterSource,
+    DRV2605Stimulus,
     HDFSink,
     StimulatorBlock,
     StimulatorRuntime,
     StimulatorTrial,
     StimuliMetadataSource,
-    DRV2605Stimulus,    
 )
 
 sources = [
@@ -23,10 +23,9 @@ trials = [
             waveform=16,
             random=False,
             custom=False,
-            voltage=4.5
+            voltage=4.5,
         )
     ),
-
     StimulatorTrial(
         stimuli=DRV2605Stimulus(
             address=0x5A,
@@ -35,7 +34,7 @@ trials = [
             waveform=16,
             random=False,
             custom=False,
-            voltage=4.5
+            voltage=4.5,
         )
     ),
 ]
