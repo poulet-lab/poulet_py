@@ -46,6 +46,7 @@ from .io import (
     ThermocoupleType,
     StimuliMetadataSource,
     DCAMSource,
+    DRV2605Source,
 )
 from .stimulus import (
     BaseStimulus,
@@ -154,4 +155,5 @@ __all__ = [
     "DCAMPROP",
     "DCAMSource",
     "DRV2605Stimulus",
+    "DRV2605Source",
 ]

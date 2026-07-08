@@ -1,109 +1,77 @@
 try:
-    from threading import Event, Thread
-    from time import monotonic_ns
-    from typing import Literal
+    from typing import Any
 
-    import board
-    import busio
-    from adafruit_bus_device.i2c_device import I2CDevice
-    from adafruit_drv2605 import DRV2605
-    from busio import I2C
-    from pydantic import ConfigDict, Field, PrivateAttr
-    from pyftdi.ftdi import Sequence
+    from pydantic import Field
 
-    from poulet_py import LOGGER, BaseStimulus, precise_sleep
+    from poulet_py import BaseStimulus
 
 except ImportError as e:
     msg = """
-Missing DRV2605 source dependencies. Install options:
-- Dedicated:    pip install poulet_py[sources] adafruit-circuitpython-drv2605 adafruit-blinka
-- Module:       pip install poulet_py[io] adafruit-circuitpython-drv2605 adafruit-blinka
-- Full:         pip install poulet_py[all] adafruit-circuitpython-drv2605 adafruit-blinka
+Missing DRV2605L stimulus dependencies.
+
+Install options:
+- Dedicated:    pip install poulet_py[stimulus]
+- Module:       pip install poulet_py[io]
+- Full:         pip install poulet_py[all]
 """
     raise ImportError(msg) from e
 
-# Minimal vaible to test the DRV2605 driver and its integration with Poulet-Py.
-# This is a simple example that initializes the DRV2605, sets up a sequence of effects, and plays them.
-# For now a user setable sequence length of 1000ms "Alert" at 100% intensity is used.
-
-# register to set the waveform sequence, 8 slots of 1 byte each, 0-123 for effect number, 0 for empty slot
-REG_WAVESEQ1 = 0x04
-# register to start the effect sequence
-REG_GO = 0x0C
-# drive voltage clamp register, 0-255 corresponds to 0-5.6V
-REG_OD_CLAMP = 0x17
-# i2c adress of the DRV2605, default is 0x5A
-DRV2605_ADDR = 0x5A
-
 
 class DRV2605Stimulus(BaseStimulus):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    """
+    Stimulus description for a DRV2605L haptic motor driver.
 
-    address: int = Field(default=0x5A, description="DRV2605 I2C address")
-    bus_frequency: int = Field(default=400_000, description="Fast I2C clock speed in Hz")
+    This class does not touch hardware. It only describes what should be played.
+    The hardware execution is handled by DRV2605Source.
+    """
+
+    duration: int = Field(
+        default=1000,
+        ge=1,
+        le=7000,
+        description=(
+            "Nominal stimulus duration in ms. If repeat_count is not given, "
+            "duration // 1000 is used as the number of waveform repetitions, "
+            "clamped to 0-7."
+        ),
+    )
 
     waveform: int = Field(
         default=16,
-        description="100% intensity 1000ms 'Alert' waveform effect (#16)",
         ge=1,
         le=123,
+        description="DRV2605L ROM waveform/effect ID. Effect 16 is the 1000 ms alert.",
     )
-    random: int = Field(
-        default=False,
-        description="Whether to randomize the waveform length (True/False)",
-    )
-    custom: int = Field(
-        default=False,
-        description="Whether to use a custom waveform sequence (True/False)",
-    )
-    voltage: float = Field(
-        default=4.5,
-        description="Drive voltage in volts (0-5.6)",
+
+    repeat_count: int | None = Field(
+        default=None,
         ge=0,
+        le=7,
+        description=(
+            "Number of times to place the waveform into the 8-slot waveform "
+            "sequencer. Slot 8 is kept as 0 terminator, so valid range is 0-7. "
+            "If None, duration // 1000 is used."
+        ),
+    )
+
+    drive_voltage: float | None = Field(
+        default=None,
+        ge=0.0,
         le=5.6,
-    )
-    duration: Literal[0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000] = Field(
-        default=8 * 1000,
-        description="Stimulation in ms (0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000)",
-        ge=0,
-        le=8000,
+        description=(
+            "Optional OD_CLAMP voltage in V. If None, the current DRV2605L "
+            "configuration is left unchanged."
+        ),
     )
 
-    i2c: I2C | None = Field(default=None)
+    def build(self, *args: Any, **kwargs: Any) -> dict[str, int | float | None]:
+        if self.repeat_count is None:
+            repeat_count = max(0, min(int(self.duration // 1000), 7))
+        else:
+            repeat_count = self.repeat_count
 
-    i2c = busio.I2C(board.SCL, board.SDA)
-    # Optional: keep the official driver for init/config/play compatibility
-
-    drv: DRV2605 | None = Field(default=None)
-    drv = DRV2605(i2c)
-    # Raw register access over the same working Adafruit/Blinka I2C bus
-    raw_drv: I2CDevice | None = Field(default=None)
-
-    raw_drv = I2CDevice(i2c, DRV2605_ADDR)
-
-    def write_reg(self, register, value):
-        with self.raw_drv as dev:
-            dev.write(bytes([register, value & 0xFF]))
-
-    def write_block(self, start_register, values):
-        with self.raw_drv as dev:
-            dev.write(bytes([start_register] + [v & 0xFF for v in values]))
-
-    def od_clamp_from_voltage(self, voltage):
-        return max(0, min(255, round(voltage * 255 / 5.6)))
-
-    def set_effect16_repeats(self, repeats):
-        repeats = max(0, min(int(repeats), 7))
-        slots = [16] * repeats + [0] * (8 - repeats)
-        self.write_block(REG_WAVESEQ1, slots)
-
-    def set_drive_voltage(self, voltage):
-        self.write_reg(REG_OD_CLAMP, self.od_clamp_from_voltage(voltage))
-
-    def play(self):
-        self.write_reg(REG_GO, 1)
-
-    def build(self, *args, **kwargs) -> Sequence[bytes]:
-        self.set_drive_voltage(self.voltage)
-        self.set_effect16_repeats(self.duration / 1000)
-        self.play()
+        return {
+            "waveform": self.waveform,
+            "repeat_count": repeat_count,
+            "drive_voltage": self.drive_voltage,
+        }
