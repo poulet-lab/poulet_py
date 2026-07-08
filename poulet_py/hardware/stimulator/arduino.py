@@ -7,13 +7,12 @@ try:
 
     from poulet_py import LOGGER, setup_logging
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'arduino' module. Install options:
 - Dedicated:    pip install poulet_py[arduino]
 - Module:       pip install poulet_py[hardware]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class Arduino:

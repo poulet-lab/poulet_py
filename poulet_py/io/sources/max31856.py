@@ -1,7 +1,7 @@
 try:
     from enum import Enum
     from threading import Event, Thread
-    from time import time_ns
+    from time import monotonic_ns
     from typing import Literal
 
     from adafruit_blinka.microcontroller.generic_linux.rpi_gpio_pin import Pin
@@ -25,13 +25,12 @@ try:
 
     from poulet_py import LOGGER, BaseSource, precise_sleep
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'sources' module. Install options:
 - Dedicated:    pip install poulet_py[sources]
 - Module:       pip install poulet_py[io]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class ThermocoupleType(int, Enum):
@@ -68,16 +67,17 @@ class Max31856Source(BaseSource):
     reference_temperature_thresholds: tuple[float, float] = Field(
         default=(-2.0, 40.0), description="Cold junction low/high fault threshold."
     )
+    spi: SPI | None = PrivateAttr(None)
 
-    _spi: SPI | None = PrivateAttr(None)
+    _internal_spi: bool = PrivateAttr(default=False)
     _cs: DigitalInOut | None = PrivateAttr(default=None)
     _max31856: MAX31856 = PrivateAttr()
 
-    _acquisition_thread: Thread | None = PrivateAttr(default=None)
+    _acquisition_thread: Thread = PrivateAttr()
     _stop_acquisition_event: Event = PrivateAttr(default_factory=Event)
 
     def _set_buffer_dtype(self):
-        self._buffer_dtype = [
+        self._source_buffer_dtype = [
             ("timestamp", "uint64"),
             ("temperature", "float32"),
             ("reference", "float32"),
@@ -86,7 +86,9 @@ class Max31856Source(BaseSource):
 
     def _open(self):
         try:
-            self._spi = SPI(self.sclk, self.mosi, self.miso)
+            if self.spi is None:
+                self._spi = SPI(self.sclk, self.mosi, self.miso)
+                self._internal_spi = True
 
             if self.cs_pin:
                 self._cs = DigitalInOut(self.cs_pin)
@@ -100,15 +102,34 @@ class Max31856Source(BaseSource):
             )
             self._max31856.temperature_thresholds = self.temperature_thresholds
             self._max31856.reference_temperature_thresholds = self.reference_temperature_thresholds
-
         except Exception as e:
-            msg = f"Failed to initialize MAX31856: {e}"
-            raise RuntimeError(msg) from e
+            raise RuntimeError(f"Failed to initialize MAX31856: {e}") from e
 
         self._start_acquisition_thread()
 
+    def _close(self):
+        """Close the SPI device and stop acquisition thread."""
+        self._stop_acquisition_event.set()
+
+        if self._acquisition_thread and self._acquisition_thread.is_alive():
+            self._acquisition_thread.join(timeout=2.0)
+            if self._acquisition_thread.is_alive():
+                LOGGER.warning("MAX31856: Acquisition thread is still alive after closure")
+
+        del self._acquisition_thread
+        del self._max31856
+
+        if self._cs:
+            self._cs.deinit()
+
+        if self._spi and self._internal_spi:
+            self._spi.deinit()
+
+    def _fire(self) -> bool:
+        precise_sleep(self._max_stimulus_duration_ms / 1000.0)
+        return True
+
     def _start_acquisition_thread(self):
-        """Start the background acquisition thread."""
         if self._acquisition_thread and self._acquisition_thread.is_alive():
             return
 
@@ -121,30 +142,12 @@ class Max31856Source(BaseSource):
         )
         self._acquisition_thread.start()
 
-    def _close(self):
-        """Close the SPI device and stop acquisition thread."""
-        self._stop_acquisition_event.set()
-
-        if self._acquisition_thread and self._acquisition_thread.is_alive():
-            self._acquisition_thread.join(timeout=2.0)
-            if self._acquisition_thread.is_alive():
-                LOGGER.warning("MAX31856: Acquisition thread is still alive after closure")
-
-        if self._spi:
-            self._spi.deinit()
-
-        if self._cs:
-            self._cs.deinit()
-
-        self._acquisition_thread = None
-
     def _acquisition_thread_func(self):
-        """Background thread for continuous SPI data acquisition."""
         while not self._stop_acquisition_event.is_set():
             try:
                 faults = self._max31856._read_register(_MAX31856_SR_REG, 1)[0]
                 self._max31856._perform_one_shot_measurement()
-                timestamp = time_ns()
+                timestamp = monotonic_ns()
                 temperature = self._max31856.read_high_res_temp()
                 reference = self._max31856.unpack_reference_temperature()
 
@@ -156,11 +159,6 @@ class Max31856Source(BaseSource):
             except Exception as e:
                 LOGGER.error(f"MAX31856 acquisition error: {e}")
                 break
-
-    def _fire(self) -> bool:
-        precise_sleep(self._max_stimulus_duration_ms / 1000.0)
-
-        return True
 
     @staticmethod
     def _log_faults(faults: int):
@@ -183,7 +181,4 @@ class Max31856Source(BaseSource):
             if faults & _MAX31856_FAULT_OPEN:
                 fault_msgs.append("open_tc")
 
-            LOGGER.warning(
-                "MAX31856 faults: %s",
-                ", ".join(fault_msgs),
-            )
+            LOGGER.warning("MAX31856 faults: %s", ", ".join(fault_msgs))

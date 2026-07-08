@@ -10,13 +10,12 @@ try:
     from poulet_py import BaseEvent, BaseSink, SinkEvent
 
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'sinks' module. Install options:
 - Dedicated:    pip install poulet_py[sinks]
 - Module:       pip install poulet_py[io]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class HDFSink(BaseSink):
@@ -134,12 +133,11 @@ class HDFSink(BaseSink):
             src = self._sources[name]
 
             if arr.shape[1:] != src["fixed_shape"]:
-                msg = (
+                raise ValueError(
                     f"Shape mismatch for source '{name}'. "
                     f"Expected (*, {src['fixed_shape']}), "
                     f"got {arr.shape}"
                 )
-                raise ValueError(msg)
 
             append_len = arr.shape[0]
             self._grow_if_needed(src, append_len)

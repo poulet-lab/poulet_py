@@ -1,19 +1,18 @@
 try:
     from threading import Thread
-    from time import time_ns
+    from time import monotonic_ns
 
     import spidev
     from pydantic import Field, PrivateAttr
 
     from poulet_py import LOGGER, BaseSource, SPIStimulus, precise_sleep
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'sources' module. Install options:
 - Dedicated:    pip install poulet_py[sources]
 - Module:       pip install poulet_py[io]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class SPISource(BaseSource):
@@ -37,7 +36,7 @@ class SPISource(BaseSource):
     _stop_acquisition: bool = PrivateAttr(default=False)
 
     def _set_buffer_dtype(self):
-        self._buffer_dtype = [("timestamp", "uint64"), ("data", "uint8", self.read_size)]
+        self._source_buffer_dtype = [("timestamp", "uint64"), ("data", "uint8", self.read_size)]
 
     def _open(self):
         try:
@@ -53,8 +52,9 @@ class SPISource(BaseSource):
             self._spi.read0 = self.read0
             self._spi.mosi_idle_low = self.mosi_idle_low
         except Exception as e:
-            msg = f"Failed to initialize SPI device {self.spi_bus}:{self.spi_cs}: {e}"
-            raise RuntimeError(msg) from e
+            raise RuntimeError(
+                f"Failed to initialize SPI device {self.spi_bus}:{self.spi_cs}: {e}"
+            ) from e
 
         self._stop_acquisition = False
         self._start_acquisition_thread()
@@ -90,12 +90,12 @@ class SPISource(BaseSource):
         while not self._stop_acquisition and self._is_open:
             try:
                 data = self._spi.readbytes(self.read_size)  # Returns List[int]
-                timestamp = time_ns()
+                timestamp = monotonic_ns()
 
                 with self._lock:
-                    idx = self._buffer_idx % self.buffer_size
-                    self._buffer[idx]["timestamp"] = timestamp
-                    self._buffer[idx]["data"] = data  # Store the list of ints
+                    idx = self._source_buffer_idx % self.buffer_size
+                    self._source_buffer[idx]["timestamp"] = timestamp
+                    self._source_buffer[idx]["data"] = data  # Store the list of ints
                     self._buffer_idx += 1
 
             except Exception as e:
@@ -113,6 +113,6 @@ class SPISource(BaseSource):
 
                 # Read response if in finite mode (store in buffer)
                 data = self._spi.readbytes(self.read_size)
-                timestamp = time_ns()
+                timestamp = monotonic_ns()
 
         return True

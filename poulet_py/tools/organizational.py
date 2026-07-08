@@ -7,12 +7,11 @@ try:
 
     from poulet_py import LOGGER
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'tools' module. Install options:
 - Module:       pip install poulet_py[tools]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 def sanitize_path(path: Path | str, *, add_timestamp: bool = False) -> Path:

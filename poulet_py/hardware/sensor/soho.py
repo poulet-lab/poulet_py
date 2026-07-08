@@ -43,13 +43,12 @@ try:
     from poulet_py import LOGGER
 
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'soho' module. Install options:
 - Dedicated:    pip install poulet_py[soho]
 - Module:       pip install poulet_py[hardware]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 console = Console()
 
@@ -523,8 +522,9 @@ class Soho(BaseModel):
         except RuntimeError:
             asyncio.run(self._pause_and_test_connection_async())
         else:
-            msg = "pause_and_test_connection() cannot be called from a running event loop"
-            raise RuntimeError(msg)
+            raise RuntimeError(
+                "pause_and_test_connection() cannot be called from a running event loop"
+            )
 
     async def _pause_and_test_connection_async(self) -> None:
         """Async implementation (keyboard handler and internal use)."""
