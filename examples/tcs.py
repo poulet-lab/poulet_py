@@ -38,7 +38,7 @@ trials = [
         )
     ),
 ]
-blocks = [StimulatorBlock(trials=trials, trial_repetitions=5)]
+blocks = [StimulatorBlock(trials=trials, trial_repetitions=2)]
 
 exp = StimulatorRuntime(name="Test TCS", sources=sources, sinks=sinks, blocks=blocks)
 
