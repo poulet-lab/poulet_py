@@ -26,7 +26,7 @@ classifiers = [
 dependencies = [
   "lazy_loader<=0.5",
   "pydantic<=2.13.4",
-  "pydantic-settings<=2.14.1",
+  "pydantic-settings<=2.14.2",
   "python-dotenv<=1.2.2",
   "rich<=15.0.0",
   "deprecated<=1.3.1",
@@ -65,7 +65,7 @@ seq = [
   "flirpy<=0.6.2",
   "zstandard<=0.25.0",
   "pandas<=3.0.2",
-  "pillow<=12.2.0",
+  "pillow<=12.3.0",
   "h5py<=3.16.0",
 ]
 # Hardware
@@ -89,7 +89,7 @@ triggers = ["poulet_py[gpio]"]
 gpio = ["gpiozero<=2.0.1", "lgpio<=0.2.2.0; platform_system == 'Linux'"]
 soho = ["pandas<=3.0.2"]
 # IO
-event = ["numpydantic<=1.9.1"]
+event = ["numpydantic<=1.10.0"]
 sinks = ["poulet_py[event]", "h5py<=3.16.0", "orjson<=3.11.9", "numpy<=2.4.4"]
 sources = [
   "poulet_py[event]",
@@ -116,7 +116,7 @@ all = ["poulet_py[converters, hardware, io, stimuli, tools, utils]"]
 # Docs
 docs = [
   "sphinx<=9.1.0",
-  "pydata-sphinx-theme<=0.18.0",
+  "pydata-sphinx-theme<=0.19.0",
   "sphinx-autodoc-typehints<=3.10.2",
   "ipython<=9.13.0",
 ]
