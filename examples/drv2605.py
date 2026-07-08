@@ -56,6 +56,7 @@ blocks = [
 ]
 
 experiment = StimulatorRuntime(
+    name="drv2605_test",
     sources=sources,
     sinks=sinks,
     blocks=blocks,
