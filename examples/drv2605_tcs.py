@@ -1,6 +1,6 @@
 from board import SCL, SDA
 from busio import I2C
-
+from adafruit_ina228 import AveragingCount, ConversionTime, Mode
 from poulet_py import (
     AcquisitionType,
     CounterSource,
@@ -13,6 +13,8 @@ from poulet_py import (
     StimuliMetadataSource,
     TCSSource,
     TCSStimulus,
+    DRV2605Source,
+    DRV2605Stimulus
 )
 
 # create common i2c bus for all sources
@@ -27,24 +29,35 @@ sources = [
         port="/dev/ttyUSB0",
         maximum_temperature=50,
     ),
-    DCAMSource(name="dcam", acquisition_type=AcquisitionType.CONTINUOUS),
+    #DCAMSource(name="dcam", acquisition_type=AcquisitionType.CONTINUOUS),
     INA228Source(
-        name="ina228_mouse",
-        address=0x41,
-        i2c=i2c,
-        bus_voltage_conv_time=50,
-        averaging_count=1,
-        ftdi_latency_ms=1,
-    ),
+    name="ina228_mouse",
+    i2c=i2c,
+    address=0x41,
+    bus_frequency=1_000_000,
+    buffer_size=10_000,
+    sample_interval_s=0.0,
+    mode=Mode.CONT_BUS,
+    averaging_count=AveragingCount.COUNT_16,
+    bus_voltage_conv_time=ConversionTime.TIME_150_US,
+    ftdi_latency_ms=1,
+        ),
     INA228Source(
-        name="ina228_pad",
-        address=0x40,
-        i2c=i2c,
-        bus_voltage_conv_time=50,
-        averaging_count=1,
-        ftdi_latency_ms=1,
-    ),
+    name="ina228_pad",
+    i2c=i2c,
+    address=0x40,
+    bus_frequency=1_000_000,
+    buffer_size=10_000,
+    sample_interval_s=0.0,
+    mode=Mode.CONT_BUS,
+    averaging_count=AveragingCount.COUNT_16,
+    bus_voltage_conv_time=ConversionTime.TIME_150_US,
+    ftdi_latency_ms=1,
+        ),
+
+
 ]
+
 
 sinks = [
     HDFSink(file="./temp_drv2605_tcs_ins_10x.h5"),
@@ -106,7 +119,7 @@ trials = [
 ]
 
 blocks = [
-    StimulatorBlock(trials=trials, trial_repetitions=1),
+    StimulatorBlock(trials=trials, trial_repetitions=10),
 ]
 
 experiment = StimulatorRuntime(
