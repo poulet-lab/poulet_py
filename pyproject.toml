@@ -70,7 +70,7 @@ seq = [
 ]
 # Hardware
 camera = [
-  "pypylon<=26.5.0",
+  "pypylon<=26.6",
   "opencv-python<=4.13.0.92",
   "numpy<=2.4.4",
   "scipy<=1.17.1",
