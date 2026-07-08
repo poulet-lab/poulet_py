@@ -30,7 +30,7 @@ trials = [
             waveform=16,
             repeat_count=1,
             duration=1000,
-            drive_voltage=3.0,
+            drive_voltage=5.0,
         )
     ),
     StimulatorTrial(
@@ -46,7 +46,7 @@ trials = [
             waveform=16,
             repeat_count=7,
             duration=7000,
-            drive_voltage=4.5,
+            drive_voltage=2.5,
         )
     ),
 ]
@@ -56,6 +56,7 @@ blocks = [
 ]
 
 experiment = StimulatorRuntime(
+    name="Test_DRV2605L",
     sources=sources,
     sinks=sinks,
     blocks=blocks,
