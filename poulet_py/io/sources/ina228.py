@@ -2,6 +2,7 @@ try:
     from threading import Event, Thread
     from time import monotonic_ns
     from typing import Literal
+
     from adafruit_ina228 import INA228
     from board import SCL, SDA
     from busio import I2C
@@ -44,26 +45,21 @@ class INA228Source(BaseSource):
         default=0.001,
         gt=0,
         description=(
-            "Delay between INA228 reads in seconds. "
-            "Use 0.005-0.02 s for initial FT232H testing."
+            "Delay between INA228 reads in seconds. Use 0.005-0.02 s for initial FT232H testing."
         ),
     )
     bus_voltage_conv_time: Literal[50, 80, 150, 280, 540, 1052, 2074, 4120] = Field(
-
         default=50, description="ADC conversion time for bus voltage measurement in microseconds"
-
     )
 
     shunt_voltage_conv_time: Literal[50, 80, 150, 280, 540, 1052, 2074, 4120] = Field(
-
-        default=50, description="ADC conversion time for shunt voltage measurement in microseconds, higher conversion times can improve the accurcay of a signal but also increase the time it takes to acquire a signal"
-
+        default=50,
+        description="ADC conversion time for shunt voltage measurement in microseconds, higher conversion times can improve the accurcay of a signal but also increase the time it takes to acquire a signal",
     )
 
     averaging_count: Literal[1, 4, 16, 64, 128, 256, 512, 1024] = Field(
-
-        default=1, description="Number of samples to average for each reading, higher values can improve the accurcay of a signal but also increase the time it takes to acquire a signal"
-
+        default=1,
+        description="Number of samples to average for each reading, higher values can improve the accurcay of a signal but also increase the time it takes to acquire a signal",
     )
     i2c: I2C | None = Field(
         default=None,
@@ -178,8 +174,7 @@ class INA228Source(BaseSource):
 
             except Exception as e:
                 LOGGER.error(
-                    f"INA228 {self.name} acquisition error at address "
-                    f"0x{self.address:02X}: {e}"
+                    f"INA228 {self.name} acquisition error at address 0x{self.address:02X}: {e}"
                 )
                 break
 
@@ -191,9 +186,7 @@ class INA228Source(BaseSource):
             pyftdi_i2c_controller = self.i2c._i2c._i2c
             ftdi = pyftdi_i2c_controller.ftdi
             ftdi.set_latency_timer(self.ftdi_latency_ms)
-            LOGGER.info(
-                f"INA228 {self.name}: set FTDI latency timer to {self.ftdi_latency_ms} ms"
-            )
+            LOGGER.info(f"INA228 {self.name}: set FTDI latency timer to {self.ftdi_latency_ms} ms")
 
         except AttributeError as e:
             raise RuntimeError("Could not access pyftdi controller through Blinka.") from e
