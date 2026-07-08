@@ -5,13 +5,12 @@ try:
 
     from poulet_py import LOGGER, BaseTrigger
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'triggers' module. Install options:
 - Dedicated:    pip install poulet_py[triggers]
 - Module:       pip install poulet_py[hardware]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class KeyboardTrigger(BaseTrigger):
@@ -19,7 +18,13 @@ class KeyboardTrigger(BaseTrigger):
 
     key: str = Field(..., description="Key to trigger")
 
-    def wait(self) -> bool:
+    def _init(self) -> None:
+        pass
+
+    def _close(self) -> None:
+        pass
+
+    def _wait(self) -> bool:
         """Wait for keyboard input with optional timeout."""
         result = False
         input_received = Event()
@@ -46,18 +51,12 @@ class KeyboardTrigger(BaseTrigger):
         thread.daemon = True
         thread.start()
 
-        # Wait with timeout if specified
         if self.timeout is not None:
             input_received.wait(timeout=self.timeout)
         else:
             input_received.wait()
 
-        # If thread is still alive after timeout, interrupt it
         if thread.is_alive():
             LOGGER.warning(f"Timeout waiting for key '{self.key}'")
 
         return result
-
-    def cleanup(self) -> None:
-        """No cleanup needed for keyboard."""
-        pass

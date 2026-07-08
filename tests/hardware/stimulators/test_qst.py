@@ -1,5 +1,5 @@
 import re
-from time import time_ns
+from time import monotonic_ns
 from unittest.mock import Mock, call, patch
 
 import pytest
@@ -153,7 +153,7 @@ class TestTCSFunctionality:
             patch.object(tcs, "_expect_response") as mock_expect,
         ):
             mock_read.return_value = test_response.encode()
-            mock_expect.return_value = (time_ns(), re.match(r"(\d{3})", "300"))
+            mock_expect.return_value = (monotonic_ns(), re.match(r"(\d{3})", "300"))
 
             readings = tcs.get_readings()
             assert readings["neutral"] == 30.0

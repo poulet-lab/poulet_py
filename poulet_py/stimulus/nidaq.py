@@ -6,7 +6,6 @@ try:
         arange,
         arcsin,
         asarray,
-        bool_,
         ceil,
         cumsum,
         deg2rad,
@@ -28,13 +27,12 @@ try:
     from poulet_py import BaseStimulus
 
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'stim' module. Install options:
 - Dedicated:    pip install poulet_py[nidaq]
 - Module:       pip install poulet_py[stim]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class NIAnalogBaseStimulus(BaseStimulus):
@@ -42,8 +40,7 @@ class NIAnalogBaseStimulus(BaseStimulus):
 
     def build(self, rate: float) -> NDArray[float64]:
         if rate <= 0:
-            msg = "Sampling rate must be positive"
-            raise ValueError(msg)
+            raise ValueError("Sampling rate must be positive")
 
         active_samples = int(self.duration * rate / 1000)
         pre_samples = int(self.pre_delay * rate / 1000)
@@ -67,7 +64,7 @@ class NIAnalogBaseStimulus(BaseStimulus):
 class NIConstantAnalogStimulus(NIAnalogBaseStimulus):
     amplitude: float = Field(1.0, description="", ge=0)
 
-    def _generate(self, t, rate):
+    def _generate(self, t, rate) -> NDArray[float64]:
         return ones_like(t) * self.amplitude
 
 
@@ -76,7 +73,7 @@ class NISineAnalogStimulus(NIAnalogBaseStimulus):
     amplitude: float = Field(default=1.0, description="", ge=0)
     phase: float = Field(default=0.0)
 
-    def _generate(self, t, rate):
+    def _generate(self, t, rate) -> NDArray[float64]:
         omega = 2 * pi * self.frequency
         return self.amplitude * sin(omega * t + deg2rad(self.phase))
 
@@ -86,16 +83,16 @@ class NISquareAnalogStimulus(NIAnalogBaseStimulus):
     amplitude: float = Field(default=1.0)
     duty_cycle: float = Field(default=0.5, ge=0, le=1)
 
-    def _generate(self, t, rate):
+    def _generate(self, t, rate) -> NDArray[float64]:
         period = 1 / self.frequency
-        return self.amplitude * ((t % period) < (self.duty_cycle * period))
+        return (self.amplitude * ((t % period) < (self.duty_cycle * period))).astype(float64)
 
 
 class NITriangleAnalogStimulus(NIAnalogBaseStimulus):
     frequency: float = Field(..., gt=0)
     amplitude: float = Field(default=1.0)
 
-    def _generate(self, t, rate):
+    def _generate(self, t, rate) -> NDArray[float64]:
         return self.amplitude * (2 / pi) * arcsin(sin(2 * pi * self.frequency * t))
 
 
@@ -103,7 +100,7 @@ class NISawAnalogStimulus(NIAnalogBaseStimulus):
     frequency: float = Field(..., gt=0)
     amplitude: float = Field(default=1.0)
 
-    def _generate(self, t, rate):
+    def _generate(self, t, rate) -> NDArray[float64]:
         return self.amplitude * (2 * (t * self.frequency % 1) - 1)
 
 
@@ -111,7 +108,7 @@ class NIPulseAnalogStimulus(NIAnalogBaseStimulus):
     pulse_width: int = Field(..., gt=0)
     amplitude: float = Field(default=1.0)
 
-    def _generate(self, t, rate):
+    def _generate(self, t, rate) -> NDArray[float64]:
         samples = int(self.pulse_width * rate / 1000)
         y = zeros_like(t)
         y[:samples] = self.amplitude
@@ -123,7 +120,7 @@ class NIPulseTrainAnalogStimulus(NIAnalogBaseStimulus):
     pulse_interval: int = Field(..., gt=0)
     amplitude: float = Field(default=1.0)
 
-    def _generate(self, t, rate):
+    def _generate(self, t, rate) -> NDArray[float64]:
         width = int(self.pulse_width * rate / 1000)
         interval = int(self.pulse_interval * rate / 1000)
         period = width + interval
@@ -138,7 +135,7 @@ class NIChirpAnalogStimulus(NIAnalogBaseStimulus):
     f_end: float = Field(..., gt=0)
     amplitude: float = Field(default=1.0)
 
-    def _generate(self, t, rate):
+    def _generate(self, t, rate) -> NDArray[float64]:
         dt = 1 / rate
         sweep = self.f_start + (self.f_end - self.f_start) * (t / t[-1])
         phase = 2 * pi * cumsum(sweep) * dt
@@ -150,7 +147,7 @@ class NIWhiteNoiseAnalogStimulus(NIAnalogBaseStimulus):
     std: float = Field(default=0.1)
     seed: int | None = Field(default=None)
 
-    def _generate(self, t, rate):
+    def _generate(self, t, rate) -> NDArray[float64]:
         rng = default_rng(self.seed)
         return self.amplitude * rng.normal(0, self.std, len(t))
 
@@ -158,7 +155,7 @@ class NIWhiteNoiseAnalogStimulus(NIAnalogBaseStimulus):
 class NIArbitraryAnalogStimulus(NIAnalogBaseStimulus):
     waveform: Sequence[float] = Field(...)
 
-    def _generate(self, t, rate):
+    def _generate(self, t, rate) -> NDArray[float64]:
         data = asarray(self.waveform, dtype=float)
         tiled = tile(data, int(ceil(len(t) / len(data))))
         return tiled[: len(t)]
@@ -168,7 +165,7 @@ class NISteppedAnalogStimulus(NIAnalogBaseStimulus):
     step_values: Sequence[float] = Field(...)
     step_durations: Sequence[int] = Field(...)
 
-    def _generate(self, t, rate):
+    def _generate(self, t, rate) -> NDArray[float64]:
         y = zeros_like(t)
         cursor = 0
 
@@ -187,8 +184,7 @@ class NIAnalogCompositeStimulus(BaseStimulus):
 
     def build(self, rate: float) -> NDArray[float64]:
         if rate <= 0:
-            msg = "Sampling rate must be positive"
-            raise ValueError(msg)
+            raise ValueError("Sampling rate must be positive")
         build = []
         for stim in self.stimuli:
             build.append(stim.build(rate))
@@ -200,10 +196,9 @@ class NIDigitalBaseStimulus(BaseStimulus, ABC):
     pre_delay: int = Field(default=0, ge=0)
     post_delay: int = Field(default=0, ge=0)
 
-    def build(self, rate: float) -> NDArray[bool_]:
+    def build(self, rate: float) -> NDArray[uint32]:
         if rate <= 0:
-            msg = "Sampling rate must be positive"
-            raise ValueError(msg)
+            raise ValueError("Sampling rate must be positive")
 
         active_samples = int(self.duration * rate / 1000)
         pre_samples = int(self.pre_delay * rate / 1000)
@@ -217,18 +212,18 @@ class NIDigitalBaseStimulus(BaseStimulus, ABC):
         return signal.reshape((1, -1))
 
     @abstractmethod
-    def _generate(self, samples: int, rate: float) -> NDArray[bool_]: ...
+    def _generate(self, samples: int, rate: float) -> NDArray[uint32]: ...
 
 
 class NIConstantDigitalStimulus(NIDigitalBaseStimulus):
-    def _generate(self, samples: int, rate: float) -> NDArray[bool_]:
+    def _generate(self, samples: int, rate: float) -> NDArray[uint32]:
         return ones(samples, dtype=uint32)
 
 
 class NIPulseDigitalStimulus(NIDigitalBaseStimulus):
     pulse_width: int = Field(..., description="in ms")
 
-    def _generate(self, samples: int, rate: float) -> NDArray[bool_]:
+    def _generate(self, samples: int, rate: float) -> NDArray[uint32]:
         width_samples = int(self.pulse_width * rate / 1000)
         y = zeros(samples, dtype=uint32)
         y[:width_samples] = True
@@ -239,12 +234,12 @@ class NIPulseTrainDigitalStimulus(NIDigitalBaseStimulus):
     pulse_width: int = Field(..., description="in ms")
     pulse_interval: int = Field(..., description="in ms")
 
-    def _generate(self, samples: int, rate: float) -> NDArray[bool_]:
+    def _generate(self, samples: int, rate: float) -> NDArray[uint32]:
         width_samples = int(self.pulse_width * rate / 1000)
         interval_samples = int(self.pulse_interval * rate / 1000)
         period = width_samples + interval_samples
         idx = arange(samples)
-        return (idx % period) < width_samples
+        return ((idx % period) < width_samples).astype(uint32)
 
 
 class NIDigitalCompositeStimulus(BaseStimulus):
@@ -252,8 +247,7 @@ class NIDigitalCompositeStimulus(BaseStimulus):
 
     def build(self, rate: float) -> NDArray[float64]:
         if rate <= 0:
-            msg = "Sampling rate must be positive"
-            raise ValueError(msg)
+            raise ValueError("Sampling rate must be positive")
 
         build = []
         for stim in self.stimuli:

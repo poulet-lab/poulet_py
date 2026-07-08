@@ -2,14 +2,13 @@ try:
     from abc import ABC, abstractmethod
     from typing import Any
 
-    from pydantic import BaseModel, Field, PrivateAttr
+    from pydantic import BaseModel, Field
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'stim' module. Install options:
 - Module:       pip install poulet_py[stim]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class BaseStimulus(BaseModel, ABC):

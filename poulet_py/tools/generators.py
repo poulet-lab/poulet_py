@@ -3,12 +3,11 @@ try:
     from random import shuffle
     from typing import Any, Literal
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'tools' module. Install options:
 - Module:       pip install poulet_py[tools]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 def repeat(
@@ -71,5 +70,4 @@ def repeat(
     elif mode == "sequential":
         return _l
 
-    msg = f"Invalid mode '{mode}'. Choose 'random' or 'sequential'."
-    raise ValueError(msg)
+    raise ValueError(f"Invalid mode '{mode}'. Choose 'random' or 'sequential'.")

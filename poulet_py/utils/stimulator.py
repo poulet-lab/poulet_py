@@ -13,9 +13,9 @@ StimulatorRuntime
 
 try:
     from collections.abc import Sequence
-    from concurrent.futures import ThreadPoolExecutor, wait
     from secrets import choice
-    from threading import Event
+    from threading import Barrier, Event
+    from time import time_ns
     from typing import Literal, Self
 
     from prompt_toolkit import HTML
@@ -37,13 +37,12 @@ try:
     )
 
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'stimulator' module. Install options:
 - Dedicated:    pip install poulet_py[stm]
 - Module:       pip install poulet_py[utils]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class StimulatorTrial(BaseModel):
@@ -56,11 +55,15 @@ class StimulatorTrial(BaseModel):
 
     name: str | None = Field(default=None, description="Name of the trial")
     stimuli: BaseStimulus | Sequence[BaseStimulus] = Field(..., description="Stimuli for the trial")
+    isi: int | Sequence[int] = Field(default=0, description="Inter-stimulus interval")
 
     @model_validator(mode="after")
     def validate_stimuli(self):
         if not isinstance(self.stimuli, Sequence):
             self.stimuli = [self.stimuli]
+
+        if isinstance(self.isi, range):
+            self.isi = list(self.isi)
         return self
 
 
@@ -141,6 +144,7 @@ class StimulatorRuntime(BaseModel):
     _stopped: Event = PrivateAttr(default_factory=Event)
 
     _key_bindings: KeyBindings = PrivateAttr()
+    _start_time_of_experiment: int = PrivateAttr(default_factory=time_ns)
 
     @model_validator(mode="after")
     def validate_isi(self) -> Self:
@@ -177,8 +181,7 @@ class StimulatorRuntime(BaseModel):
     @bus.setter
     def bus(self, value: EventBus):
         if self._is_open:
-            msg = "Cannot change bus while stimulator is open"
-            raise RuntimeError(msg)
+            raise RuntimeError("Cannot change bus while stimulator is open")
 
         self._bus = value
         self._external_bus = True
@@ -265,49 +268,58 @@ class StimulatorRuntime(BaseModel):
             return
 
         blocks = self._expand_trials()
-        with ThreadPoolExecutor(max_workers=len(self.sources)) as executor:
-            with ProgressBar(
-                key_bindings=self._key_bindings, bottom_toolbar=self._generate_bottom_toolbar
-            ) as pb:
-                with patch_stdout():
-                    self._wait_not_started()
 
-                    for block, trials in pb(blocks, total=len(blocks), label="Blocks"):
-                        for trial_idx, trial in pb(
-                            enumerate(trials), total=len(trials), label="Trials"
-                        ):
-                            if self._aborted.is_set():
-                                break
+        barrier = Barrier(len(self.sources))
+        for s in self.sources:
+            s.barrier = barrier
 
-                            if block.trigger and not block.trigger.wait():
-                                if block.trigger_policy == "skip":
-                                    LOGGER.warning(
-                                        f"Trigger failed for trial {trial.name} in block {block.name}, skipping trial."
-                                    )
-                                    continue
+        with ProgressBar(
+            key_bindings=self._key_bindings, bottom_toolbar=self._generate_bottom_toolbar
+        ) as pb:
+            with patch_stdout():
+                self._wait_not_started()
 
-                                msg = f"Trigger failed for trial {trial.name} in block {block.name}"
-                                raise RuntimeError(msg)
+                for block, trials in pb(blocks, total=len(blocks), label="Blocks"):
+                    for trial_idx, trial in pb(
+                        enumerate(trials), total=len(trials), label="Trials"
+                    ):
+                        if self._aborted.is_set():
+                            break
 
-                            st_info = {
-                                f"{type(st).__name__}": st.model_dump(
-                                    exclude_unset=True, exclude_none=True
+                        if block.trigger and not block.trigger.wait():
+                            if block.trigger_policy == "skip":
+                                LOGGER.warning(
+                                    f"Trigger failed for trial {trial.name} in block {block.name}, skipping trial."
                                 )
-                                for st in trial.stimuli
-                            }
-                            LOGGER.info("Trial %d: %s", trial_idx, st_info)
-                            futures = [executor.submit(s.fire, trial.stimuli) for s in self.sources]
-                            wait(futures)
+                                continue
 
-                            isi = self.get_isi(block.isi or self.isi)
-                            precise_sleep(isi / 1000.0)
+                            raise RuntimeError(
+                                f"Trigger failed for trial {trial.name} in block {block.name}"
+                            )
 
-                            self._wait_paused()
+                        isi = trial.isi
+                        trial.isi = self.get_isi(trial.isi or block.isi or self.isi)
+
+                        trial_info = trial.model_dump(exclude_unset=True, exclude_none=True)
+                        LOGGER.info("Trial %d: %s", trial_idx, trial_info)
+
+                        for s in self.sources:
+                            s.fire(trial.stimuli)
+
+                        for s in self.sources:
+                            s.wait()
+
+                        precise_sleep(trial.isi / 1000.0)
+                        trial.isi = isi
+
+                        self._wait_paused()
+
+        for s in self.sources:
+            s.barrier = None
 
     def _ensure_open(self):
         if not self._is_open:
-            msg = f"{type(self)} need to be opened first"
-            raise RuntimeError(msg)
+            raise RuntimeError(f"{type(self).__name__} need to be opened first")
 
     def _generate_bottom_toolbar(self):
         shortcuts = "<b>[ctrl-x]</b> Abort"

@@ -25,6 +25,8 @@ from .hardware import (
     TCSCommand,
     ThermalCamera,
     Soho,
+    DCAM,
+    DCAMPROP,
 )
 from .io import (
     AcquisitionType,
@@ -40,8 +42,10 @@ from .io import (
     SinkEvent,
     TCSSource,
     Max31856Source,
+    INA228Source,
     ThermocoupleType,
     StimuliMetadataSource,
+    DCAMSource,
 )
 from .stimulus import (
     BaseStimulus,
@@ -83,6 +87,7 @@ __all__ = [
     "BaseTrigger",
     "BaslerCamera",
     "Max31856Source",
+    "INA228Source",
     "CounterSource",
     "OpenEphysSource",
     "EmptyStimulus",
@@ -144,4 +149,7 @@ __all__ = [
     "sanitize_path",
     "setup_logging",
     "Soho",
+    "DCAM",
+    "DCAMPROP",
+    "DCAMSource",
 ]
