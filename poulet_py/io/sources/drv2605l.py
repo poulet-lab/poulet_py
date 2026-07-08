@@ -1,11 +1,12 @@
 try:
     from time import monotonic_ns
     from typing import Any
-    from pyftdi.i2c import I2cNackError
+
     from adafruit_bus_device.i2c_device import I2CDevice
     from board import SCL, SDA
     from busio import I2C
     from pydantic import ConfigDict, Field, PrivateAttr
+    from pyftdi.i2c import I2cNackError
 
     from poulet_py import LOGGER, BaseSource, DRV2605Stimulus, precise_sleep
 
@@ -129,8 +130,7 @@ class DRV2605Source(BaseSource):
                 )
             else:
                 LOGGER.error(
-                    "DRV2605L %s failed to play waveform=%s repeat_count=%s "
-                    "drive_voltage=%s",
+                    "DRV2605L %s failed to play waveform=%s repeat_count=%s drive_voltage=%s",
                     self.name,
                     waveform,
                     repeat_count,
@@ -168,7 +168,6 @@ class DRV2605Source(BaseSource):
 
         self._write_block(REG_WAVESEQ1, slots)
         self._write_register(REG_GO, 1)
-
 
     def stop(self):
         if self._device is None:
@@ -221,8 +220,7 @@ class DRV2605Source(BaseSource):
                 last_error = e
 
                 LOGGER.warning(
-                    "DRV2605L %s transient I2C error during playback "
-                    "attempt %s/%s: %s",
+                    "DRV2605L %s transient I2C error during playback attempt %s/%s: %s",
                     self.name,
                     attempt + 1,
                     self.i2c_retry_attempts + 1,
@@ -240,8 +238,6 @@ class DRV2605Source(BaseSource):
         )
 
         return False
-
-
 
     def _recover_i2c_backend(self):
         try:

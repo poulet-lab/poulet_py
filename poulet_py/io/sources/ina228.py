@@ -216,24 +216,24 @@ class INA228Source(BaseSource):
                     sleep(0)
 
             except Exception as e:
-                    consecutive_errors += 1
-                    LOGGER.warning(
-                        "INA228 %s transient acquisition error %s/100 at address 0x%02X: %s",
+                consecutive_errors += 1
+                LOGGER.warning(
+                    "INA228 %s transient acquisition error %s/100 at address 0x%02X: %s",
+                    self.name,
+                    consecutive_errors,
+                    self.address,
+                    e,
+                )
+
+                # precise_sleep(0.0001)
+
+                if consecutive_errors >= 100:
+                    LOGGER.exception(
+                        "INA228 %s stopping after repeated acquisition errors at address 0x%02X",
                         self.name,
-                        consecutive_errors,
                         self.address,
-                        e,
                     )
-
-                    #precise_sleep(0.0001)
-
-                    if consecutive_errors >= 100:
-                        LOGGER.exception(
-                            "INA228 %s stopping after repeated acquisition errors at address 0x%02X",
-                            self.name,
-                            self.address,
-                        )
-                        break
+                    break
 
     def _set_ftdi_latency_timer(self):
         if self.ftdi_latency_ms is None:

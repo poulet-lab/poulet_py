@@ -3,7 +3,9 @@ from board import SCL, SDA
 from busio import I2C
 
 from poulet_py import (
+    AcquisitionType,
     CounterSource,
+    DCAMSource,
     DRV2605Source,
     DRV2605Stimulus,
     HDFSink,
@@ -12,10 +14,6 @@ from poulet_py import (
     StimulatorRuntime,
     StimulatorTrial,
     StimuliMetadataSource,
-    TCSSource,
-    TCSStimulus,
-    DCAMSource,
-    AcquisitionType,
 )
 
 # create common i2c bus for all sources
@@ -32,11 +30,11 @@ sources = [
         i2c_retry_backoff_s=0.005,
         continue_on_i2c_error=True,
     ),
-#    TCSSource(
-#        name="tcs",
-#        port="/dev/ttyUSB0",
-#        maximum_temperature=50,
-#    ),
+    #    TCSSource(
+    #        name="tcs",
+    #        port="/dev/ttyUSB0",
+    #        maximum_temperature=50,
+    #    ),
     DCAMSource(name="dcam", acquisition_type=AcquisitionType.CONTINUOUS),
     INA228Source(
         name="ina228_mouse",
