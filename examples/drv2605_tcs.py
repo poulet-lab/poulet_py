@@ -1,28 +1,32 @@
 from poulet_py import (
+    AcquisitionType,
     CounterSource,
+    DCAMSource,
+    DRV2605Source,
+    DRV2605Stimulus,
     HDFSink,
+    INA228Source,
     StimulatorBlock,
     StimulatorRuntime,
     StimulatorTrial,
     StimuliMetadataSource,
     TCSSource,
     TCSStimulus,
-    DRV2605Source,
-    DCAMSource,
-    DRV2605Stimulus,
-    AcquisitionType,
-    INA228Source,
 )
 
 sources = [
     CounterSource(name="trial"),
     StimuliMetadataSource(name="metadata"),
     DRV2605Source(name="drv2605", address=0x5A, bus_frequency=400_000),
-    TCSSource(name="tcs", port="/dev/ttyUSB0", maximum_temperature=50,),
-    DCAMSource(name="dcam",acquisition_type=AcquisitionType.CONTINUOUS),
+    TCSSource(
+        name="tcs",
+        port="/dev/ttyUSB0",
+        maximum_temperature=50,
+    ),
+    DCAMSource(name="dcam", acquisition_type=AcquisitionType.CONTINUOUS),
     INA228Source(name="ina228_1"),
-   # INA228Source(name="ina228_2", address=0x41, bus_frequency=1_000_000,
-   #     bus_voltage_conv_time=150, averaging_count=16),
+    # INA228Source(name="ina228_2", address=0x41, bus_frequency=1_000_000,
+    #     bus_voltage_conv_time=150, averaging_count=16),
 ]
 
 sinks = [

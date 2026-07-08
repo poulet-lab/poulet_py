@@ -1,4 +1,3 @@
-
 try:
     from time import monotonic_ns
     from typing import Any
@@ -8,7 +7,7 @@ try:
     from busio import I2C
     from pydantic import ConfigDict, Field, PrivateAttr
 
-    from poulet_py import BaseSource, DRV2605Stimulus, LOGGER, precise_sleep
+    from poulet_py import LOGGER, BaseSource, DRV2605Stimulus, precise_sleep
 
 except ImportError as e:
     msg = """
@@ -34,7 +33,6 @@ LIBRARY_TS2200A = 0x01
 
 
 class DRV2605Source(BaseSource):
-
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     address: int = Field(default=DRV2605_ADDR)
@@ -44,9 +42,7 @@ class DRV2605Source(BaseSource):
         default=None,
         ge=1,
         le=255,
-        description=(
-            "FTDI latency timer in ms"
-        ),
+        description=("FTDI latency timer in ms"),
     )
 
     i2c: I2C | None = Field(
