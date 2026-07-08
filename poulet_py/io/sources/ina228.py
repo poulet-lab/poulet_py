@@ -1,14 +1,13 @@
 try:
     from threading import Event, Thread
-    from time import monotonic_ns
-    from typing import Literal
+    from time import monotonic_ns, sleep
 
-    from adafruit_ina228 import INA228
+    from adafruit_ina228 import AveragingCount, ConversionTime, INA228, Mode
     from board import SCL, SDA
     from busio import I2C
     from pydantic import ConfigDict, Field, PrivateAttr
 
-    from poulet_py import LOGGER, BaseSource, precise_sleep
+    from poulet_py import BaseSource, LOGGER, precise_sleep
 
 except ImportError as e:
     raise ImportError(
@@ -27,47 +26,55 @@ class INA228Source(BaseSource):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     address: int = Field(default=0x40, description="INA228 I2C address")
-
-    bus_frequency: int = Field(
-        default=400_000,
-        description="I2C clock speed in Hz. With FT232H/Blinka this may be backend-limited.",
-        gt=1,
-    )
+    bus_frequency: int = Field(default=1_000_000, gt=1)
 
     ftdi_latency_ms: int | None = Field(
         default=1,
-        description="FTDI USB latency timer in ms. Use None to leave default.",
         ge=1,
         le=255,
+        description="FTDI USB latency timer in ms. Use None to leave unchanged.",
     )
 
     sample_interval_s: float = Field(
-        default=0.001,
-        gt=0,
+        default=0.0,
+        ge=0.0,
         description=(
-            "Delay between INA228 reads in seconds. Use 0.005-0.02 s for initial FT232H testing."
+            "Delay after each INA228 read. Use 0.0 for maximum throughput. "
+            "Use ~0.001 for approximately 1 kHz target pacing."
         ),
     )
-    bus_voltage_conv_time: Literal[50, 80, 150, 280, 540, 1052, 2074, 4120] = Field(
-        default=50, description="ADC conversion time for bus voltage measurement in microseconds"
+
+    mode: int = Field(
+        default=Mode.CONT_BUS,
+        description="INA228 ADC mode. Default is continuous bus-voltage-only.",
     )
 
-    shunt_voltage_conv_time: Literal[50, 80, 150, 280, 540, 1052, 2074, 4120] = Field(
-        default=50,
-        description="ADC conversion time for shunt voltage measurement in microseconds, higher conversion times can improve the accurcay of a signal but also increase the time it takes to acquire a signal",
+    bus_voltage_conv_time: int = Field(
+        default=ConversionTime.TIME_50_US,
+        description="INA228 bus voltage conversion time setting.",
     )
 
-    averaging_count: Literal[1, 4, 16, 64, 128, 256, 512, 1024] = Field(
-        default=1,
-        description="Number of samples to average for each reading, higher values can improve the accurcay of a signal but also increase the time it takes to acquire a signal",
+    shunt_voltage_conv_time: int = Field(
+        default=ConversionTime.TIME_50_US,
+        description="INA228 shunt voltage conversion time setting.",
     )
-    i2c: I2C | None = Field(
-        default=None,
-        description=(
-            "Optional externally supplied I2C bus. "
-            "For multiple INA228 devices on one FT232H, pass the same i2c object to all sources."
-        ),
+
+    temp_conv_time: int = Field(
+        default=ConversionTime.TIME_50_US,
+        description="INA228 temperature conversion time setting.",
     )
+
+    averaging_count: int = Field(
+        default=AveragingCount.COUNT_1,
+        description="INA228 averaging count.",
+    )
+
+    skip_reset: bool = Field(
+        default=False,
+        description="Pass skip_reset to the Adafruit INA228 driver.",
+    )
+
+    i2c: I2C | None = Field(default=None)
 
     _ina228: INA228 | None = PrivateAttr(default=None)
     _internal_i2c: bool = PrivateAttr(default=False)
@@ -81,20 +88,19 @@ class INA228Source(BaseSource):
         ]
 
     def open(self) -> None:
-        """
-        Open BaseSource first so _source_buffer exists before the acquisition
-        thread starts writing samples.
-        """
         if self._is_open:
             return
 
+        # BaseSource.open() creates _source_buffer only after _open().
+        # Therefore the acquisition thread must start after super().open().
         super().open()
         self._start_acquisition_thread()
 
     def close(self) -> None:
-        """
-        Stop the acquisition thread before BaseSource deletes _source_buffer.
-        """
+        if not self._is_open:
+            return
+
+        # Stop writing before BaseSource deletes _source_buffer.
         self._stop_acquisition_thread()
         super().close()
 
@@ -105,16 +111,20 @@ class INA228Source(BaseSource):
                 self._internal_i2c = True
                 self._set_ftdi_latency_timer()
 
-            self._ina228 = INA228(self.i2c, address=self.address)
+            self._ina228 = INA228(
+                self.i2c,
+                address=self.address,
+                skip_reset=self.skip_reset,
+            )
+
+            self._configure_ina228()
 
         except Exception as e:
             raise RuntimeError(
                 f"Failed to initialize INA228 at address 0x{self.address:02X}"
             ) from e
 
-        # IMPORTANT:
-        # Do not start the acquisition thread here.
-        # BaseSource has not created _source_buffer yet.
+        # Do not start acquisition here.
 
     def _close(self):
         self._ina228 = None
@@ -128,12 +138,33 @@ class INA228Source(BaseSource):
         precise_sleep(self._max_stimulus_duration_ms / 1000.0)
         return True
 
+    def _configure_ina228(self):
+        if self._ina228 is None:
+            raise RuntimeError("INA228 is not initialized.")
+
+        self._ina228.averaging_count = self.averaging_count
+        self._ina228.bus_voltage_conv_time = self.bus_voltage_conv_time
+        self._ina228.shunt_voltage_conv_time = self.shunt_voltage_conv_time
+        self._ina228.temp_conv_time = self.temp_conv_time
+        self._ina228.mode = self.mode
+
+        LOGGER.info(
+            "INA228 %s at 0x%02X configured: mode=%s, avg=%s, "
+            "vbus_ct=%s, vshunt_ct=%s, temp_ct=%s",
+            self.name,
+            self.address,
+            self.mode,
+            self.averaging_count,
+            self.bus_voltage_conv_time,
+            self.shunt_voltage_conv_time,
+            self.temp_conv_time,
+        )
+
     def _start_acquisition_thread(self):
         if self._acquisition_thread is not None and self._acquisition_thread.is_alive():
             return
 
         self._stop_acquisition_event.clear()
-
         self._acquisition_thread = Thread(
             target=self._acquisition_thread_func,
             daemon=True,
@@ -146,21 +177,22 @@ class INA228Source(BaseSource):
 
         if self._acquisition_thread is not None and self._acquisition_thread.is_alive():
             self._acquisition_thread.join(timeout=2.0)
-
             if self._acquisition_thread.is_alive():
                 LOGGER.warning(
-                    f"INA228 {self.name}: acquisition thread is still alive after closure"
+                    "INA228 %s: acquisition thread still alive after closure",
+                    self.name,
                 )
 
         self._acquisition_thread = None
 
     def _acquisition_thread_func(self):
+        n = 0
+        t0 = monotonic_ns()
+
         while not self._stop_acquisition_event.is_set():
             try:
                 if self._ina228 is None:
-                    LOGGER.warning(
-                        f"INA228 {self.name}: acquisition stopped because device is not initialized"
-                    )
+                    LOGGER.warning("INA228 %s stopped: device not initialized", self.name)
                     break
 
                 self._write_sample(
@@ -170,11 +202,27 @@ class INA228Source(BaseSource):
                     )
                 )
 
-                precise_sleep(self.sample_interval_s)
+                n += 1
+
+                if n % 1000 == 0:
+                    now = monotonic_ns()
+                    hz = 1000 / ((now - t0) * 1e-9)
+                    LOGGER.info("INA228 %s acquisition rate: %.1f Hz", self.name, hz)
+                    t0 = now
+
+                if self.sample_interval_s > 0:
+                    precise_sleep(self.sample_interval_s)
+                else:
+                    # Yield very lightly; the I2C call already dominates timing,
+                    # but this helps avoid starving other Python threads.
+                    sleep(0)
 
             except Exception as e:
-                LOGGER.error(
-                    f"INA228 {self.name} acquisition error at address 0x{self.address:02X}: {e}"
+                LOGGER.exception(
+                    "INA228 %s acquisition error at address 0x%02X: %s",
+                    self.name,
+                    self.address,
+                    e,
                 )
                 break
 
@@ -186,7 +234,11 @@ class INA228Source(BaseSource):
             pyftdi_i2c_controller = self.i2c._i2c._i2c
             ftdi = pyftdi_i2c_controller.ftdi
             ftdi.set_latency_timer(self.ftdi_latency_ms)
-            LOGGER.info(f"INA228 {self.name}: set FTDI latency timer to {self.ftdi_latency_ms} ms")
+            LOGGER.info(
+                "INA228 %s: set FTDI latency timer to %s ms",
+                self.name,
+                self.ftdi_latency_ms,
+            )
 
         except AttributeError as e:
             raise RuntimeError("Could not access pyftdi controller through Blinka.") from e
