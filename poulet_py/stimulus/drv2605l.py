@@ -74,6 +74,7 @@ class DRV2605Stimulus(BaseStimulus):
     i2c = busio.I2C(board.SCL, board.SDA)
     # Optional: keep the official driver for init/config/play compatibility
 
+    drv: DRV2605 | None = Field(default=None)
     drv = DRV2605(i2c)
     # Raw register access over the same working Adafruit/Blinka I2C bus
     raw_drv: I2CDevice | None = Field(default=None)
