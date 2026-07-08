@@ -109,7 +109,8 @@ class INA228Source(BaseSource):
             if self.i2c is None:
                 self.i2c = I2C(SCL, SDA, frequency=self.bus_frequency)
                 self._internal_i2c = True
-                self._set_ftdi_latency_timer()
+
+            self._set_ftdi_latency_timer()
 
             self._ina228 = INA228(
                 self.i2c,
@@ -123,8 +124,6 @@ class INA228Source(BaseSource):
             raise RuntimeError(
                 f"Failed to initialize INA228 at address 0x{self.address:02X}"
             ) from e
-
-        # Do not start acquisition here.
 
     def _close(self):
         self._ina228 = None
@@ -187,7 +186,7 @@ class INA228Source(BaseSource):
     def _acquisition_thread_func(self):
         n = 0
         t0 = monotonic_ns()
-
+        consecutive_errors = 0
         while not self._stop_acquisition_event.is_set():
             try:
                 if self._ina228 is None:
@@ -217,13 +216,24 @@ class INA228Source(BaseSource):
                     sleep(0)
 
             except Exception as e:
-                LOGGER.exception(
-                    "INA228 %s acquisition error at address 0x%02X: %s",
-                    self.name,
-                    self.address,
-                    e,
-                )
-                break
+                    consecutive_errors += 1
+                    LOGGER.warning(
+                        "INA228 %s transient acquisition error %s/100 at address 0x%02X: %s",
+                        self.name,
+                        consecutive_errors,
+                        self.address,
+                        e,
+                    )
+
+                    #precise_sleep(0.0001)
+
+                    if consecutive_errors >= 100:
+                        LOGGER.exception(
+                            "INA228 %s stopping after repeated acquisition errors at address 0x%02X",
+                            self.name,
+                            self.address,
+                        )
+                        break
 
     def _set_ftdi_latency_timer(self):
         if self.ftdi_latency_ms is None:

@@ -14,6 +14,8 @@ from poulet_py import (
     StimuliMetadataSource,
     TCSSource,
     TCSStimulus,
+    DCAMSource,
+    AcquisitionType,
 )
 
 # create common i2c bus for all sources
@@ -22,20 +24,27 @@ i2c = I2C(SCL, SDA)
 sources = [
     CounterSource(name="trial"),
     StimuliMetadataSource(name="metadata"),
-    DRV2605Source(name="drv2605", address=0x5A, i2c=i2c),  # , bus_frequency=400_000),
-    TCSSource(
-        name="tcs",
-        port="/dev/ttyUSB0",
-        maximum_temperature=50,
+    DRV2605Source(
+        name="drv2605",
+        address=0x5A,
+        i2c=i2c,
+        i2c_retry_attempts=5,
+        i2c_retry_backoff_s=0.005,
+        continue_on_i2c_error=True,
     ),
-    # DCAMSource(name="dcam", acquisition_type=AcquisitionType.CONTINUOUS),
+#    TCSSource(
+#        name="tcs",
+#        port="/dev/ttyUSB0",
+#        maximum_temperature=50,
+#    ),
+    DCAMSource(name="dcam", acquisition_type=AcquisitionType.CONTINUOUS),
     INA228Source(
         name="ina228_mouse",
         i2c=i2c,
         address=0x41,
         bus_frequency=1_000_000,
         buffer_size=10_000,
-        sample_interval_s=0.0,
+        sample_interval_s=0.001,
         mode=Mode.CONT_BUS,
         averaging_count=AveragingCount.COUNT_16,
         bus_voltage_conv_time=ConversionTime.TIME_150_US,
@@ -47,7 +56,7 @@ sources = [
         address=0x40,
         bus_frequency=1_000_000,
         buffer_size=10_000,
-        sample_interval_s=0.0,
+        sample_interval_s=0.001,
         mode=Mode.CONT_BUS,
         averaging_count=AveragingCount.COUNT_16,
         bus_voltage_conv_time=ConversionTime.TIME_150_US,
@@ -57,38 +66,12 @@ sources = [
 
 
 sinks = [
-    HDFSink(file="./temp_drv2605_tcs_ins_10x.h5"),
+    HDFSink(file="./temp_drv2605_catchcerror_ins_camera.h5"),
 ]
 
 trials = [
     StimulatorTrial(
-        stimuli=TCSStimulus(
-            surface=0,
-            baseline=32,
-            target=20,
-            rise_rate=10,
-            return_speed=10,
-            duration=1000,
-        )
-    ),
-    StimulatorTrial(
-        stimuli=DRV2605Stimulus(
-            waveform=16,
-            repeat_count=1,
-            drive_voltage=2.0,
-            duration=1000,
-        )
-    ),
-    StimulatorTrial(
         stimuli=[
-            TCSStimulus(
-                surface=0,
-                baseline=32,
-                target=40,
-                rise_rate=10,
-                return_speed=10,
-                duration=1000,
-            ),
             DRV2605Stimulus(
                 waveform=16,
                 repeat_count=0,
@@ -116,7 +99,7 @@ trials = [
 ]
 
 blocks = [
-    StimulatorBlock(trials=trials, trial_repetitions=10),
+    StimulatorBlock(trials=trials, trial_repetitions=50),
 ]
 
 experiment = StimulatorRuntime(

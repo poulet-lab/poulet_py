@@ -1,7 +1,7 @@
 try:
     from time import monotonic_ns
     from typing import Any
-
+    from pyftdi.i2c import I2cNackError
     from adafruit_bus_device.i2c_device import I2CDevice
     from board import SCL, SDA
     from busio import I2C
@@ -52,7 +52,22 @@ class DRV2605Source(BaseSource):
             "busio.I2C(board.SCL, board.SDA) in _open()."
         ),
     )
+    i2c_retry_attempts: int = Field(
+        default=5,
+        ge=0,
+        description="Number of retry attempts for transient DRV2605L I2C errors.",
+    )
 
+    i2c_retry_backoff_s: float = Field(
+        default=0.005,
+        ge=0.0,
+        description="Backoff between DRV2605L I2C retries in seconds.",
+    )
+
+    continue_on_i2c_error: bool = Field(
+        default=True,
+        description="If True, log DRV2605L I2C failures and continue later trials.",
+    )
     _device: I2CDevice | None = PrivateAttr(default=None)
     _internal_i2c: bool = PrivateAttr(default=False)
 
@@ -97,21 +112,35 @@ class DRV2605Source(BaseSource):
             repeat_count = int(config["repeat_count"])
             drive_voltage = config["drive_voltage"]
 
-            self._play_waveform(
+            played = self._play_waveform_with_retries(
                 waveform=waveform,
                 repeat_count=repeat_count,
                 drive_voltage=drive_voltage,
             )
 
-            self._write_sample(
-                (
-                    monotonic_ns(),
+            if played:
+                self._write_sample(
+                    (
+                        monotonic_ns(),
+                        waveform,
+                        repeat_count,
+                        float("nan") if drive_voltage is None else float(drive_voltage),
+                    )
+                )
+            else:
+                LOGGER.error(
+                    "DRV2605L %s failed to play waveform=%s repeat_count=%s "
+                    "drive_voltage=%s",
+                    self.name,
                     waveform,
                     repeat_count,
-                    float("nan") if drive_voltage is None else float(drive_voltage),
+                    drive_voltage,
                 )
-            )
 
+                if not self.continue_on_i2c_error:
+                    return False
+
+            # Preserve trial timing even if the haptic command failed.
             precise_sleep((stimulus.duration + stimulus.post_delay) / 1000.0)
 
         return True
@@ -140,9 +169,20 @@ class DRV2605Source(BaseSource):
         self._write_block(REG_WAVESEQ1, slots)
         self._write_register(REG_GO, 1)
 
+
     def stop(self):
-        if self._device is not None:
+        if self._device is None:
+            return
+
+        try:
             self._write_register(REG_GO, 0)
+
+        except (I2cIOError, I2cNackError, OSError, TimeoutError) as e:
+            LOGGER.warning(
+                "DRV2605L %s failed to stop cleanly over I2C: %s",
+                self.name,
+                e,
+            )
 
     def _write_register(self, register: int, value: int):
         if self._device is None:
@@ -159,6 +199,56 @@ class DRV2605Source(BaseSource):
 
         with self._device as device:
             device.write(payload)
+
+    def _play_waveform_with_retries(
+        self,
+        waveform: int,
+        repeat_count: int,
+        drive_voltage: float | None = None,
+    ) -> bool:
+        last_error: Exception | None = None
+
+        for attempt in range(self.i2c_retry_attempts + 1):
+            try:
+                self._play_waveform(
+                    waveform=waveform,
+                    repeat_count=repeat_count,
+                    drive_voltage=drive_voltage,
+                )
+                return True
+
+            except (I2cIOError, I2cNackError, OSError, TimeoutError) as e:
+                last_error = e
+
+                LOGGER.warning(
+                    "DRV2605L %s transient I2C error during playback "
+                    "attempt %s/%s: %s",
+                    self.name,
+                    attempt + 1,
+                    self.i2c_retry_attempts + 1,
+                    e,
+                )
+
+                self._recover_i2c_backend()
+                precise_sleep(self.i2c_retry_backoff_s)
+
+        LOGGER.error(
+            "DRV2605L %s failed after %s I2C attempts. Last error: %s",
+            self.name,
+            self.i2c_retry_attempts + 1,
+            last_error,
+        )
+
+        return False
+
+
+
+    def _recover_i2c_backend(self):
+        try:
+            pyftdi_i2c_controller = self.i2c._i2c._i2c
+            pyftdi_i2c_controller.flush()
+        except Exception:
+            pass
 
     @staticmethod
     def _od_clamp_from_voltage(voltage: float) -> int:
