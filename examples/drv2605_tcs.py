@@ -1,5 +1,6 @@
 from board import SCL, SDA
 from busio import I2C
+
 from poulet_py import (
     AcquisitionType,
     CounterSource,
@@ -11,20 +12,38 @@ from poulet_py import (
     StimulatorTrial,
     StimuliMetadataSource,
     TCSSource,
-    TCSStimulus
+    TCSStimulus,
 )
 
-#create common i2c bus for all sources
-i2c = I2C(SCL,SDA)
+# create common i2c bus for all sources
+i2c = I2C(SCL, SDA)
 
 sources = [
     CounterSource(name="trial"),
     StimuliMetadataSource(name="metadata"),
-    DRV2605Source(name="drv2605", address=0x5A,i2c=i2c),#, bus_frequency=400_000),
-    TCSSource(name="tcs", port="/dev/ttyUSB0", maximum_temperature=50,),
-    DCAMSource(name="dcam",acquisition_type=AcquisitionType.CONTINUOUS),
-    INA228Source(name="ina228_mouse", address=0x41, i2c=i2c,bus_voltage_conv_time=50, averaging_count=1,ftdi_latency_ms=1),
-    INA228Source(name="ina228_pad", address=0x40, i2c=i2c,bus_voltage_conv_time=50, averaging_count=1, ftdi_latency_ms=1),
+    DRV2605Source(name="drv2605", address=0x5A, i2c=i2c),  # , bus_frequency=400_000),
+    TCSSource(
+        name="tcs",
+        port="/dev/ttyUSB0",
+        maximum_temperature=50,
+    ),
+    DCAMSource(name="dcam", acquisition_type=AcquisitionType.CONTINUOUS),
+    INA228Source(
+        name="ina228_mouse",
+        address=0x41,
+        i2c=i2c,
+        bus_voltage_conv_time=50,
+        averaging_count=1,
+        ftdi_latency_ms=1,
+    ),
+    INA228Source(
+        name="ina228_pad",
+        address=0x40,
+        i2c=i2c,
+        bus_voltage_conv_time=50,
+        averaging_count=1,
+        ftdi_latency_ms=1,
+    ),
 ]
 
 sinks = [
@@ -50,22 +69,21 @@ trials = [
             duration=1000,
         )
     ),
-
     StimulatorTrial(
         stimuli=[
             TCSStimulus(
-            surface=0,
-            baseline=32,
-            target=40,
-            rise_rate=10,
-            return_speed=10,
-            duration=1000,
+                surface=0,
+                baseline=32,
+                target=40,
+                rise_rate=10,
+                return_speed=10,
+                duration=1000,
             ),
             DRV2605Stimulus(
-            waveform=16,
-            repeat_count=0,
-            drive_voltage=2.0,
-            duration=1000,
+                waveform=16,
+                repeat_count=0,
+                drive_voltage=2.0,
+                duration=1000,
             ),
         ]
     ),
