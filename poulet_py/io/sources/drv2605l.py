@@ -1,3 +1,4 @@
+
 try:
     from time import monotonic_ns
     from typing import Any
@@ -7,7 +8,7 @@ try:
     from busio import I2C
     from pydantic import ConfigDict, Field, PrivateAttr
 
-    from poulet_py import LOGGER, BaseSource, DRV2605Stimulus, precise_sleep
+    from poulet_py import BaseSource, DRV2605Stimulus, LOGGER, precise_sleep
 
 except ImportError as e:
     msg = """
@@ -22,42 +23,29 @@ Install options:
 
 
 DRV2605_ADDR = 0x5A
-
 REG_MODE = 0x01
 REG_RTP_INPUT = 0x02
 REG_LIBRARY = 0x03
 REG_WAVESEQ1 = 0x04
 REG_GO = 0x0C
 REG_OD_CLAMP = 0x17
-
 MODE_INTTRIG = 0x00
 LIBRARY_TS2200A = 0x01
 
 
 class DRV2605Source(BaseSource):
-    """
-    Runtime source/controller for the DRV2605L haptic motor driver.
-
-    This follows the same basic hardware-lifecycle pattern as INA228Source:
-    - optional externally supplied I2C bus
-    - internal bus creation in _open()
-    - optional FTDI latency setting for FT232H/Blinka
-    - cleanup in _close()
-    - stimulation in _fire()
-    """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     address: int = Field(default=DRV2605_ADDR)
-    bus_frequency: int = Field(default=400_000, gt=1)
+    bus_frequency: int = Field(default=400_000)
 
     ftdi_latency_ms: int | None = Field(
         default=1,
         ge=1,
         le=255,
         description=(
-            "Optional FTDI latency timer in ms. Only applies when using "
-            "Blinka through an FT232H backend."
+            "FTDI latency timer in ms"
         ),
     )
 
@@ -71,7 +59,7 @@ class DRV2605Source(BaseSource):
 
     fire_on: tuple[type[DRV2605Stimulus], ...] = Field(
         default=(DRV2605Stimulus,),
-        description="Only fire for DRV2605Stimulus objects.",
+        description="Fire for DRV2605Stimulus objects.",
     )
 
     _device: I2CDevice | None = PrivateAttr(default=None)
