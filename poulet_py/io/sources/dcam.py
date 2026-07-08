@@ -20,15 +20,12 @@ try:
     from poulet_py import DCAM, LOGGER, AcquisitionType, BaseSource, precise_sleep
 
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'sources' module. Install options:
-
-    Dedicated: pip install poulet_py[sources]
-    Module: pip install poulet_py[io]
-    Full: pip install poulet_py[all]
-
-"""
-    raise ImportError(msg) from e
+- Dedicated:    pip install poulet_py[sources]
+- Module:       pip install poulet_py[io]
+- Full:         pip install poulet_py[all]
+""") from e
 
 
 class DCAMSource(BaseSource, DCAM):

@@ -12,13 +12,12 @@ try:
 
     from poulet_py import BaseStimulus, EventBus, SinkEvent
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'sources' module. Install options:
 - Dedicated:    pip install poulet_py[sources]
 - Module:       pip install poulet_py[io]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class AcquisitionType(str, Enum):
@@ -78,8 +77,7 @@ class BaseSource(BaseModel, ABC):
     @bus.setter
     def bus(self, value: EventBus):
         if self._is_open:
-            msg = f"Cannot change bus while {self.name} is open"
-            raise RuntimeError(msg)
+            raise RuntimeError(f"Cannot change bus while {self.name} is open")
 
         self._bus = value
         self._external_bus = True
@@ -147,16 +145,14 @@ class BaseSource(BaseModel, ABC):
 
     def _ensure_open(self) -> None:
         if not self._is_open:
-            msg = f"{type(self).__name__} needs to be opened first"
-            raise RuntimeError(msg)
+            raise RuntimeError(f"{type(self).__name__} needs to be opened first")
 
     def _set_source_buffer(self) -> None:
         self._set_buffer_dtype()
         dt = dtype(self._source_buffer_dtype)
 
         if not dt.names or "timestamp" not in dt.names:
-            msg = "Buffer dtype must include a 'timestamp' field of type uint64"
-            raise ValueError(msg)
+            raise ValueError("Buffer dtype must include a 'timestamp' field of type uint64")
 
         self._source_buffer = zeros(self.buffer_size, dtype=dt)
         self._source_buffer_idx = 0
