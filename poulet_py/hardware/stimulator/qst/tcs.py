@@ -8,7 +8,7 @@ and calibration functionality.
 
 try:
     from collections import deque
-    from re import Match, Pattern, compile, search
+    from re import Match, Pattern, compile
     from threading import Condition, Event, Thread
     from time import monotonic_ns
 
@@ -140,7 +140,7 @@ class TCS(BaseModel, validate_assignment=True):
     )
     acquisition_type: AcquisitionType = Field(
         default=AcquisitionType.FINITE, description="Type of data acquisition, continuous or finite"
-    )  # TODO
+    )  # TODO stop thread when finite
     buffer_size: int = Field(default=100, description="Size of the internal sampling queue", ge=1)
     maximum_temperature: float = Field(
         default=40.0, description="Maximum allowed temperature in °C"
@@ -199,9 +199,10 @@ class TCS(BaseModel, validate_assignment=True):
         """
         if self._is_open:
             return
-
         self._tcs_open_serial()
         self._tcs_set_buffer()
+
+        self._done_trigger.set()
         self._tcs_start_trigger_thread()
         self._tcs_start_acquisition_thread()
 
@@ -209,7 +210,7 @@ class TCS(BaseModel, validate_assignment=True):
         self.execute_command(TCSCommand.DISPLAY_TEMPERATURES_DURING_STIMULATION)
 
         info = self.info()
-        match = search(compile(r"Firmware:(.*)\nProbe ID:(.*)\nProbe TYPE:(.*)\n"), info)
+        match = compile(r"Firmware:(.*)\nProbe ID:(.*)\nProbe TYPE:(.*)\n").search(info)
         battery_info = self.battery_info()
 
         LOGGER.info(
@@ -404,6 +405,9 @@ class TCS(BaseModel, validate_assignment=True):
         This method starts a timer thread for stimulus duration and optionally
         activates buzzer and trigger output.
         """
+        if self.stimulus_running:
+            raise RuntimeError("Trigger already running")
+
         self._tcs_ensure_open()
         self._tcs_validate_stimulus(stimulus)
 
@@ -464,7 +468,7 @@ class TCS(BaseModel, validate_assignment=True):
         self.execute_command(TCSCommand.RESET)
         LOGGER.info("Reset successfully")
 
-    def read_sample(self, timeout: float = 0.01) -> ndarray | None:
+    def read_sample(self, timeout: float | None = None) -> ndarray | None:
         """
         Read the most recent temperature sample.
 
@@ -562,6 +566,9 @@ class TCS(BaseModel, validate_assignment=True):
             buffer = self._tcs_buffer
             needle = self._tcs_buffer_needle
 
+            if avail > size:
+                LOGGER.warning("Dropped %d samples", avail - size)
+
             if count > size:
                 needle = self._tcs_buffer_idx - size
                 count = size
@@ -609,7 +616,6 @@ class TCS(BaseModel, validate_assignment=True):
                 parity="N",
                 stopbits=1,
                 timeout=self.read_timeout,
-                write_timeout=2,
             )
         except Exception as e:
             raise RuntimeError("Serial initialization failed") from e
@@ -716,20 +722,23 @@ class TCS(BaseModel, validate_assignment=True):
                         request = self._serial_search_queue[0]
 
                         if request.pattern is not None:
-                            if match := search(request.pattern, line):
+                            if match := request.pattern.search(line):
                                 request.result = (monotonic_ns(), match)
                                 request.event.set()
                                 self._serial_search_queue.popleft()
 
-                if match := search(self._temperature_line_pattern, line):
-                    idx = self._tcs_buffer_idx % self.buffer_size
-                    timestamp = monotonic_ns()
-                    values = tuple(map(float, match.groups()))
-                    self._tcs_buffer[idx] = (timestamp, *values)
+                if self.acquisition_type == AcquisitionType.CONTINUOUS or (
+                    self.acquisition_type == AcquisitionType.FINITE and self.stimulus_running
+                ):
+                    if match := self._temperature_line_pattern.search(line):
+                        with self._acquisition_cond:
+                            idx = self._tcs_buffer_idx % self.buffer_size
+                            timestamp = monotonic_ns()
+                            values = tuple(map(float, match.groups()))
+                            self._tcs_buffer[idx] = (timestamp, *values)
 
-                    with self._acquisition_cond:
-                        self._tcs_buffer_idx += 1
-                        self._acquisition_cond.notify_all()
+                            self._tcs_buffer_idx += 1
+                            self._acquisition_cond.notify_all()
 
         except Exception as e:
             LOGGER.exception(f"Read loop failed: {e}")
