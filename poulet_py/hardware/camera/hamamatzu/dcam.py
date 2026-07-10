@@ -187,8 +187,7 @@ class DCAM(BaseModel):
         default=None,
         ge=0,
         description=(
-            "Optional horizontal ROI start position. "
-            "If None, ROI is centered when center_roi=True."
+            "Optional horizontal ROI start position. If None, ROI is centered when center_roi=True."
         ),
     )
 
@@ -196,8 +195,7 @@ class DCAM(BaseModel):
         default=None,
         ge=0,
         description=(
-            "Optional vertical ROI start position. "
-            "If None, ROI is centered when center_roi=True."
+            "Optional vertical ROI start position. If None, ROI is centered when center_roi=True."
         ),
     )
 
@@ -255,13 +253,19 @@ class DCAM(BaseModel):
     )
 
     contrast_gain: int = Field(default=10, description="Camera contrast gain.")
-    framebundle_mode: DCAMPROP.MODE = Field(default=DCAMPROP.MODE.OFF, description="Frame bundle mode.")
+    framebundle_mode: DCAMPROP.MODE = Field(
+        default=DCAMPROP.MODE.OFF, description="Frame bundle mode."
+    )
     framebundle_number: int = Field(default=1, description="Frame bundle number.")
     number_of_view: int = Field(default=1, description="Number of views.")
     buffer_size: int = Field(default=100, description="Software circular buffer size.")
-    dcam_internal_buffer_size: int = Field(default=10, description="Camera internal frame buffer size.")
+    dcam_internal_buffer_size: int = Field(
+        default=10, description="Camera internal frame buffer size."
+    )
     timeout: int | Literal["auto"] = Field(default="auto", description="DCAM wait timeout in ms.")
-    capture_mode: DCAMCAP_START = Field(default=DCAMCAP_START.SEQUENCE, description="DCAM capture mode.")
+    capture_mode: DCAMCAP_START = Field(
+        default=DCAMCAP_START.SEQUENCE, description="DCAM capture mode."
+    )
 
     _is_open: bool = PrivateAttr(default=False)
     _dcam_api: DCAMAPI_INIT = PrivateAttr(default_factory=DCAMAPI_INIT)
@@ -770,7 +774,10 @@ class DCAM(BaseModel):
 
                 masterpulse_interval = requested_interval
 
-                if isinstance(min_trigger_interval, float) and masterpulse_interval <= min_trigger_interval:
+                if (
+                    isinstance(min_trigger_interval, float)
+                    and masterpulse_interval <= min_trigger_interval
+                ):
                     # Leave a small margin rather than requesting an interval the camera cannot obey.
                     masterpulse_interval = min_trigger_interval + 0.001
                     timing_readbacks["MASTERPULSE_INTERVAL_ADJUSTED_REASON"] = (
@@ -778,7 +785,9 @@ class DCAM(BaseModel):
                     )
 
                 timing_readbacks["MASTERPULSE_INTERVAL_REQUESTED_SEC"] = masterpulse_interval
-                timing_readbacks["MASTERPULSE_INTERVAL_REQUESTED_MS"] = masterpulse_interval * 1000.0
+                timing_readbacks["MASTERPULSE_INTERVAL_REQUESTED_MS"] = (
+                    masterpulse_interval * 1000.0
+                )
                 timing_readbacks["MASTERPULSE_EFFECTIVE_REQUESTED_FPS"] = 1.0 / masterpulse_interval
                 timing_readbacks["MASTERPULSE_MODE_SET"] = self._set_property(
                     DCAM_IDPROP.MASTERPULSE_MODE,
@@ -864,7 +873,9 @@ class DCAM(BaseModel):
         masterpulse_interval_sec = timing_readbacks.get("MASTERPULSE_INTERVAL_READBACK_SEC")
         if isinstance(masterpulse_interval_sec, float) and masterpulse_interval_sec > 0:
             timing_readbacks["MASTERPULSE_INTERVAL_READBACK_MS"] = masterpulse_interval_sec * 1000.0
-            timing_readbacks["EFFECTIVE_FPS_FROM_MASTERPULSE_INTERVAL"] = 1.0 / masterpulse_interval_sec
+            timing_readbacks["EFFECTIVE_FPS_FROM_MASTERPULSE_INTERVAL"] = (
+                1.0 / masterpulse_interval_sec
+            )
 
         cyclic_period_sec = timing_readbacks.get("TIMING_CYCLICTRIGGERPERIOD_SEC")
         if isinstance(cyclic_period_sec, float) and cyclic_period_sec > 0:
@@ -886,7 +897,9 @@ class DCAM(BaseModel):
 
         invalid_exposure_period_sec = timing_readbacks.get("TIMING_INVALIDEXPOSUREPERIOD_SEC")
         if isinstance(invalid_exposure_period_sec, float):
-            timing_readbacks["TIMING_INVALIDEXPOSUREPERIOD_MS"] = invalid_exposure_period_sec * 1000.0
+            timing_readbacks["TIMING_INVALIDEXPOSUREPERIOD_MS"] = (
+                invalid_exposure_period_sec * 1000.0
+            )
 
         if isinstance(exposure_sec, float) and isinstance(global_exposure_delay_sec, float):
             global_window_sec = exposure_sec - global_exposure_delay_sec
@@ -1155,7 +1168,9 @@ class DCAM(BaseModel):
 
         if err == DCAMERR.TIMEOUT:
             self._timeout_errors += 1
-            LOGGER.warning("Timeout waiting for frame ready event. Timeout errors: %s", self._timeout_errors)
+            LOGGER.warning(
+                "Timeout waiting for frame ready event. Timeout errors: %s", self._timeout_errors
+            )
             return False
 
         self._timeout_errors = 0
@@ -1198,4 +1213,3 @@ class DCAM(BaseModel):
 
     def __exit__(self, exc_type, exc, tb):
         self.close()
-

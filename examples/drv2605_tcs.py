@@ -1,7 +1,7 @@
 from adafruit_ina228 import AveragingCount, ConversionTime, Mode
 from board import SCL, SDA
 from busio import I2C
-from poulet_py.hardware.camera.hamamatzu.dcam import DCAMPROP
+
 from poulet_py import (
     AcquisitionType,
     CounterSource,
@@ -15,8 +15,9 @@ from poulet_py import (
     StimulatorTrial,
     StimuliMetadataSource,
     TCSSource,
-    TCSStimulus
+    TCSStimulus,
 )
+from poulet_py.hardware.camera.hamamatzu.dcam import DCAMPROP
 
 # create common i2c bus for all sources
 i2c = I2C(SCL, SDA)
@@ -38,14 +39,15 @@ sources = [
         maximum_temperature=50,
         buffer_size=10_000,
     ),
-    DCAMSource(name="dcam",
-                acquisition_type=AcquisitionType.CONTINUOUS,
-                resolution = (1024,1024),
-                frame_rate=20,
-                binning=DCAMPROP.BINNING._2,
-                exposure_time=50,
-                timing_mode="masterpulse"
-                ),
+    DCAMSource(
+        name="dcam",
+        acquisition_type=AcquisitionType.CONTINUOUS,
+        resolution=(1024, 1024),
+        frame_rate=20,
+        binning=DCAMPROP.BINNING._2,
+        exposure_time=50,
+        timing_mode="masterpulse",
+    ),
     INA228Source(
         name="ina228_mouse",
         i2c=i2c,
@@ -73,11 +75,9 @@ sources = [
 
 
 sinks = [
-    HDFSink(file="./temp_drv2605_continous.h5",
-    queue_size=20_000,
-    grow_step=10_000,
-    compression = "lzf"),
-
+    HDFSink(
+        file="./temp_drv2605_continous.h5", queue_size=20_000, grow_step=10_000, compression="lzf"
+    ),
 ]
 
 trials = [
@@ -135,21 +135,22 @@ trials = [
             ),
         ]
     ),
-        StimulatorTrial(
-        stimuli=[DRV2605Stimulus(
-            waveform=16,
-            repeat_count=1,
-            drive_voltage=4.0,
-            duration=1000,
-        ),
-        TCSStimulus(
-            surface=0,
-            duration=1000,
-            baseline=32,
-            target=32,
-            rise_rate=100,
-            return_speed=100,
-        ),
+    StimulatorTrial(
+        stimuli=[
+            DRV2605Stimulus(
+                waveform=16,
+                repeat_count=1,
+                drive_voltage=4.0,
+                duration=1000,
+            ),
+            TCSStimulus(
+                surface=0,
+                duration=1000,
+                baseline=32,
+                target=32,
+                rise_rate=100,
+                return_speed=100,
+            ),
         ]
     ),
 ]

@@ -1,4 +1,3 @@
-
 try:
     from numpy import concatenate, ndarray, zeros
     from pydantic import PrivateAttr
@@ -72,7 +71,7 @@ class TCSSource(BaseSource, TCS):
         """
         cond = getattr(self, "_acquisition_cond", None)
         if cond is None:
-            cond = getattr(self, "_sampling_cond")
+            cond = self._sampling_cond
 
         chunks = []
 
