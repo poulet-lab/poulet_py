@@ -35,7 +35,7 @@ sources = [
         address=0x41,
         bus_frequency=1_000_000,
         buffer_size=10_000,
-        sample_interval_s=0.0,
+        sample_interval_s=0.001,
         mode=Mode.CONT_BUS,
         averaging_count=AveragingCount.COUNT_16,
         bus_voltage_conv_time=ConversionTime.TIME_150_US,
@@ -47,7 +47,7 @@ sources = [
         address=0x40,
         bus_frequency=1_000_000,
         buffer_size=10_000,
-        sample_interval_s=0.0,
+        sample_interval_s=0.001,
         mode=Mode.CONT_BUS,
         averaging_count=AveragingCount.COUNT_16,
         bus_voltage_conv_time=ConversionTime.TIME_150_US,
@@ -57,7 +57,7 @@ sources = [
 
 
 sinks = [
-    HDFSink(file="./temp_drv2605_tcs_ins_10x.h5"),
+    HDFSink(file="./temp_drv2605_tcs_ins_different_bus.h5"),
 ]
 
 trials = [
