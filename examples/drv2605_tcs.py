@@ -29,7 +29,6 @@ sources = [
         i2c_retry_attempts=5,
         i2c_retry_backoff_s=0.005,
         continue_on_i2c_error=True,
-
     ),
     TCSSource(
         name="tcs",
@@ -88,20 +87,21 @@ trials = [
         )
     ),
     StimulatorTrial(
-        stimuli=[DRV2605Stimulus(
-            waveform=16,
-            repeat_count=0,
-            drive_voltage=4.0,
-            duration=1000,
-        ),
-        TCSStimulus(
-            surface=0,
-            duration=1000,
-            baseline=32,
-            target=40,
-            rise_rate=100,
-            return_speed=100,
-        ),
+        stimuli=[
+            DRV2605Stimulus(
+                waveform=16,
+                repeat_count=0,
+                drive_voltage=4.0,
+                duration=1000,
+            ),
+            TCSStimulus(
+                surface=0,
+                duration=1000,
+                baseline=32,
+                target=40,
+                rise_rate=100,
+                return_speed=100,
+            ),
         ]
     ),
 ]
