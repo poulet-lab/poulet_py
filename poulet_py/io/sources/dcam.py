@@ -91,7 +91,7 @@ class DCAMSource(BaseSource, DCAM):
                     LOGGER.error("DCAMSource error in reading sample, drop frame")
                     continue
 
-                self._write_samples(sample)
+                self._write_sample(sample)
 
         else:
             precise_sleep(self._max_stimulus_duration_ms / 1000.0)

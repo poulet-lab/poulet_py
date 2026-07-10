@@ -207,6 +207,11 @@ class INA228Source(BaseSource):
                     hz = 1000 / ((now - t0) * 1e-9)
                     LOGGER.info("INA228 %s acquisition rate: %.1f Hz", self.name, hz)
                     t0 = now
+                    if 1.7 >= self._ina228.bus_voltage >= 1.6:
+                        LOGGER.warning("INA228 %s caution approaching unsafe temperature", self.name)
+                    elif self._ina228.bus_voltage >= 1.7:
+                        LOGGER.error("INA228 %s temperature too high, terminate experiment!", self.name)
+
 
                 if self.sample_interval_s > 0:
                     precise_sleep(self.sample_interval_s)

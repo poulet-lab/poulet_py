@@ -216,7 +216,7 @@ class DRV2605Source(BaseSource):
                 )
                 return True
 
-            except (I2cIOError, I2cNackError, OSError, TimeoutError) as e:
+            except (I2cNackError, OSError, TimeoutError) as e:
                 last_error = e
 
                 LOGGER.warning(
