@@ -29,12 +29,13 @@ sources = [
         i2c_retry_attempts=5,
         i2c_retry_backoff_s=0.005,
         continue_on_i2c_error=True,
+
     ),
-    #    TCSSource(
-    #        name="tcs",
-    #        port="/dev/ttyUSB0",
-    #        maximum_temperature=50,
-    #    ),
+    TCSSource(
+        name="tcs",
+        port="/dev/ttyUSB0",
+        maximum_temperature=50,
+    ),
     DCAMSource(name="dcam", acquisition_type=AcquisitionType.CONTINUOUS),
     INA228Source(
         name="ina228_mouse",
@@ -42,10 +43,10 @@ sources = [
         address=0x41,
         bus_frequency=1_000_000,
         buffer_size=10_000,
-        sample_interval_s=0.001,
+        sample_interval_s=0.002,
         mode=Mode.CONT_BUS,
-        averaging_count=AveragingCount.COUNT_16,
-        bus_voltage_conv_time=ConversionTime.TIME_150_US,
+        averaging_count=AveragingCount.COUNT_64,
+        bus_voltage_conv_time=ConversionTime.TIME_50_US,
         ftdi_latency_ms=1,
     ),
     INA228Source(
@@ -54,17 +55,17 @@ sources = [
         address=0x40,
         bus_frequency=1_000_000,
         buffer_size=10_000,
-        sample_interval_s=0.001,
+        sample_interval_s=0.002,
         mode=Mode.CONT_BUS,
-        averaging_count=AveragingCount.COUNT_16,
-        bus_voltage_conv_time=ConversionTime.TIME_150_US,
+        averaging_count=AveragingCount.COUNT_64,
+        bus_voltage_conv_time=ConversionTime.TIME_50_US,
         ftdi_latency_ms=1,
     ),
 ]
 
 
 sinks = [
-    HDFSink(file="./temp_drv2605_catchcerror_ins_camera.h5"),
+    HDFSink(file="./temp_drv2605_catchcerror_ins_camera_differentUSB_bus.h5"),
 ]
 
 trials = [
@@ -73,7 +74,7 @@ trials = [
             DRV2605Stimulus(
                 waveform=16,
                 repeat_count=0,
-                drive_voltage=2.0,
+                drive_voltage=4.0,
                 duration=1000,
             ),
         ]
@@ -82,17 +83,26 @@ trials = [
         stimuli=DRV2605Stimulus(
             waveform=16,
             repeat_count=1,
-            drive_voltage=2.0,
+            drive_voltage=4.0,
             duration=1000,
         )
     ),
     StimulatorTrial(
-        stimuli=DRV2605Stimulus(
+        stimuli=[DRV2605Stimulus(
             waveform=16,
             repeat_count=0,
-            drive_voltage=2.0,
+            drive_voltage=4.0,
             duration=1000,
-        )
+        ),
+        TCSStimulus(
+            surface=0,
+            duration=1000,
+            baseline=32,
+            target=40,
+            rise_rate=100,
+            return_speed=100,
+        ),
+        ]
     ),
 ]
 
