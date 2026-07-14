@@ -206,9 +206,11 @@ class INA228Source(BaseSource):
                     now = monotonic_ns()
                     hz = 1000 / ((now - t0) * 1e-9)
                     LOGGER.info("INA228 %s acquisition rate: %.1f Hz", self.name, hz)
-                    LOGGER.info("INA228 I2C: %.0f Hz (configured=%s)",
-                                self.i2c._i2c._i2c.frequency,
-                                self.i2c._i2c._i2c.configured)
+                    LOGGER.info(
+                        "INA228 I2C: %.0f Hz (configured=%s)",
+                        self.i2c._i2c._i2c.frequency,
+                        self.i2c._i2c._i2c.configured,
+                    )
                     t0 = now
                     if 1.7 >= self._ina228.bus_voltage >= 1.6:
                         LOGGER.warning(
