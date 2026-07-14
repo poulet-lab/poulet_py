@@ -26,7 +26,7 @@ class INA228Source(BaseSource):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     address: int = Field(default=0x40, description="INA228 I2C address")
-    bus_frequency: int = Field(default=1_000_000, gt=1)
+    bus_frequency: int = Field(default=400_000, gt=1)
 
     ftdi_latency_ms: int | None = Field(
         default=1,
@@ -206,6 +206,9 @@ class INA228Source(BaseSource):
                     now = monotonic_ns()
                     hz = 1000 / ((now - t0) * 1e-9)
                     LOGGER.info("INA228 %s acquisition rate: %.1f Hz", self.name, hz)
+                    LOGGER.info("INA228 I2C: %.0f Hz (configured=%s)",
+                                self.i2c._i2c._i2c.frequency,
+                                self.i2c._i2c._i2c.configured)
                     t0 = now
                     if 1.7 >= self._ina228.bus_voltage >= 1.6:
                         LOGGER.warning(

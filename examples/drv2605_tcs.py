@@ -20,8 +20,10 @@ from poulet_py import (
 from poulet_py.hardware.camera.hamamatzu.dcam import DCAMPROP
 
 # create common i2c bus for all sources
-i2c = I2C(SCL, SDA)
-
+i2c = I2C(SCL, SDA, frequency = 400_000)
+#this is a temp fix to test weather pyftdi error handling introduces erroneous values...
+#instead move to poulet_py error handling and read discard
+i2c._i2c._i2c.set_retry_count(1)
 sources = [
     CounterSource(name="trial"),
     StimuliMetadataSource(name="metadata"),
@@ -39,15 +41,15 @@ sources = [
         maximum_temperature=50,
         buffer_size=10_000,
     ),
-    DCAMSource(
-        name="dcam",
-        acquisition_type=AcquisitionType.CONTINUOUS,
-        resolution=(1024, 1024),
-        frame_rate=20,
-        binning=DCAMPROP.BINNING._2,
-        exposure_time=50,
-        timing_mode="masterpulse",
-    ),
+    DCAMSource(name="dcam",
+                acquisition_type=AcquisitionType.CONTINUOUS,
+                resolution = (1024,1024),
+                frame_rate=20,
+                binning=DCAMPROP.BINNING._2,
+                exposure_time=30,
+                timing_mode="masterpulse",
+                output_trigger_kind=DCAMPROP.OUTPUTTRIGGER_KIND.GLOBALEXPOSURE,
+                ),
     INA228Source(
         name="ina228_mouse",
         i2c=i2c,
@@ -75,9 +77,11 @@ sources = [
 
 
 sinks = [
-    HDFSink(
-        file="./temp_drv2605_continous.h5", queue_size=20_000, grow_step=10_000, compression="lzf"
-    ),
+    HDFSink(file="./temp_full_length_motornoise_i2cfreq_wdrv_wmotor_lessretry.h5",
+    queue_size=20_000,
+    grow_step=10_000,
+    compression = "lzf"),
+
 ]
 
 trials = [
@@ -156,7 +160,7 @@ trials = [
 ]
 
 blocks = [
-    StimulatorBlock(trials=trials, trial_repetitions=30),
+    StimulatorBlock(trials=trials, trial_repetitions=550),
 ]
 
 experiment = StimulatorRuntime(
