@@ -166,6 +166,9 @@ class DRV2605Source(BaseSource):
 
         slots = [waveform] * repeat_count + [0] * (8 - repeat_count)
 
+        LOGGER.info("DRV2605L I2C: %.0f Hz (configured=%s)",
+                    self.i2c._i2c._i2c.frequency,
+                    self.i2c._i2c._i2c.configured)
         self._write_block(REG_WAVESEQ1, slots)
         self._write_register(REG_GO, 1)
 
