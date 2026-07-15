@@ -81,7 +81,7 @@ sources = [
 
 sinks = [
     HDFSink(
-        file="./temp_full_length_motornoise_i2cfreq_wdrv_wmotor_lessretry.h5",
+        file="./temp_demo.h5",
         queue_size=20_000,
         grow_step=10_000,
         compression="lzf",
@@ -94,12 +94,12 @@ trials = [
             DRV2605Stimulus(
                 waveform=16,
                 repeat_count=0,
-                drive_voltage=4.0,
-                duration=1000,
+                drive_voltage=2.0,
+                duration=3000,
             ),
             TCSStimulus(
                 surface=0,
-                duration=1000,
+                duration=3000,
                 baseline=32,
                 target=32,
                 rise_rate=100,
@@ -111,13 +111,13 @@ trials = [
         stimuli=[
             DRV2605Stimulus(
                 waveform=16,
-                repeat_count=1,
-                drive_voltage=4.0,
-                duration=1000,
+                repeat_count=3,
+                drive_voltage=2,
+                duration=3000,
             ),
             TCSStimulus(
                 surface=0,
-                duration=1000,
+                duration=3000,
                 baseline=32,
                 target=40,
                 rise_rate=100,
@@ -131,11 +131,11 @@ trials = [
                 waveform=16,
                 repeat_count=0,
                 drive_voltage=4.0,
-                duration=1000,
+                duration=3000,
             ),
             TCSStimulus(
                 surface=0,
-                duration=1000,
+                duration=3000,
                 baseline=32,
                 target=40,
                 rise_rate=100,
@@ -147,13 +147,13 @@ trials = [
         stimuli=[
             DRV2605Stimulus(
                 waveform=16,
-                repeat_count=1,
-                drive_voltage=4.0,
-                duration=1000,
+                repeat_count=3,
+                drive_voltage=5.0,
+                duration=3000,
             ),
             TCSStimulus(
                 surface=0,
-                duration=1000,
+                duration=3000,
                 baseline=32,
                 target=32,
                 rise_rate=100,
@@ -164,7 +164,7 @@ trials = [
 ]
 
 blocks = [
-    StimulatorBlock(trials=trials, trial_repetitions=550),
+    StimulatorBlock(trials=trials, trial_repetitions=5),
 ]
 
 experiment = StimulatorRuntime(
