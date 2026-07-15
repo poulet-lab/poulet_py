@@ -1,6 +1,6 @@
 # ruff: noqa TID252
 from .eventing import BaseEvent, EventBus, EventHandler, SinkEvent
-from .sinks import BaseSink, HDFSink, OscilloscopeSink
+from .sinks import BaseSink, HDFSink
 
 from .sources import (
     AcquisitionType,
@@ -30,7 +30,7 @@ __all__ = [
     "EventBus",
     "EventHandler",
     "HDFSink",
-    "OscilloscopeSink",
+    "HDFSink",
     "NIDaQSource",
     "SinkEvent",
     "TCSSource",
