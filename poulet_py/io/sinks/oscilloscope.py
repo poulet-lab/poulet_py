@@ -7,7 +7,7 @@ try:
     from numpy import ndarray
     from pydantic import ConfigDict, Field, PrivateAttr
 
-    from poulet_py import BaseEvent, BaseSink, LOGGER, Oscilloscope, SinkEvent
+    from poulet_py import LOGGER, BaseEvent, BaseSink, Oscilloscope, SinkEvent
 
 except ImportError as e:
     raise ImportError(
