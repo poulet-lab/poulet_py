@@ -20,10 +20,10 @@ from poulet_py import (
 from poulet_py.hardware.camera.hamamatzu.dcam import DCAMPROP
 
 # create common i2c bus for all sources
-i2c = I2C(SCL, SDA, frequency = 400_000)
-#this is a temp fix to test weather pyftdi error handling introduces erroneous values...
-#instead move to poulet_py error handling and read discard
-#maximum o retries internally through pyftdi, eliminates warning: retry exchange handling and 
+i2c = I2C(SCL, SDA, frequency=400_000)
+# this is a temp fix to test weather pyftdi error handling introduces erroneous values...
+# instead move to poulet_py error handling and read discard
+# maximum o retries internally through pyftdi, eliminates warning: retry exchange handling and
 # liminates erroneous data writing into buffer
 i2c._i2c._i2c.set_retry_count(1)
 sources = [

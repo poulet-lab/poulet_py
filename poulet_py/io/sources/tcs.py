@@ -42,24 +42,21 @@ class TCSSource(BaseSource, TCS):
 
     def _trigger_and_wait(self, stimulus: TCSStimulus) -> None:
         """
-        Supports both TCS implementations:
-
-        - new vk_tcs_fix-style TCS.trigger(stimulus, wait=True)
-        - old speed_up_dev-style TCS.trigger(stimulus) plus source-side waiting
+        Trigger a TCS stimulus and drain samples while it runs so live
+        monitors receive data during the trial, not only after completion.
         """
+        precise_sleep(stimulus.pre_delay / 1000.0)
         try:
-            self.trigger(stimulus, wait=True)
-            return
-
+            self.trigger(stimulus, wait=False)
         except TypeError:
-            # Backward-compatible path for the old trigger(stimulus) API.
-            precise_sleep(stimulus.pre_delay / 1000.0)
             self.trigger(stimulus)
 
-            while self.stimulus_running:
-                precise_sleep(0.001)
+        while self.stimulus_running:
+            self._drain_tcs_buffer()
+            precise_sleep(0.05)
 
-            precise_sleep(stimulus.post_delay / 1000.0)
+        precise_sleep(stimulus.post_delay / 1000.0)
+        self._drain_tcs_buffer()
 
     def _drain_tcs_buffer(self) -> None:
         """
