@@ -44,6 +44,15 @@ class INA228Source(BaseSource):
         ),
     )
 
+    sample_rate_Hz: float = Field(
+        default = 10.0,
+        ge=0.0,
+        le=1000.0,
+        description=(
+            "target sample rate for voltage measurement"
+        )
+    )
+
     mode: int = Field(
         default=Mode.CONT_BUS,
         description="INA228 ADC mode. Default is continuous bus-voltage-only.",
@@ -74,6 +83,7 @@ class INA228Source(BaseSource):
         description="Pass skip_reset to the Adafruit INA228 driver.",
     )
 
+
     i2c: I2C | None = Field(default=None)
 
     _ina228: INA228 | None = PrivateAttr(default=None)
@@ -84,6 +94,7 @@ class INA228Source(BaseSource):
     def _set_buffer_dtype(self):
         self._source_buffer_dtype = [
             ("timestamp", "uint64"),
+            ("time_roundtrip", "uint64"),
             ("bus_voltage", "float32"),
         ]
 
@@ -184,19 +195,34 @@ class INA228Source(BaseSource):
         self._acquisition_thread = None
 
     def _acquisition_thread_func(self):
-        n = 0
+        missed_deadlines = 0
+        period_ns = (1/self.sample_rate_Hz * 1e9)
         t0 = monotonic_ns()
+        next_deadline = monotonic_ns()
+        n = 0
         consecutive_errors = 0
         while not self._stop_acquisition_event.is_set():
+            next_deadline += period_ns
             try:
                 if self._ina228 is None:
                     LOGGER.warning("INA228 %s stopped: device not initialized", self.name)
                     break
 
+                time_request = monotonic_ns()
+                voltage = float(self._ina228.bus_voltage)
+                time_answer = monotonic_ns()
+
+                #approximate read time based on 1/2 roundtrip time
+                time_roundtrip = time_answer - time_request
+                time_read = (time_request + time_answer)//2
+
+                #reset consecutive error timer if sucessful read was possible
+                consecutive_errors = 0
                 self._write_sample(
                     (
-                        monotonic_ns(),
-                        float(self._ina228.bus_voltage),
+                        time_read,
+                        time_roundtrip,
+                        voltage,
                     )
                 )
 
@@ -211,22 +237,28 @@ class INA228Source(BaseSource):
                         self.i2c._i2c._i2c.frequency,
                         self.i2c._i2c._i2c.configured,
                     )
-                    t0 = now
-                    if 1.7 >= self._ina228.bus_voltage >= 1.6:
+                    if 1.7 >= voltage >= 1.6:
                         LOGGER.warning(
                             "INA228 %s caution approaching unsafe temperature", self.name
                         )
-                    elif self._ina228.bus_voltage >= 1.7:
+                    elif voltage >= 1.7:
                         LOGGER.error(
                             "INA228 %s temperature too high, terminate experiment!", self.name
                         )
+                    t0 = now
 
-                if self.sample_interval_s > 0:
-                    precise_sleep(self.sample_interval_s)
+                remaining_ns = next_deadline - monotonic_ns()
+                if remaining_ns > 0:
+                    precise_sleep(remaining_ns / 1e9)
                 else:
                     # Yield very lightly; the I2C call already dominates timing,
                     # but this helps avoid starving other Python threads.
-                    sleep(0)
+                    missed_deadlines +=1
+                    #LOGGER.warning(
+                    #    "INA228 %s slow acquisition %s/100 at address 0x%02X: %s",
+                    #    missed_deadlines,
+
+                #)
 
             except Exception as e:
                 consecutive_errors += 1
@@ -238,9 +270,7 @@ class INA228Source(BaseSource):
                     e,
                 )
 
-                # precise_sleep(0.0001)
-
-                if consecutive_errors >= 100:
+                if consecutive_errors >= 10:
                     LOGGER.exception(
                         "INA228 %s stopping after repeated acquisition errors at address 0x%02X",
                         self.name,
