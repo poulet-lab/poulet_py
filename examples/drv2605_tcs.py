@@ -162,8 +162,9 @@ trials = [
         ]
     ),
 ]
-
+#low temp exp
 blocks = [
+    #32
     StimulatorBlock(trials=trials, trial_repetitions=5),
 ]
 
