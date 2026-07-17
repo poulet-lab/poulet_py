@@ -45,12 +45,7 @@ class INA228Source(BaseSource):
     )
 
     sample_rate_Hz: float = Field(
-        default = 10.0,
-        ge=0.0,
-        le=1000.0,
-        description=(
-            "target sample rate for voltage measurement"
-        )
+        default=10.0, ge=0.0, le=1000.0, description=("target sample rate for voltage measurement")
     )
 
     mode: int = Field(
@@ -82,7 +77,6 @@ class INA228Source(BaseSource):
         default=False,
         description="Pass skip_reset to the Adafruit INA228 driver.",
     )
-
 
     i2c: I2C | None = Field(default=None)
 
@@ -196,7 +190,7 @@ class INA228Source(BaseSource):
 
     def _acquisition_thread_func(self):
         missed_deadlines = 0
-        period_ns = (1/self.sample_rate_Hz * 1e9)
+        period_ns = 1 / self.sample_rate_Hz * 1e9
         t0 = monotonic_ns()
         next_deadline = monotonic_ns()
         n = 0
@@ -212,11 +206,11 @@ class INA228Source(BaseSource):
                 voltage = float(self._ina228.bus_voltage)
                 time_answer = monotonic_ns()
 
-                #approximate read time based on 1/2 roundtrip time
+                # approximate read time based on 1/2 roundtrip time
                 time_roundtrip = time_answer - time_request
-                time_read = (time_request + time_answer)//2
+                time_read = (time_request + time_answer) // 2
 
-                #reset consecutive error timer if sucessful read was possible
+                # reset consecutive error timer if sucessful read was possible
                 consecutive_errors = 0
                 self._write_sample(
                     (
@@ -253,12 +247,12 @@ class INA228Source(BaseSource):
                 else:
                     # Yield very lightly; the I2C call already dominates timing,
                     # but this helps avoid starving other Python threads.
-                    missed_deadlines +=1
-                    #LOGGER.warning(
+                    missed_deadlines += 1
+                    # LOGGER.warning(
                     #    "INA228 %s slow acquisition %s/100 at address 0x%02X: %s",
                     #    missed_deadlines,
 
-                #)
+                # )
 
             except Exception as e:
                 consecutive_errors += 1
