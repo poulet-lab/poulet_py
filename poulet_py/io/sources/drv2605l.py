@@ -122,7 +122,7 @@ class DRV2605Source(BaseSource):
             )
             time_answer = monotonic_ns()
             time_roundtrip = time_answer - time_request
-            time_read = (time_request + time_answer)//2
+            time_read = (time_request + time_answer) // 2
             if played:
                 self._write_sample(
                     (
@@ -146,7 +146,9 @@ class DRV2605Source(BaseSource):
                     return False
 
             # Preserve trial timing even if the haptic command failed.
-            precise_sleep((stimulus.duration-((monotonic_ns() - t0)/1e9) + stimulus.post_delay) / 1000.0)
+            precise_sleep(
+                (stimulus.duration - ((monotonic_ns() - t0) / 1e9) + stimulus.post_delay) / 1000.0
+            )
 
         return True
 
