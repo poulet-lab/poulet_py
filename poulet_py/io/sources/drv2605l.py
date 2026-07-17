@@ -75,6 +75,7 @@ class DRV2605Source(BaseSource):
     def _set_buffer_dtype(self):
         self._source_buffer_dtype = [
             ("timestamp", "uint64"),
+            ("time_roundtrip", "uint64"),
             ("waveform", "uint8"),
             ("repeat_count", "uint8"),
             ("drive_voltage", "float32"),
@@ -103,6 +104,7 @@ class DRV2605Source(BaseSource):
 
     def _fire(self) -> bool:
         for stimulus in self._stimuli:
+            t0 = monotonic_ns()
             if not isinstance(stimulus, DRV2605Stimulus):
                 continue
 
@@ -112,17 +114,20 @@ class DRV2605Source(BaseSource):
             waveform = int(config["waveform"])
             repeat_count = int(config["repeat_count"])
             drive_voltage = config["drive_voltage"]
-
+            time_request = monotonic_ns()
             played = self._play_waveform_with_retries(
                 waveform=waveform,
                 repeat_count=repeat_count,
                 drive_voltage=drive_voltage,
             )
-
+            time_answer = monotonic_ns()
+            time_roundtrip = time_answer - time_request
+            time_read = (time_request + time_answer)//2
             if played:
                 self._write_sample(
                     (
-                        monotonic_ns(),
+                        time_read,
+                        time_roundtrip,
                         waveform,
                         repeat_count,
                         float("nan") if drive_voltage is None else float(drive_voltage),
@@ -141,7 +146,7 @@ class DRV2605Source(BaseSource):
                     return False
 
             # Preserve trial timing even if the haptic command failed.
-            precise_sleep((stimulus.duration + stimulus.post_delay) / 1000.0)
+            precise_sleep((stimulus.duration-((monotonic_ns() - t0)/1e9) + stimulus.post_delay) / 1000.0)
 
         return True
 
