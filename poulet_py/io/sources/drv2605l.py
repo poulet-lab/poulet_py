@@ -122,7 +122,7 @@ class DRV2605Source(BaseSource):
             )
             time_answer = monotonic_ns()
             time_roundtrip = time_answer - time_request
-            time_read = (time_request + time_answer)//2
+            time_read = (time_request + time_answer) // 2
             if played:
                 self._write_sample(
                     (
