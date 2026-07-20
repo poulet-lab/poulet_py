@@ -68,7 +68,6 @@ sources = [
         name="ina228_pad",
         i2c=i2c,
         address=0x40,
-        bus_frequency=1_000_000,
         buffer_size=10_000,
         sample_rate_Hz=100,
         mode=Mode.CONT_BUS,
@@ -165,7 +164,7 @@ trials = [
 #low temp exp
 blocks = [
     #32
-    StimulatorBlock(trials=trials, trial_repetitions=5),
+    StimulatorBlock(trials=trials, trial_repetitions=10),
 ]
 
 experiment = StimulatorRuntime(
