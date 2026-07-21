@@ -90,6 +90,7 @@ class INA228Source(BaseSource):
             ("timestamp", "uint64"),
             ("time_roundtrip", "uint64"),
             ("bus_voltage", "float32"),
+            ("invalid_value_count", "int16"),
         ]
 
     def open(self) -> None:
@@ -194,6 +195,7 @@ class INA228Source(BaseSource):
         t0 = monotonic_ns()
         next_deadline = monotonic_ns()
         n = 0
+        invalid_value_count = 0
         consecutive_errors = 0
         while not self._stop_acquisition_event.is_set():
             next_deadline += period_ns
@@ -212,13 +214,19 @@ class INA228Source(BaseSource):
 
                 # reset consecutive error timer if sucessful read was possible
                 consecutive_errors = 0
-                self._write_sample(
-                    (
-                        time_read,
-                        time_roundtrip,
-                        voltage,
+
+                if voltage > maximum_valid_voltage:
+                    invalid_value_count += 1
+                else:
+                    self._write_sample()
+                    self._write_sample(
+                        (
+                            time_read,
+                            time_roundtrip,
+                            voltage,
+                            invalid_value_count,
+                        )
                     )
-                )
 
                 n += 1
 
