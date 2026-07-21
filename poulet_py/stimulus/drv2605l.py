@@ -1,5 +1,5 @@
 try:
-    from typing import Any
+    from typing import Any, Literal
 
     from pydantic import Field
 
@@ -10,29 +10,51 @@ except ImportError as e:
 Missing DRV2605L stimulus dependencies.
 
 Install options:
-- Dedicated:    pip install poulet_py[stimulus]
-- Module:       pip install poulet_py[io]
-- Full:         pip install poulet_py[all]
+- Dedicated: pip install poulet_py[stimulus]
+- Module:    pip install poulet_py[io]
+- Full:      pip install poulet_py[all]
 """
     raise ImportError(msg) from e
 
 
+
+
 class DRV2605Stimulus(BaseStimulus):
     """
-    Stimulus description for a DRV2605L haptic motor driver.
+    DRV2605L stimulus description.
 
-    This class does not touch hardware. It only describes what should be played.
-    The hardware execution is handled by DRV2605Source.
+    RTP is the default mode. ``drive_voltage`` is converted to the unsigned
+    RTP_INPUT command. ``DRV2605Source.maximum_voltage`` independently sets
+    OD_CLAMP and defaults to 3.3 V.
     """
 
-    duration: int = Field(
-        default=1000,
-        ge=1,
-        le=7000,
+    mode: Literal["rtp", "play_waveform"] = Field(
+        default="rtp",
+        description="Use RTP input or the internal ROM waveform sequencer.",
+    )
+
+    specify_mode: bool = Field(
+        default=False,
         description=(
-            "Nominal stimulus duration in ms. If repeat_count is not given, "
-            "duration // 1000 is used as the number of waveform repetitions, "
-            "clamped to 0-7."
+            "Force mode-specific registers to be rewritten for this stimulus. "
+            "Otherwise cached configuration is reused."
+        ),
+    )
+
+    duration: int = Field(
+        default=500,
+        ge=50,
+        le=10000,
+        description="Motor command duration in ms. RTP mode requires 50-5000 ms.",
+    )
+
+    drive_voltage: float = Field(
+        default=5.6,
+        ge=0.0,
+        le=5.6,
+        description=(
+            "Requested RTP command on the existing 0-5.6 V API scale. "
+            "OD_CLAMP independently limits maximum output."
         ),
     )
 
@@ -40,38 +62,37 @@ class DRV2605Stimulus(BaseStimulus):
         default=16,
         ge=1,
         le=123,
-        description="DRV2605L ROM waveform/effect ID. Effect 16 is the 1000 ms alert.",
+        description="ROM waveform ID for play_waveform mode.",
     )
 
     repeat_count: int | None = Field(
-        default=None,
+        default=1,
         ge=0,
         le=7,
         description=(
-            "Number of times to place the waveform into the 8-slot waveform "
-            "sequencer. Slot 8 is kept as 0 terminator, so valid range is 0-7. "
-            "If None, duration // 1000 is used."
+            "Number of waveform-sequencer slots. If None, duration // 1000 "
+            "is used and clamped to 0-7."
         ),
     )
+    
 
-    drive_voltage: float | None = Field(
-        default=None,
-        ge=0.0,
-        le=5.6,
-        description=(
-            "Optional OD_CLAMP voltage in V. If None, the current DRV2605L "
-            "configuration is left unchanged."
-        ),
-    )
-
-    def build(self, *args: Any, **kwargs: Any) -> dict[str, int | float | None]:
-        if self.repeat_count is None:
-            repeat_count = max(0, min(int(self.duration // 1000), 7))
-        else:
-            repeat_count = self.repeat_count
+    def build(
+        self,
+        *args: Any,
+        **kwargs: Any,
+    ) -> dict[str, int | float | str | bool]:
+        del args, kwargs
+        repeat_count = (
+            max(0, min(int(self.duration // 1000), 7))
+            if self.repeat_count is None
+            else self.repeat_count
+        )
 
         return {
+            "mode": self.mode,
+            "specify_mode": self.specify_mode,
+            "duration": self.duration,
+            "drive_voltage": self.drive_voltage,
             "waveform": self.waveform,
             "repeat_count": repeat_count,
-            "drive_voltage": self.drive_voltage,
         }
