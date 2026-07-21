@@ -17,8 +17,6 @@ Install options:
     raise ImportError(msg) from e
 
 
-
-
 class DRV2605Stimulus(BaseStimulus):
     """
     DRV2605L stimulus description.
@@ -74,7 +72,6 @@ class DRV2605Stimulus(BaseStimulus):
             "is used and clamped to 0-7."
         ),
     )
-    
 
     def build(
         self,
