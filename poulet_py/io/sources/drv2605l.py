@@ -147,7 +147,7 @@ class DRV2605Source(BaseSource):
 
             # Preserve trial timing even if the haptic command failed.
             precise_sleep(
-                (stimulus.duration - ((monotonic_ns() - t0) / 1e9) + stimulus.post_delay) / 1000.0
+                (stimulus.duration - ((monotonic_ns() - t0) / 1e6) + stimulus.post_delay) / 1000.0
             )
 
         return True
