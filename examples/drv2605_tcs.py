@@ -38,22 +38,22 @@ sources = [
         i2c_retry_backoff_s=0.001,
         continue_on_i2c_error=True,
     ),
-    TCSSource(
-        name="tcs",
-        port="/dev/ttyUSB0",
-        maximum_temperature=50,
-        buffer_size=10_000,
-    ),
-    DCAMSource(
-        name="dcam",
-        acquisition_type=AcquisitionType.CONTINUOUS,
-        resolution=(1024, 1024),
-        frame_rate=20,
-        binning=DCAMPROP.BINNING._2,
-        exposure_time=30,
-        timing_mode="masterpulse",
-        output_trigger_kind=DCAMPROP.OUTPUTTRIGGER_KIND.GLOBALEXPOSURE,
-    ),
+    #TCSSource(
+    #    name="tcs",
+    #    port="/dev/ttyUSB0",
+    #    maximum_temperature=50,
+    #    buffer_size=10_000,
+    #),
+    #DCAMSource(
+    #    name="dcam",
+    #    acquisition_type=AcquisitionType.CONTINUOUS,
+    #    resolution=(1024, 1024),
+    #    frame_rate=20,
+    #    binning=DCAMPROP.BINNING._2,
+    #    exposure_time=30,
+    #    timing_mode="masterpulse",
+    #    output_trigger_kind=DCAMPROP.OUTPUTTRIGGER_KIND.GLOBALEXPOSURE,
+    #),
     INA228Source(
         name="ina228_mouse",
         i2c=i2c,
@@ -79,7 +79,7 @@ sources = [
 
 sinks = [
     HDFSink(
-        file="./temp_demo_speedupdev_longer.h5",
+        file="./temp_demo_speedupdev_longer_nocam_notcs_source.h5",
         queue_size=20_000,
         grow_step=10_000,
         compression="lzf",
