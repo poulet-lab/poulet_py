@@ -174,7 +174,7 @@ trials = [
 blocks = [
     StimulatorBlock(
         trials=trials,
-        trial_repetitions=100,
+        trial_repetitions=40,
     ),
 ]
 
