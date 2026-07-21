@@ -33,6 +33,7 @@ sources = [
         name="drv2605",
         address=0x5A,
         i2c=i2c,
+        maximum_voltage=5.6,
         i2c_retry_attempts=10,
         i2c_retry_backoff_s=0.001,
         continue_on_i2c_error=True,
@@ -62,7 +63,6 @@ sources = [
         mode=Mode.CONT_BUS,
         averaging_count=AveragingCount.COUNT_16,
         bus_voltage_conv_time=ConversionTime.TIME_150_US,
-        ftdi_latency_ms=1,
     ),
     INA228Source(
         name="ina228_pad",
@@ -73,29 +73,25 @@ sources = [
         mode=Mode.CONT_BUS,
         averaging_count=AveragingCount.COUNT_16,
         bus_voltage_conv_time=ConversionTime.TIME_150_US,
-        ftdi_latency_ms=1,
     ),
 ]
 
 
 sinks = [
     HDFSink(
-        file="./temp_demo.h5",
+        file="./temp_demo_speedupdev.h5",
         queue_size=20_000,
         grow_step=10_000,
         compression="lzf",
     ),
 ]
 
+
+# Exact stimulus and trial structure from drv2605_tcs.py.
+# Only the DRV2605L usage mode has been changed to RTP.
 trials = [
     StimulatorTrial(
         stimuli=[
-            DRV2605Stimulus(
-                waveform=16,
-                repeat_count=0,
-                drive_voltage=2.0,
-                duration=3000,
-            ),
             TCSStimulus(
                 surface=0,
                 duration=3000,
@@ -103,16 +99,19 @@ trials = [
                 target=32,
                 rise_rate=100,
                 return_speed=100,
+                pre_delay = 1000,
+                post_delay = 1000,
             ),
         ]
     ),
     StimulatorTrial(
         stimuli=[
             DRV2605Stimulus(
-                waveform=16,
-                repeat_count=3,
-                drive_voltage=2,
+                mode="rtp",
+                drive_voltage=3,
                 duration=3000,
+                pre_delay = 1000,
+                post_delay = 1000,
             ),
             TCSStimulus(
                 surface=0,
@@ -121,16 +120,19 @@ trials = [
                 target=40,
                 rise_rate=100,
                 return_speed=100,
+                pre_delay = 1000,
+                post_delay = 1000,
             ),
         ]
     ),
     StimulatorTrial(
         stimuli=[
             DRV2605Stimulus(
-                waveform=16,
-                repeat_count=0,
-                drive_voltage=4.0,
+                mode="rtp",
+                drive_voltage=0,
                 duration=3000,
+                pre_delay = 1000,
+                post_delay = 1000,
             ),
             TCSStimulus(
                 surface=0,
@@ -139,33 +141,43 @@ trials = [
                 target=40,
                 rise_rate=100,
                 return_speed=100,
+                pre_delay = 1000,
+                post_delay = 1000,
             ),
         ]
     ),
     StimulatorTrial(
         stimuli=[
             DRV2605Stimulus(
-                waveform=16,
-                repeat_count=3,
+                mode="rtp",
                 drive_voltage=5.0,
                 duration=3000,
+                pre_delay = 1000,
+                post_delay = 1000,
             ),
             TCSStimulus(
                 surface=0,
                 duration=3000,
                 baseline=32,
-                target=32,
+                target=20,
                 rise_rate=100,
                 return_speed=100,
+                pre_delay = 1000,
+                post_delay = 1000,
             ),
         ]
     ),
 ]
-# low temp exp
+
+
+# Exact block structure from drv2605_tcs.py.
 blocks = [
-    # 32
-    StimulatorBlock(trials=trials, trial_repetitions=10),
+    StimulatorBlock(
+        trials=trials,
+        trial_repetitions=10,
+    ),
 ]
+
 
 experiment = StimulatorRuntime(
     name="drv2605_tcs_ina_test",
@@ -174,5 +186,7 @@ experiment = StimulatorRuntime(
     blocks=blocks,
 )
 
+
 with experiment:
     experiment.run()
+
