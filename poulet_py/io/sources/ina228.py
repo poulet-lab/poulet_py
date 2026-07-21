@@ -35,15 +35,15 @@ class INA228Source(BaseSource):
         description="FTDI USB latency timer in ms. Use None to leave unchanged.",
     )
 
-    sample_interval_s: float = Field(
-        default=0.0,
+    maximum_valid_voltage: float = Field(
+        default=5.6,
         ge=0.0,
+        le=85.0,
         description=(
-            "Delay after each INA228 read. Use 0.0 for maximum throughput. "
-            "Use ~0.001 for approximately 1 kHz target pacing."
+            "Maximum voltage that doesnt get rejected"
         ),
     )
-
+    
     sample_rate_Hz: float = Field(
         default=10.0, ge=0.0, le=1000.0, description=("target sample rate for voltage measurement")
     )
