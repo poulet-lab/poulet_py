@@ -79,7 +79,7 @@ sources = [
 
 sinks = [
     HDFSink(
-        file="./temp_demo_speedupdev.h5",
+        file="./temp_demo_speedupdev_longer.h5",
         queue_size=20_000,
         grow_step=10_000,
         compression="lzf",
@@ -174,7 +174,7 @@ trials = [
 blocks = [
     StimulatorBlock(
         trials=trials,
-        trial_repetitions=10,
+        trial_repetitions=100,
     ),
 ]
 
