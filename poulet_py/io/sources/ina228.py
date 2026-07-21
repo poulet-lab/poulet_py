@@ -193,6 +193,7 @@ class INA228Source(BaseSource):
         t0 = monotonic_ns()
         next_deadline = monotonic_ns()
         n = 0
+        maximum_valid_voltage=self.maximum_valid_voltage
         invalid_value_count = 0
         consecutive_errors = 0
         while not self._stop_acquisition_event.is_set():
@@ -216,7 +217,6 @@ class INA228Source(BaseSource):
                 if voltage > maximum_valid_voltage:
                     invalid_value_count += 1
                 else:
-                    self._write_sample()
                     self._write_sample(
                         (
                             time_read,
