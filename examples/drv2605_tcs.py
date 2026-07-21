@@ -3,9 +3,7 @@ from board import SCL, SDA
 from busio import I2C
 
 from poulet_py import (
-    AcquisitionType,
     CounterSource,
-    DCAMSource,
     DRV2605Source,
     DRV2605Stimulus,
     HDFSink,
@@ -14,10 +12,8 @@ from poulet_py import (
     StimulatorRuntime,
     StimulatorTrial,
     StimuliMetadataSource,
-    TCSSource,
     TCSStimulus,
 )
-from poulet_py.hardware.camera.hamamatzu.dcam import DCAMPROP
 
 # create common i2c bus for all sources
 i2c = I2C(SCL, SDA, frequency=400_000)
@@ -38,13 +34,13 @@ sources = [
         i2c_retry_backoff_s=0.001,
         continue_on_i2c_error=True,
     ),
-    #TCSSource(
+    # TCSSource(
     #    name="tcs",
     #    port="/dev/ttyUSB0",
     #    maximum_temperature=50,
     #    buffer_size=10_000,
-    #),
-    #DCAMSource(
+    # ),
+    # DCAMSource(
     #    name="dcam",
     #    acquisition_type=AcquisitionType.CONTINUOUS,
     #    resolution=(1024, 1024),
@@ -53,7 +49,7 @@ sources = [
     #    exposure_time=30,
     #    timing_mode="masterpulse",
     #    output_trigger_kind=DCAMPROP.OUTPUTTRIGGER_KIND.GLOBALEXPOSURE,
-    #),
+    # ),
     INA228Source(
         name="ina228_mouse",
         i2c=i2c,
