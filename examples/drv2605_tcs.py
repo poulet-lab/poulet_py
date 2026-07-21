@@ -99,8 +99,8 @@ trials = [
                 target=32,
                 rise_rate=100,
                 return_speed=100,
-                pre_delay = 1000,
-                post_delay = 1000,
+                pre_delay=1000,
+                post_delay=1000,
             ),
         ]
     ),
@@ -110,8 +110,8 @@ trials = [
                 mode="rtp",
                 drive_voltage=3,
                 duration=3000,
-                pre_delay = 1000,
-                post_delay = 1000,
+                pre_delay=1000,
+                post_delay=1000,
             ),
             TCSStimulus(
                 surface=0,
@@ -120,8 +120,8 @@ trials = [
                 target=40,
                 rise_rate=100,
                 return_speed=100,
-                pre_delay = 1000,
-                post_delay = 1000,
+                pre_delay=1000,
+                post_delay=1000,
             ),
         ]
     ),
@@ -131,8 +131,8 @@ trials = [
                 mode="rtp",
                 drive_voltage=0,
                 duration=3000,
-                pre_delay = 1000,
-                post_delay = 1000,
+                pre_delay=1000,
+                post_delay=1000,
             ),
             TCSStimulus(
                 surface=0,
@@ -141,8 +141,8 @@ trials = [
                 target=40,
                 rise_rate=100,
                 return_speed=100,
-                pre_delay = 1000,
-                post_delay = 1000,
+                pre_delay=1000,
+                post_delay=1000,
             ),
         ]
     ),
@@ -152,8 +152,8 @@ trials = [
                 mode="rtp",
                 drive_voltage=5.0,
                 duration=3000,
-                pre_delay = 1000,
-                post_delay = 1000,
+                pre_delay=1000,
+                post_delay=1000,
             ),
             TCSStimulus(
                 surface=0,
@@ -162,8 +162,8 @@ trials = [
                 target=20,
                 rise_rate=100,
                 return_speed=100,
-                pre_delay = 1000,
-                post_delay = 1000,
+                pre_delay=1000,
+                post_delay=1000,
             ),
         ]
     ),
@@ -189,4 +189,3 @@ experiment = StimulatorRuntime(
 
 with experiment:
     experiment.run()
-
