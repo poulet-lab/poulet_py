@@ -39,11 +39,9 @@ class INA228Source(BaseSource):
         default=5.6,
         ge=0.0,
         le=85.0,
-        description=(
-            "Maximum voltage that doesnt get rejected"
-        ),
+        description=("Maximum voltage that doesnt get rejected"),
     )
-    
+
     sample_rate_Hz: float = Field(
         default=10.0, ge=0.0, le=1000.0, description=("target sample rate for voltage measurement")
     )
