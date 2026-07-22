@@ -1,7 +1,9 @@
 from threading import Event, Thread
+
 from numpy import ndarray, zeros
 from pydantic import Field, PrivateAttr
-from poulet_py import BaseSource, DCAM, LOGGER, precise_sleep
+
+from poulet_py import DCAM, LOGGER, BaseSource, precise_sleep
 
 
 class DCAMSource(BaseSource, DCAM):
