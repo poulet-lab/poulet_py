@@ -1,7 +1,9 @@
 from threading import Event, Thread
+
 from numpy import ndarray, zeros
 from pydantic import Field, PrivateAttr
-from poulet_py import BaseSource, DCAM, LOGGER, precise_sleep
+
+from poulet_py import DCAM, LOGGER, BaseSource, precise_sleep
 
 
 class DCAMSource(BaseSource, DCAM):
@@ -33,9 +35,7 @@ class DCAMSource(BaseSource, DCAM):
             return
 
         self._stop_acquisition_event.set()
-        self._acquisition_thread.join(
-            timeout=self.drain_wait_timeout_s + 1.0
-        )
+        self._acquisition_thread.join(timeout=self.drain_wait_timeout_s + 1.0)
 
         super().close()
 
