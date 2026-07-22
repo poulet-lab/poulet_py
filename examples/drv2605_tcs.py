@@ -13,8 +13,10 @@ from poulet_py import (
     StimulatorTrial,
     StimuliMetadataSource,
     TCSStimulus,
+    TCSSource,
+    DCAMSource,
 )
-
+from poulet_py.hardware.camera.hamamatzu.dcam import AcquisitionType,DCAMPROP
 # create common i2c bus for all sources
 i2c = I2C(SCL, SDA, frequency=400_000)
 # this is a temp fix to test weather pyftdi error handling introduces erroneous values...
@@ -34,27 +36,28 @@ sources = [
         i2c_retry_backoff_s=0.001,
         continue_on_i2c_error=True,
     ),
-    # TCSSource(
-    #    name="tcs",
-    #    port="/dev/ttyUSB0",
-    #    maximum_temperature=50,
-    #    buffer_size=10_000,
-    # ),
-    # DCAMSource(
-    #    name="dcam",
-    #    acquisition_type=AcquisitionType.CONTINUOUS,
-    #    resolution=(1024, 1024),
-    #    frame_rate=20,
-    #    binning=DCAMPROP.BINNING._2,
-    #    exposure_time=30,
-    #    timing_mode="masterpulse",
-    #    output_trigger_kind=DCAMPROP.OUTPUTTRIGGER_KIND.GLOBALEXPOSURE,
-    # ),
+    TCSSource(
+       name="tcs",
+       port="/dev/ttyUSB0",
+       maximum_temperature=50,
+       buffer_size=500,
+    ),
+    DCAMSource(
+       name="dcam",
+       acquisition_type=AcquisitionType.CONTINUOUS,
+       resolution=(1024, 1024),
+       frame_rate=20,
+       binning=DCAMPROP.BINNING._2,
+       exposure_time=30,
+       buffer_size=10,
+       timing_mode="masterpulse",
+       output_trigger_kind=DCAMPROP.OUTPUTTRIGGER_KIND.GLOBALEXPOSURE,
+    ),
     INA228Source(
         name="ina228_mouse",
         i2c=i2c,
         address=0x41,
-        buffer_size=10_000,
+        buffer_size=50,
         sample_rate_Hz=100,
         mode=Mode.CONT_BUS,
         averaging_count=AveragingCount.COUNT_16,
@@ -64,7 +67,7 @@ sources = [
         name="ina228_pad",
         i2c=i2c,
         address=0x40,
-        buffer_size=10_000,
+        buffer_size=50,
         sample_rate_Hz=100,
         mode=Mode.CONT_BUS,
         averaging_count=AveragingCount.COUNT_16,
@@ -75,9 +78,9 @@ sources = [
 
 sinks = [
     HDFSink(
-        file="./temp_demo_speedupdev_longer_nocam_notcs_source.h5",
-        queue_size=20_000,
-        grow_step=10_000,
+        file="./temp_whynoframes.h5",
+        queue_size=1_000,
+        grow_step=100,
         compression="lzf",
     ),
 ]
@@ -170,7 +173,7 @@ trials = [
 blocks = [
     StimulatorBlock(
         trials=trials,
-        trial_repetitions=40,
+        trial_repetitions=100,
     ),
 ]
 
