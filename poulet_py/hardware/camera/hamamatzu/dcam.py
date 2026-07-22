@@ -260,7 +260,7 @@ class DCAM(BaseModel):
     number_of_view: int = Field(default=1, description="Number of views.")
     buffer_size: int = Field(default=100, description="Software circular buffer size.")
     dcam_internal_buffer_size: int = Field(
-        default=10, description="Camera internal frame buffer size."
+        default=16, description="Camera internal frame buffer size."
     )
     timeout: int | Literal["auto"] = Field(default="auto", description="DCAM wait timeout in ms.")
     capture_mode: DCAMCAP_START = Field(
@@ -1187,7 +1187,6 @@ class DCAM(BaseModel):
         with self._acquisition_cond:
             idx = self._dcam_buffer_idx % self.buffer_size
             ptr = self._dcam_buffer[idx]["dcam"].ctypes.data
-
             self._dcam_frame.buf = c_void_p(ptr)
             err = dcambuf_copyframe(self._dcam_device.hdcam, byref(self._dcam_frame))
             if err.is_failed():
