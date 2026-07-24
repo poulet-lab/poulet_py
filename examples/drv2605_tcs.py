@@ -30,13 +30,11 @@ sources = [
     StimuliMetadataSource(name="metadata"),
     DRV2605Source(
         name="drv2605",
-        address=0x5A,
         i2c=i2c,
-        maximum_voltage=5.6,
-        i2c_retry_attempts=10,
-        i2c_retry_backoff_s=0.001,
-        continue_on_i2c_error=True,
-    ),
+        motor_type="erm",
+        loop_mode="closed_loop",
+        calibrate=False,
+        ),
     TCSSource(
         name="tcs",
         port="/dev/ttyUSB0",
@@ -49,7 +47,7 @@ sources = [
         resolution=(1024, 1024),
         frame_rate=20,
         binning=DCAMPROP.BINNING._2,
-        exposure_time=30,
+        exposure_time=35,
         buffer_size=10,
         timing_mode="masterpulse",
         output_trigger_kind=DCAMPROP.OUTPUTTRIGGER_KIND.GLOBALEXPOSURE,
@@ -63,6 +61,7 @@ sources = [
         mode=Mode.CONT_BUS,
         averaging_count=AveragingCount.COUNT_16,
         bus_voltage_conv_time=ConversionTime.TIME_150_US,
+        temperature = True
     ),
     INA228Source(
         name="ina228_pad",
@@ -73,6 +72,7 @@ sources = [
         mode=Mode.CONT_BUS,
         averaging_count=AveragingCount.COUNT_16,
         bus_voltage_conv_time=ConversionTime.TIME_150_US,
+        temperature = True,
     ),
 ]
 
@@ -129,7 +129,7 @@ trials = [
         stimuli=[
             DRV2605Stimulus(
                 mode="rtp",
-                drive_voltage=0,
+                drive_voltage=3,
                 duration=3000,
                 pre_delay=1000,
                 post_delay=1000,
@@ -150,7 +150,7 @@ trials = [
         stimuli=[
             DRV2605Stimulus(
                 mode="rtp",
-                drive_voltage=5.0,
+                drive_voltage=3,
                 duration=3000,
                 pre_delay=1000,
                 post_delay=1000,
@@ -174,7 +174,7 @@ trials = [
 blocks = [
     StimulatorBlock(
         trials=trials,
-        trial_repetitions=100,
+        trial_repetitions=10,
     ),
 ]
 
