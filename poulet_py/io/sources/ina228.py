@@ -78,12 +78,11 @@ class INA228Source(BaseSource):
     calibration_offset_voltage: float = Field(
         default=0.0,
         description="Voltage added for safety checks and temperature conversion.",
-        )
-    temperature: bool = Field( 
+    )
+    temperature: bool = Field(
         default=True,
         description="Convert the corrected voltage to temperature for safety checks.",
-        )
-
+    )
 
     i2c: I2C | None = Field(default=None)
 
@@ -196,7 +195,6 @@ class INA228Source(BaseSource):
 
         self._acquisition_thread = None
 
-
     def _acquisition_thread_func(self):
         ina228 = self._ina228
         if ina228 is None:
@@ -278,7 +276,6 @@ class INA228Source(BaseSource):
                         self.address,
                     )
                     return
-
 
     def _set_ftdi_latency_timer(self):
         if self.ftdi_latency_ms is None:

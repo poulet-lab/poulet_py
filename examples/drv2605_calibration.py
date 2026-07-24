@@ -9,7 +9,6 @@ DRC2605SSource.py.
 
 from poulet_py import DRV2605Source
 
-
 ERM_RATED_VOLTAGE = 3.0  # Replace when the current ERM rating is established.
 ERM_MAXIMUM_VOLTAGE = 5
 
@@ -33,26 +32,11 @@ def main() -> None:
         print("\nReplace the current-ERM constants block with:\n")
         print(f"CURRENT_ERM_RATED_VOLTAGE = {ERM_RATED_VOLTAGE:.6f}")
         print(f"CURRENT_ERM_MAXIMUM_VOLTAGE = {ERM_MAXIMUM_VOLTAGE:.6f}")
-        print(
-            "CURRENT_ERM_CALIBRATED_RATED_VOLTAGE: float | None = "
-            f"{ERM_RATED_VOLTAGE:.6f}"
-        )
-        print(
-            "CURRENT_ERM_CALIBRATED_MAXIMUM_VOLTAGE: float | None = "
-            f"{ERM_MAXIMUM_VOLTAGE:.6f}"
-        )
-        print(
-            "CURRENT_ERM_AUTO_CAL_COMP: int | None = "
-            f"0x{result.auto_cal_comp:02X}"
-        )
-        print(
-            "CURRENT_ERM_AUTO_CAL_BEMF: int | None = "
-            f"0x{result.auto_cal_bemf:02X}"
-        )
-        print(
-            "CURRENT_ERM_BEMF_GAIN: int | None = "
-            f"0x{result.bemf_gain:02X}"
-        )
+        print(f"CURRENT_ERM_CALIBRATED_RATED_VOLTAGE: float | None = {ERM_RATED_VOLTAGE:.6f}")
+        print(f"CURRENT_ERM_CALIBRATED_MAXIMUM_VOLTAGE: float | None = {ERM_MAXIMUM_VOLTAGE:.6f}")
+        print(f"CURRENT_ERM_AUTO_CAL_COMP: int | None = 0x{result.auto_cal_comp:02X}")
+        print(f"CURRENT_ERM_AUTO_CAL_BEMF: int | None = 0x{result.auto_cal_bemf:02X}")
+        print(f"CURRENT_ERM_BEMF_GAIN: int | None = 0x{result.bemf_gain:02X}")
         print(f"\nCalibration elapsed: {result.elapsed_s:.3f} s")
     finally:
         drv.close()
@@ -60,4 +44,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
