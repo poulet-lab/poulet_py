@@ -34,7 +34,7 @@ sources = [
         motor_type="erm",
         loop_mode="closed_loop",
         calibrate=False,
-        ),
+    ),
     TCSSource(
         name="tcs",
         port="/dev/ttyUSB0",
@@ -61,7 +61,7 @@ sources = [
         mode=Mode.CONT_BUS,
         averaging_count=AveragingCount.COUNT_16,
         bus_voltage_conv_time=ConversionTime.TIME_150_US,
-        temperature = True
+        temperature=True,
     ),
     INA228Source(
         name="ina228_pad",
@@ -72,7 +72,7 @@ sources = [
         mode=Mode.CONT_BUS,
         averaging_count=AveragingCount.COUNT_16,
         bus_voltage_conv_time=ConversionTime.TIME_150_US,
-        temperature = True,
+        temperature=True,
     ),
 ]
 

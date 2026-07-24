@@ -84,8 +84,6 @@ CURRENT_ERM_AUTO_CAL_BEMF: int | None = 0xA5
 CURRENT_ERM_BEMF_GAIN: int | None = 0x01
 
 
-
-
 @dataclass(frozen=True, slots=True)
 class DRV2605CalibrationResult:
     success: bool
@@ -285,15 +283,9 @@ class DRV2605Source(BaseSource):
             control3,
         ) = self._read_block(REG_RATED_VOLTAGE, 8)
 
-        motor_feedback = (
-            feedback | N_ERM_LRA
-            if self.motor_type == "lra"
-            else feedback & ~N_ERM_LRA
-        )
+        motor_feedback = feedback | N_ERM_LRA if self.motor_type == "lra" else feedback & ~N_ERM_LRA
         if self.loop_mode == "closed_loop" and not self.calibrate:
-            motor_feedback = (
-                motor_feedback & ~BEMF_GAIN
-            ) | int(self.bemf_gain)
+            motor_feedback = (motor_feedback & ~BEMF_GAIN) | int(self.bemf_gain)
 
         loop_control = control3 & ~(ERM_OPEN_LOOP | LRA_OPEN_LOOP)
         if self.loop_mode == "open_loop":
@@ -311,16 +303,8 @@ class DRV2605Source(BaseSource):
         self._od_clamp = self._overdrive_register()
 
         if self.loop_mode == "closed_loop":
-            cal_comp = (
-                current_cal_comp
-                if self.calibrate
-                else int(self.auto_cal_comp)
-            )
-            cal_bemf = (
-                current_cal_bemf
-                if self.calibrate
-                else int(self.auto_cal_bemf)
-            )
+            cal_comp = current_cal_comp if self.calibrate else int(self.auto_cal_comp)
+            cal_bemf = current_cal_bemf if self.calibrate else int(self.auto_cal_bemf)
             # One contiguous write installs the voltage and motor-specific
             # closed-loop calibration while preserving unrelated feedback bits.
             self._write_block(
@@ -555,8 +539,12 @@ class DRV2605Source(BaseSource):
             if start
             else (prepared.voltage, prepared.drive, 0.0, self._rtp_zero)
         )
-        self._write_command_sample(request, 0, mode, waveform, repeats, before_voltage, before_drive)
-        self._write_command_sample(answer, answer - request, mode, waveform, repeats, after_voltage, after_drive)
+        self._write_command_sample(
+            request, 0, mode, waveform, repeats, before_voltage, before_drive
+        )
+        self._write_command_sample(
+            answer, answer - request, mode, waveform, repeats, after_voltage, after_drive
+        )
 
     def _write_command_sample(
         self,
@@ -687,23 +675,20 @@ class DRV2605Source(BaseSource):
         return min(0xFF, 0x7F + round(voltage / self.maximum_voltage * 128))
 
     def _drive_time(self) -> int:
-        value = round((500.0 / self.lra_frequency_hz - 0.5) / 0.1) if self.motor_type == "lra" else 0x13
+        value = (
+            round((500.0 / self.lra_frequency_hz - 0.5) / 0.1) if self.motor_type == "lra" else 0x13
+        )
         return max(0, min(31, value))
 
     def _rated_voltage_register(self, control2: int) -> int:
         if self.motor_type == "erm":
             value = self.rated_voltage / 0.02118
         else:
-            sample_time_s = LRA_SAMPLE_TIME_US[
-                (control2 & SAMPLE_TIME) >> 4
-            ] * 1e-6
-            factor = 1.0 - 4.0 * (
-                sample_time_s + 300e-6
-            ) * self.lra_frequency_hz
+            sample_time_s = LRA_SAMPLE_TIME_US[(control2 & SAMPLE_TIME) >> 4] * 1e-6
+            factor = 1.0 - 4.0 * (sample_time_s + 300e-6) * self.lra_frequency_hz
             if factor <= 0:
                 raise ValueError(
-                    "Invalid LRA frequency/sample-time combination for "
-                    "rated-voltage calculation."
+                    "Invalid LRA frequency/sample-time combination for rated-voltage calculation."
                 )
             value = self.rated_voltage * sqrt(factor) / 0.02058
         return max(0, min(255, round(value)))
@@ -739,4 +724,3 @@ class DRV2605Source(BaseSource):
         remaining = deadline - monotonic_ns()
         if remaining > 0:
             precise_sleep(remaining / 1_000_000_000)
-
