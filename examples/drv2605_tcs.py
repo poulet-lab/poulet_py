@@ -79,7 +79,7 @@ sources = [
 
 sinks = [
     HDFSink(
-        file="./temp_whynoframes.h5",
+        file="./20260727_1238_stability_test_long.h5",
         queue_size=1_000,
         grow_step=100,
         compression="lzf",
@@ -99,8 +99,8 @@ trials = [
                 target=32,
                 rise_rate=100,
                 return_speed=100,
-                pre_delay=1000,
-                post_delay=1000,
+                pre_delay=8000,
+                post_delay=8000,
             ),
         ]
     ),
@@ -120,8 +120,8 @@ trials = [
                 target=40,
                 rise_rate=100,
                 return_speed=100,
-                pre_delay=1000,
-                post_delay=1000,
+                pre_delay=8000,
+                post_delay=8000,
             ),
         ]
     ),
@@ -131,8 +131,8 @@ trials = [
                 mode="rtp",
                 drive_voltage=3,
                 duration=3000,
-                pre_delay=1000,
-                post_delay=1000,
+                pre_delay=8000,
+                post_delay=8000,
             ),
             TCSStimulus(
                 surface=0,
@@ -141,8 +141,8 @@ trials = [
                 target=40,
                 rise_rate=100,
                 return_speed=100,
-                pre_delay=1000,
-                post_delay=1000,
+                pre_delay=8000,
+                post_delay=8000,
             ),
         ]
     ),
@@ -152,8 +152,8 @@ trials = [
                 mode="rtp",
                 drive_voltage=3,
                 duration=3000,
-                pre_delay=1000,
-                post_delay=1000,
+                pre_delay=8000,
+                post_delay=8000,
             ),
             TCSStimulus(
                 surface=0,
@@ -162,8 +162,8 @@ trials = [
                 target=20,
                 rise_rate=100,
                 return_speed=100,
-                pre_delay=1000,
-                post_delay=1000,
+                pre_delay=8000,
+                post_delay=8000,
             ),
         ]
     ),
@@ -174,7 +174,7 @@ trials = [
 blocks = [
     StimulatorBlock(
         trials=trials,
-        trial_repetitions=10,
+        trial_repetitions=40,
     ),
 ]
 
