@@ -221,7 +221,7 @@ trials = [
 blocks = [
     StimulatorBlock(
         trials=trials,
-        trial_repetitions=1,
+        trial_repetitions=20,
     ),
 ]
 
