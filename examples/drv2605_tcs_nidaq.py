@@ -1,4 +1,3 @@
-
 from adafruit_ina228 import AveragingCount, ConversionTime, Mode
 from board import SCL, SDA
 from busio import I2C
@@ -44,12 +43,11 @@ nidaq_analog_input = NIAnalogInputTask(
     device=NIDAQ_DEVICE,
     clock=nidaq_clock.clock,
     channels=[
-        #NIAnalogInputChannel(name="Cam_Trig", number=1, min_val=-10, max_val=10),
+        # NIAnalogInputChannel(name="Cam_Trig", number=1, min_val=-10, max_val=10),
         NIAnalogInputChannel(name="Touch_stim", number=0, min_val=-10, max_val=10),
         NIAnalogInputChannel(name="Pad", number=5, min_val=-10, max_val=10),
         NIAnalogInputChannel(name="Mouse", number=6, min_val=-10, max_val=10),
         NIAnalogInputChannel(name="BR_HR_Monitor", number=7, min_val=-10, max_val=10),
-
     ],
 )
 
