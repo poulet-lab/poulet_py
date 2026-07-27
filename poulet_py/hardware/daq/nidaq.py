@@ -1,4 +1,3 @@
-
 """
 NI-DAQmx Task Management System.
 

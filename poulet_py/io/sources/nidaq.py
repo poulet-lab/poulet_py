@@ -1,4 +1,3 @@
-
 try:
     from numpy import empty
 
