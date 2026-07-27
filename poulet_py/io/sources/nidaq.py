@@ -1,3 +1,4 @@
+
 try:
     from numpy import empty
 
@@ -63,7 +64,7 @@ class NIDaQSource(BaseSource, NIDaQ):
         if self.acquisition_type == AcquisitionType.FINITE:
             self.start()
 
-        data = self.read(-1, -1)
+        data = self.read(-1, 0.0)
 
         if data:
             lengths = [len(v) for v in data.values() if len(v) > 0]
