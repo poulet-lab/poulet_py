@@ -23,18 +23,16 @@ from poulet_py import (
 )
 from poulet_py.hardware.camera.hamamatzu.dcam import DCAMPROP
 
-
-#DURATION
+# DURATION
 STIMULUS_DURATION = 3000
 PRE_STIMULUS_DURATION = 8000
 POST_STIMULUS_DURATION = 8000
-TRIAL_DURATION =  PRE_STIMULUS_DURATION + STIMULUS_DURATION + POST_STIMULUS_DURATION
+TRIAL_DURATION = PRE_STIMULUS_DURATION + STIMULUS_DURATION + POST_STIMULUS_DURATION
 # NI-DAQ configuration: continuously sample the first four analog inputs
 # (physical channels Dev1/ai0 through Dev1/ai3) at 1000 samples/s/channel.
 NIDAQ_DEVICE = "Dev1"
 NIDAQ_RATE_HZ = 1000
 NIDAQ_BUFFER_SAMPLES_PER_CHANNEL = TRIAL_DURATION * NIDAQ_RATE_HZ * 1.5
-
 
 
 nidaq_clock = NIClockTask(
