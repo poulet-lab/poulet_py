@@ -23,11 +23,19 @@ from poulet_py import (
 )
 from poulet_py.hardware.camera.hamamatzu.dcam import DCAMPROP
 
+
+#DURATION
+STIMULUS_DURATION = 3000
+PRE_STIMULUS_DURATION = 8000
+POST_STIMULUS_DURATION = 8000
+TRIAL_DURATION =  PRE_STIMULUS_DURATION + STIMULUS_DURATION + POST_STIMULUS_DURATION
 # NI-DAQ configuration: continuously sample the first four analog inputs
 # (physical channels Dev1/ai0 through Dev1/ai3) at 1000 samples/s/channel.
 NIDAQ_DEVICE = "Dev1"
 NIDAQ_RATE_HZ = 1000
-NIDAQ_BUFFER_SAMPLES_PER_CHANNEL = 20_000
+NIDAQ_BUFFER_SAMPLES_PER_CHANNEL = TRIAL_DURATION * NIDAQ_RATE_HZ * 1.5
+
+
 
 nidaq_clock = NIClockTask(
     name="nidaq_clock",
@@ -43,7 +51,6 @@ nidaq_analog_input = NIAnalogInputTask(
     device=NIDAQ_DEVICE,
     clock=nidaq_clock.clock,
     channels=[
-        # NIAnalogInputChannel(name="Cam_Trig", number=1, min_val=-10, max_val=10),
         NIAnalogInputChannel(name="Touch_stim", number=0, min_val=-10, max_val=10),
         NIAnalogInputChannel(name="Pad", number=5, min_val=-10, max_val=10),
         NIAnalogInputChannel(name="Mouse", number=6, min_val=-10, max_val=10),
@@ -119,7 +126,7 @@ sources = [
 
 sinks = [
     HDFSink(
-        file="./all_sources_test.h5",
+        file="./all_sources_test_short.h5",
         queue_size=1_000,
         grow_step=100,
         compression="lzf",
@@ -134,13 +141,13 @@ trials = [
         stimuli=[
             TCSStimulus(
                 surface=0,
-                duration=3000,
+                duration=STIMULUS_DURATION,
                 baseline=32,
                 target=32,
                 rise_rate=100,
                 return_speed=100,
-                pre_delay=8000,
-                post_delay=8000,
+                pre_delay=PRE_STIMULUS_DURATION,
+                post_delay=POST_STIMULUS_DURATION,
             ),
         ]
     ),
@@ -149,19 +156,19 @@ trials = [
             DRV2605Stimulus(
                 mode="rtp",
                 drive_voltage=3,
-                duration=3000,
-                pre_delay=1000,
-                post_delay=1000,
+                duration=STIMULUS_DURATION,
+                pre_delay=PRE_STIMULUS_DURATION,
+                post_delay=POST_STIMULUS_DURATION,
             ),
             TCSStimulus(
                 surface=0,
-                duration=3000,
+                duration=STIMULUS_DURATION,
                 baseline=32,
                 target=40,
                 rise_rate=100,
                 return_speed=100,
-                pre_delay=8000,
-                post_delay=8000,
+                pre_delay=PRE_STIMULUS_DURATION,
+                post_delay=POST_STIMULUS_DURATION,
             ),
         ]
     ),
@@ -170,19 +177,19 @@ trials = [
             DRV2605Stimulus(
                 mode="rtp",
                 drive_voltage=3,
-                duration=3000,
-                pre_delay=8000,
-                post_delay=8000,
+                duration=STIMULUS_DURATION,
+                pre_delay=PRE_STIMULUS_DURATION,
+                post_delay=POST_STIMULUS_DURATION,
             ),
             TCSStimulus(
                 surface=0,
-                duration=3000,
+                duration=STIMULUS_DURATION,
                 baseline=32,
                 target=40,
                 rise_rate=100,
                 return_speed=100,
-                pre_delay=8000,
-                post_delay=8000,
+                pre_delay=PRE_STIMULUS_DURATION,
+                post_delay=POST_STIMULUS_DURATION,
             ),
         ]
     ),
@@ -191,19 +198,19 @@ trials = [
             DRV2605Stimulus(
                 mode="rtp",
                 drive_voltage=3,
-                duration=3000,
-                pre_delay=8000,
+                duration=STIMULUS_DURATION,
+                pre_delay=PRE_STIMULUS_DURATION,
                 post_delay=8000,
             ),
             TCSStimulus(
                 surface=0,
-                duration=3000,
+                duration=STIMULUS_DURATION,
                 baseline=32,
                 target=20,
                 rise_rate=100,
                 return_speed=100,
-                pre_delay=8000,
-                post_delay=8000,
+                pre_delay=PRE_STIMULUS_DURATION,
+                post_delay=POST_STIMULUS_DURATION,
             ),
         ]
     ),
@@ -214,7 +221,7 @@ trials = [
 blocks = [
     StimulatorBlock(
         trials=trials,
-        trial_repetitions=40,
+        trial_repetitions=1,
     ),
 ]
 
