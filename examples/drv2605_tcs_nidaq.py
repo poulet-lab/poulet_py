@@ -90,7 +90,7 @@ sources = [
     ),
     TCSSource(
         name="tcs",
-        port="/dev/ttyUSB0",
+        port="/dev/ttyUSB1",
         maximum_temperature=50,
         buffer_size=500,
     ),
@@ -193,13 +193,14 @@ for temps in STIMULUS_TEMPS:
             post_delay=POST_STIMULUS_DURATION,
         ),
     )
-    user_trials = user_trials.append(single_trial)
+    user_trials.append(single_trial)
 
-experiment_trials = base_trials.extend(user_trials)
+base_trials.extend(user_trials)
+
 # Exact block structure from drv2605_tcs.py.
 blocks = [
     StimulatorBlock(
-        trials=experiment_trials,
+        trials=base_trials,
         trial_repetitions=REPITITIONS,
     ),
 ]
