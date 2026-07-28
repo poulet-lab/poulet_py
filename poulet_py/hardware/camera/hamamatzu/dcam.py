@@ -49,6 +49,7 @@ from poulet_py.hardware.camera.hamamatzu._api import (
     dcamdev_open,
     dcamprop_getvalue,
     dcamprop_setvalue,
+    dcamwait_abort,
     dcamwait_close,
     dcamwait_open,
     dcamwait_start,
@@ -280,8 +281,10 @@ class DCAM(BaseModel):
     _timeout: int = PrivateAttr(default=2)
     _software_trigger_cycle: int = PrivateAttr(default=0)
     _framecount_till_software_trigger: int = PrivateAttr(default=0)
-    _acquisition_thread: Thread = PrivateAttr()
-    _stop_acquisition_event: Event = PrivateAttr(default_factory=Event)
+    # Prefixed so that subclasses mixing in their own acquisition thread cannot
+    # overwrite the handle this class needs to join before SDK teardown.
+    _dcam_acquisition_thread: Thread | None = PrivateAttr(default=None)
+    _dcam_stop_acquisition_event: Event = PrivateAttr(default_factory=Event)
     _acquisition_cond: Condition = PrivateAttr(default_factory=Condition)
     _timeout_errors: int = PrivateAttr(default=0)
 
@@ -398,7 +401,17 @@ class DCAM(BaseModel):
         self._is_open = False
 
         if self.acquisition_type == AcquisitionType.CONTINUOUS:
-            self._stop_acquisition_thread()
+            if not self._stop_acquisition_thread():
+                # Releasing the wait handle, frame buffer or API while the
+                # acquisition thread is still inside the SDK crashes the
+                # process, so leak them instead.
+                LOGGER.error(
+                    "Keeping DCAM resources allocated because the acquisition "
+                    "thread is still running; restart the process to reopen "
+                    "the camera"
+                )
+                return
+
             self._stop_capture()
 
         self._close_dcam_wait()
@@ -1043,23 +1056,33 @@ class DCAM(BaseModel):
         self._dcam_buffer_idx = 0
 
     def _start_acquisition_thread(self) -> None:
-        self._stop_acquisition_event.clear()
-        self._acquisition_thread = Thread(
+        self._dcam_stop_acquisition_event.clear()
+        self._dcam_acquisition_thread = Thread(
             target=self._acquisition_thread_func,
             name="DCAM Acquisition Thread",
             daemon=True,
         )
-        self._acquisition_thread.start()
+        self._dcam_acquisition_thread.start()
 
-    def _stop_acquisition_thread(self) -> None:
-        self._stop_acquisition_event.set()
-        self._acquisition_thread.join(timeout=5)
+    def _stop_acquisition_thread(self) -> bool:
+        """Stop the acquisition thread, reporting whether it actually exited."""
+        thread = self._dcam_acquisition_thread
+        self._dcam_stop_acquisition_event.set()
 
-        if self._acquisition_thread.is_alive():
-            LOGGER.warning("Streaming thread did not stop gracefully")
+        if thread is not None:
+            # The thread blocks in dcamwait_start until the next frame arrives,
+            # which never happens once the master pulse stops, so abort the
+            # pending wait rather than waiting out the frame timeout.
+            self._abort_dcam_wait()
+            thread.join(timeout=self._timeout / 1000.0 + 5.0)
 
-        del self._acquisition_thread
-        self._stop_acquisition_event.clear()
+            if thread.is_alive():
+                LOGGER.error("Streaming thread did not stop gracefully")
+                return False
+
+        self._dcam_acquisition_thread = None
+        self._dcam_stop_acquisition_event.clear()
+        return True
 
     def _set_timeout(self) -> None:
         if self.timeout == "auto":
@@ -1164,11 +1187,22 @@ class DCAM(BaseModel):
             LOGGER.error("Failed to close dcam wait: %s", DCAMERR(err).name)
         self._dcam_wait = DCAMWAIT_OPEN()
 
+    def _abort_dcam_wait(self) -> None:
+        if not self._dcam_wait.hwait:
+            return
+
+        err = dcamwait_abort(self._dcam_wait.hwait)
+        if err.is_failed():
+            LOGGER.error("Failed to abort dcam wait: %s", DCAMERR(err).name)
+
     def _wait_event(self, eventmask: DCAMWAIT_CAPEVENT, timeout: int):
         self._dcam_wait_event.eventmask = eventmask
         self._dcam_wait_event.timeout = timeout
 
         err = dcamwait_start(self._dcam_wait.hwait, byref(self._dcam_wait_event))
+
+        if err == DCAMERR.ABORT:
+            return False
 
         if err.is_failed() and err != DCAMERR.TIMEOUT:
             raise RuntimeError(f"Failed to start dcam wait event: {DCAMERR(err).name}")
@@ -1205,11 +1239,11 @@ class DCAM(BaseModel):
         return True
 
     def _acquisition_thread_func(self) -> None:
-        while not self._stop_acquisition_event.is_set():
+        while not self._dcam_stop_acquisition_event.is_set():
             try:
                 self._acquire_sample()
             except Exception:
-                self._stop_acquisition_event.set()
+                self._dcam_stop_acquisition_event.set()
                 LOGGER.exception("DCAM acquisition thread stopped after acquisition error")
                 raise
 
