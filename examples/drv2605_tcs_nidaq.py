@@ -24,10 +24,18 @@ from poulet_py import (
 from poulet_py.hardware.camera.hamamatzu.dcam import DCAMPROP
 
 # DURATION
+ITI = 15000
 STIMULUS_DURATION = 3000
-PRE_STIMULUS_DURATION = 8000
-POST_STIMULUS_DURATION = 8000
+STIMULUS_DURATION_TOUCH = 3000
+PRE_STIMULUS_DURATION = round(ITI/2)
+POST_STIMULUS_DURATION = round(ITI/2)
 TRIAL_DURATION = PRE_STIMULUS_DURATION + STIMULUS_DURATION + POST_STIMULUS_DURATION
+RAMP_UP = 300
+RAMP_DOWN = 300
+BASELINE = 32
+DRIVE_VOLTAGE = 3
+STIMULUS_TEMPS = [1,-1,2,-2,3,-3,5,-5,10,-10]
+REPITITIONS = 6
 # NI-DAQ configuration: continuously sample the first four analog inputs
 # (physical channels Dev1/ai0 through Dev1/ai3) at 1000 samples/s/channel.
 NIDAQ_DEVICE = "Dev1"
@@ -58,10 +66,10 @@ nidaq_analog_input = NIAnalogInputTask(
 
 # create common i2c bus for all sources
 i2c = I2C(SCL, SDA, frequency=400_000)
-# this is a temp fix to test weather pyftdi error handling introduces erroneous values...
-# instead move to poulet_py error handling and read discard
-# maximum o retries internally through pyftdi, eliminates warning: retry exchange handling and
-# liminates erroneous data writing into buffer
+#this is a temp fix to test weather pyftdi error handling introduces erroneous values...
+#instead move to poulet_py error handling and read discard
+#maximum of retries internally through pyftdi, eliminates warning: retry exchange handling and
+#limits erroneous data writing into buffer, doesnt necesseraliy need to be implemented anymore
 i2c._i2c._i2c.set_retry_count(1)
 sources = [
     CounterSource(name="trial"),
@@ -100,7 +108,7 @@ sources = [
     INA228Source(
         name="ina228_mouse",
         i2c=i2c,
-        address=0x41,
+        address=0x40,
         buffer_size=50,
         sample_rate_Hz=100,
         mode=Mode.CONT_BUS,
@@ -111,7 +119,7 @@ sources = [
     INA228Source(
         name="ina228_pad",
         i2c=i2c,
-        address=0x40,
+        address=0x41,
         buffer_size=50,
         sample_rate_Hz=100,
         mode=Mode.CONT_BUS,
@@ -134,14 +142,14 @@ sinks = [
 
 # Exact stimulus and trial structure from drv2605_tcs.py.
 # Only the DRV2605L usage mode has been changed to RTP.
-trials = [
+base_trials = [
     StimulatorTrial(
         stimuli=[
             TCSStimulus(
                 surface=0,
                 duration=STIMULUS_DURATION,
-                baseline=32,
-                target=32,
+                baseline=BASELINE,
+                target=BASELINE,
                 rise_rate=100,
                 return_speed=100,
                 pre_delay=PRE_STIMULUS_DURATION,
@@ -153,76 +161,48 @@ trials = [
         stimuli=[
             DRV2605Stimulus(
                 mode="rtp",
-                drive_voltage=3,
-                duration=STIMULUS_DURATION,
+                drive_voltage=DRIVE_VOLTAGE,
+                duration=STIMULUS_DURATION_TOUCH,
                 pre_delay=PRE_STIMULUS_DURATION,
                 post_delay=POST_STIMULUS_DURATION,
             ),
             TCSStimulus(
                 surface=0,
                 duration=STIMULUS_DURATION,
-                baseline=32,
-                target=40,
-                rise_rate=100,
-                return_speed=100,
+                baseline=BASELINE,
+                target=BASELINE,
+                rise_rate=RAMP_UP,
+                return_speed=RAMP_DOWN,
                 pre_delay=PRE_STIMULUS_DURATION,
                 post_delay=POST_STIMULUS_DURATION,
             ),
         ]
-    ),
-    StimulatorTrial(
-        stimuli=[
-            DRV2605Stimulus(
-                mode="rtp",
-                drive_voltage=3,
-                duration=STIMULUS_DURATION,
-                pre_delay=PRE_STIMULUS_DURATION,
-                post_delay=POST_STIMULUS_DURATION,
-            ),
+    )]
+user_trials = []
+for temps in STIMULUS_TEMPS: 
+    single_trial = StimulatorTrial(
+        stimuli=
             TCSStimulus(
                 surface=0,
                 duration=STIMULUS_DURATION,
-                baseline=32,
-                target=40,
-                rise_rate=100,
-                return_speed=100,
+                baseline=BASELINE,
+                target=BASELINE + temps,
+                rise_rate=RAMP_UP,
+                return_speed=RAMP_DOWN,
                 pre_delay=PRE_STIMULUS_DURATION,
                 post_delay=POST_STIMULUS_DURATION,
             ),
-        ]
-    ),
-    StimulatorTrial(
-        stimuli=[
-            DRV2605Stimulus(
-                mode="rtp",
-                drive_voltage=3,
-                duration=STIMULUS_DURATION,
-                pre_delay=PRE_STIMULUS_DURATION,
-                post_delay=8000,
-            ),
-            TCSStimulus(
-                surface=0,
-                duration=STIMULUS_DURATION,
-                baseline=32,
-                target=20,
-                rise_rate=100,
-                return_speed=100,
-                pre_delay=PRE_STIMULUS_DURATION,
-                post_delay=POST_STIMULUS_DURATION,
-            ),
-        ]
-    ),
-]
-
-
+    )
+    user_trials = user_trials.append(single_trial)
+   
+experiment_trials = base_trials.extend(user_trials)
 # Exact block structure from drv2605_tcs.py.
 blocks = [
     StimulatorBlock(
-        trials=trials,
-        trial_repetitions=20,
+        trials=experiment_trials,
+        trial_repetitions=REPITITIONS,
     ),
 ]
-
 
 experiment = StimulatorRuntime(
     name="drv2605_tcs_ina_test",
@@ -230,7 +210,6 @@ experiment = StimulatorRuntime(
     sinks=sinks,
     blocks=blocks,
 )
-
 
 with experiment:
     experiment.run()
