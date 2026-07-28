@@ -27,14 +27,14 @@ from poulet_py.hardware.camera.hamamatzu.dcam import DCAMPROP
 ITI = 15000
 STIMULUS_DURATION = 3000
 STIMULUS_DURATION_TOUCH = 3000
-PRE_STIMULUS_DURATION = round(ITI/2)
-POST_STIMULUS_DURATION = round(ITI/2)
+PRE_STIMULUS_DURATION = round(ITI / 2)
+POST_STIMULUS_DURATION = round(ITI / 2)
 TRIAL_DURATION = PRE_STIMULUS_DURATION + STIMULUS_DURATION + POST_STIMULUS_DURATION
 RAMP_UP = 300
 RAMP_DOWN = 300
 BASELINE = 32
 DRIVE_VOLTAGE = 3
-STIMULUS_TEMPS = [1,-1,2,-2,3,-3,5,-5,10,-10]
+STIMULUS_TEMPS = [1, -1, 2, -2, 3, -3, 5, -5, 10, -10]
 REPITITIONS = 6
 # NI-DAQ configuration: continuously sample the first four analog inputs
 # (physical channels Dev1/ai0 through Dev1/ai3) at 1000 samples/s/channel.
@@ -66,10 +66,10 @@ nidaq_analog_input = NIAnalogInputTask(
 
 # create common i2c bus for all sources
 i2c = I2C(SCL, SDA, frequency=400_000)
-#this is a temp fix to test weather pyftdi error handling introduces erroneous values...
-#instead move to poulet_py error handling and read discard
-#maximum of retries internally through pyftdi, eliminates warning: retry exchange handling and
-#limits erroneous data writing into buffer, doesnt necesseraliy need to be implemented anymore
+# this is a temp fix to test weather pyftdi error handling introduces erroneous values...
+# instead move to poulet_py error handling and read discard
+# maximum of retries internally through pyftdi, eliminates warning: retry exchange handling and
+# limits erroneous data writing into buffer, doesnt necesseraliy need to be implemented anymore
 i2c._i2c._i2c.set_retry_count(1)
 sources = [
     CounterSource(name="trial"),
@@ -177,24 +177,24 @@ base_trials = [
                 post_delay=POST_STIMULUS_DURATION,
             ),
         ]
-    )]
+    ),
+]
 user_trials = []
-for temps in STIMULUS_TEMPS: 
+for temps in STIMULUS_TEMPS:
     single_trial = StimulatorTrial(
-        stimuli=
-            TCSStimulus(
-                surface=0,
-                duration=STIMULUS_DURATION,
-                baseline=BASELINE,
-                target=BASELINE + temps,
-                rise_rate=RAMP_UP,
-                return_speed=RAMP_DOWN,
-                pre_delay=PRE_STIMULUS_DURATION,
-                post_delay=POST_STIMULUS_DURATION,
-            ),
+        stimuli=TCSStimulus(
+            surface=0,
+            duration=STIMULUS_DURATION,
+            baseline=BASELINE,
+            target=BASELINE + temps,
+            rise_rate=RAMP_UP,
+            return_speed=RAMP_DOWN,
+            pre_delay=PRE_STIMULUS_DURATION,
+            post_delay=POST_STIMULUS_DURATION,
+        ),
     )
     user_trials = user_trials.append(single_trial)
-   
+
 experiment_trials = base_trials.extend(user_trials)
 # Exact block structure from drv2605_tcs.py.
 blocks = [
