@@ -63,9 +63,22 @@ Check the examples/ folder for usage scripts, such as:
 We welcome contributions! Follow these guidelines:
 
 1. Branching
-  * Work on a dedicated branch (git checkout -b your-feature).
-  * Submit PRs to the dev branch (PRs to main will be rejected).
-  
+  * Work on a dedicated branch. Use **lowercase** names only.
+  * Pattern from `main` or `dev`:
+    `{initials}/{type}/{short-description}`
+    Example: `ier/documentation/branch-naming`
+  * Pattern from any other branch (include the parent name):
+    `{initials}/{parent}/{type}/{short-description}`
+    Example: `ier/speed_up_dev/bugfix/dcam-threads`
+  * Allowed `{type}` values:
+    * `feature` — new capability
+    * `bugfix` — bug fix
+    * `documentation` — docs only
+    * `refactor` — restructure without behavior change
+    * `test` — tests
+    * `performance` — performance work
+  * Submit PRs to the `dev` branch (PRs to `main` will be rejected).
+
 2. Code Standards
   * Tests: Add unit tests in tests/ (mirroring the module structure).
   * Documentation: Use docstrings and update __init__.py for lazy loading.
