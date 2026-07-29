@@ -1,6 +1,6 @@
 try:
     from threading import Thread
-    from time import time_ns
+    from time import monotonic_ns
 
     from numpy import float64, ndarray, uint64, zeros
     from open_ephys.control import OpenEphysHTTPServer
@@ -9,13 +9,12 @@ try:
 
     from poulet_py import AcquisitionType, BaseSource, precise_sleep
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'sources' module. Install options:
 - Dedicated:    pip install poulet_py[sources]
 - Module:       pip install poulet_py[io]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class OpenEphysSource(BaseSource):
@@ -28,7 +27,7 @@ class OpenEphysSource(BaseSource):
     _thread: Thread = PrivateAttr()
 
     def _set_buffer_dtype(self):
-        self._buffer_dtype = [
+        self._source_buffer_dtype = [
             ("timestamp", uint64),
             ("channel_data", float64, (self.num_channels,)),
         ]
@@ -74,15 +73,15 @@ class OpenEphysSource(BaseSource):
                 spike_data[i] = info[amp_key]
 
         self._store_sample(
-            timestamp=time_ns(),
+            timestamp=monotonic_ns(),
             channel_data=spike_data,
         )
 
     def _store_sample(self, timestamp: int, channel_data: ndarray):
-        self._buffer[self._buffer_idx]["timestamp"] = timestamp
-        self._buffer[self._buffer_idx]["channel_data"] = channel_data
+        self._source_buffer[self._source_buffer_idx]["timestamp"] = timestamp
+        self._source_buffer[self._source_buffer_idx]["channel_data"] = channel_data
 
-        self._buffer_idx = (self._buffer_idx + 1) % self.buffer_size
+        self._source_buffer_idx = (self._source_buffer_idx + 1) % self.buffer_size
 
     def _fire(self) -> bool:
         if self.acquisition_type == AcquisitionType.FINITE:

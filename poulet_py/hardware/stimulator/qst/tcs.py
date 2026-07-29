@@ -10,7 +10,7 @@ try:
     from collections import deque
     from re import Match, Pattern, compile, search
     from threading import Condition, Event, Thread
-    from time import time_ns
+    from time import monotonic_ns
 
     from numpy import ndarray, zeros
     from numpy.typing import ArrayLike
@@ -19,13 +19,12 @@ try:
 
     from poulet_py import LOGGER, TCSCommand, TCSStimulus, precise_sleep
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'qst' module. Install options:
 - Dedicated:    pip install poulet_py[qst]
 - Module:       pip install poulet_py[hardware]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class TCSSerialSearchRequest(BaseModel):
@@ -108,9 +107,9 @@ class TCS(BaseModel, validate_assignment=True):
         PySerial object for serial communication.
     _is_open : bool
         Flag indicating if the serial connection is open.
-    _buffer_idx : int
+    _tcs_buffer_idx : int
         Current index in the circular buffer.
-    _buffer : ndarray
+    _tcs_buffer : ndarray
         Circular buffer for temperature samples.
     _acquisition_thread : Thread
         Background thread for continuous data acquisition.
@@ -140,7 +139,7 @@ class TCS(BaseModel, validate_assignment=True):
         description="Serial port to which the TCS device is connected",
         pattern=r"^(COM\d+|(/dev/)tty(USB\d+|\.usb[a-zA-Z0-9]+))$",
     )
-    buffer_size: int = Field(default=1000, description="Size of the internal sampling queue", ge=1)
+    buffer_size: int = Field(default=100, description="Size of the internal sampling queue", ge=1)
     maximum_temperature: float = Field(
         default=40.0, description="Maximum allowed temperature in °C"
     )
@@ -158,8 +157,9 @@ class TCS(BaseModel, validate_assignment=True):
     _serial: Serial = PrivateAttr(default_factory=Serial)
     _is_open: bool = PrivateAttr(default=False)
 
-    _buffer_idx: int = PrivateAttr(0)
-    _buffer: ndarray = PrivateAttr()
+    _tcs_buffer_idx: int = PrivateAttr(0)
+    _tcs_buffer_needle: int = PrivateAttr(0)
+    _tcs_buffer: ndarray = PrivateAttr()
     _acquisition_thread: Thread = PrivateAttr()
     _stop_acquisition_event: Event = PrivateAttr(default_factory=Event)
     _sampling_cond: Condition = PrivateAttr(default_factory=Condition)
@@ -193,9 +193,9 @@ class TCS(BaseModel, validate_assignment=True):
         if self._is_open:
             return
 
-        self._open_serial()
-        self._set_buffer()
-        self._start_acquisition_thread()
+        self._tcs_open_serial()
+        self._tcs_set_buffer()
+        self._tcs_start_acquisition_thread()
 
         self.execute_command(TCSCommand.SET_MAX_TEMPERATURE, int(self.maximum_temperature * 10))
 
@@ -218,9 +218,9 @@ class TCS(BaseModel, validate_assignment=True):
 
     def close(self):
         """Close the serial connection and clean up resources."""
-        self._stop_acquisition_thread()
-        self._close_serial()
-        self._delete_buffer()
+        self._tcs_stop_acquisition_thread()
+        self._tcs_close_serial()
+        self._tcs_delete_buffer()
         self._is_open = False
 
     def info(self) -> str:
@@ -245,13 +245,11 @@ class TCS(BaseModel, validate_assignment=True):
         if result:
             _, match = result
             if not match:
-                msg = "Info response did not match expected format"
-                raise RuntimeError(msg)
+                raise RuntimeError("Info response did not match expected format")
 
             return match.group(1).decode().replace("\r", "\n")
 
-        msg = "Device info request timed out"
-        raise RuntimeError(msg)
+        raise RuntimeError("Device info request timed out")
 
     def battery_info(self):
         """
@@ -274,14 +272,12 @@ class TCS(BaseModel, validate_assignment=True):
             expected_pattern=compile(rb"(?P<voltage>\d+\.\d+)v\s+(?P<percent>\d+)%"),
         )
         if not result:
-            msg = "No response from device"
-            raise RuntimeError(msg)
+            raise RuntimeError("No response from device")
 
         _, match = result
 
         if not match:
-            msg = "Battery response did not match expected format"
-            raise RuntimeError(msg)
+            raise RuntimeError("Battery response did not match expected format")
 
         return {
             "voltage": float(match.group("voltage")),
@@ -311,7 +307,7 @@ class TCS(BaseModel, validate_assignment=True):
         -----
         This method flushes the serial buffer before writing.
         """
-        self._ensure_open()
+        self._tcs_ensure_open()
 
         self._serial.flush()
         LOGGER.debug(f"Sending command: {command}")
@@ -356,7 +352,7 @@ class TCS(BaseModel, validate_assignment=True):
         RuntimeError
             If serial connection is not open.
         """
-        self._ensure_open()
+        self._tcs_ensure_open()
 
         request = TCSSerialSearchRequest(pattern=expected_pattern)
         event = request.event
@@ -398,9 +394,9 @@ class TCS(BaseModel, validate_assignment=True):
         This method starts a timer thread for stimulus duration and optionally
         activates buzzer and trigger output.
         """
-        self._ensure_open()
+        self._tcs_ensure_open()
 
-        self._validate_stimulus(stimulus)
+        self._tcs_validate_stimulus(stimulus)
 
         for command in stimulus.build():
             self.write(command)
@@ -408,7 +404,7 @@ class TCS(BaseModel, validate_assignment=True):
         self.execute_command(TCSCommand.TRIGGER_STIMULATION)
 
         Thread(
-            target=self._stimulus_timer, args=(stimulus.duration,), name="TCS-stimulus-timer"
+            target=self._tcs_stimulus_timer, args=(stimulus.duration,), name="TCS-stimulus-timer"
         ).start()
 
         if self.beep:
@@ -440,7 +436,7 @@ class TCS(BaseModel, validate_assignment=True):
             If serial connection is not open, calibration fails, or
             response format is invalid.
         """
-        self._ensure_open()
+        self._tcs_ensure_open()
 
         match = self.execute_command(
             command=TCSCommand.AUTOMATIC_CALIBRATION,
@@ -449,20 +445,18 @@ class TCS(BaseModel, validate_assignment=True):
         )
 
         if match is None:
-            msg = "Calibration failed or timed out without response"
-            raise RuntimeError(msg)
+            raise RuntimeError("Calibration failed or timed out without response")
 
         _, match = match
         if not match:
-            msg = "Calibration response did not match expected format"
-            raise RuntimeError(msg)
+            raise RuntimeError("Calibration response did not match expected format")
 
         neutral_raw = int(match.group(1))
         return neutral_raw / 10.0
 
     def reset(self):
         """Reset the TCS device to its initial state."""
-        self._ensure_open()
+        self._tcs_ensure_open()
 
         self.execute_command(TCSCommand.RESET)
         LOGGER.info("Reset successfully")
@@ -487,15 +481,15 @@ class TCS(BaseModel, validate_assignment=True):
         The returned array has dtype with fields: 'timestamp' (uint64) and
         's0' through 's4' (float64) for the 5 temperature channels.
         """
-        self._ensure_open()
+        self._tcs_ensure_open()
 
         with self._sampling_cond:
-            if self._buffer_idx == 0:
-                msg = "No samples collected yet"
-                raise RuntimeError(msg)
+            if self._tcs_buffer_idx == 0:
+                raise RuntimeError("No samples collected yet")
 
-            idx = (self._buffer_idx - 1) % self.buffer_size
-            return self._buffer[idx]
+            idx = (self._tcs_buffer_idx - 1) % self.buffer_size
+            self._tcs_buffer_needle = self._tcs_buffer_idx
+            return self._tcs_buffer[idx]
 
     def read_many_sample(self, data: ndarray, n: int, timeout: float = 10.0) -> int:
         """
@@ -529,22 +523,21 @@ class TCS(BaseModel, validate_assignment=True):
         This method reads the most recent samples from the circular buffer,
         returning them in chronological order (oldest to newest).
         """
-        self._ensure_open()
+        self._tcs_ensure_open()
 
         if data.shape[0] < n:
-            msg = f"Provided array has {data.shape[0]} rows, need at least {n}"
-            raise ValueError(msg)
+            raise ValueError(f"Provided array has {data.shape[0]} rows, need at least {n}")
 
-        deadline = time_ns() + timeout
+        deadline = monotonic_ns() + timeout
 
         with self._sampling_cond:
-            while self._buffer_idx == 0:
-                remaining = deadline - time_ns()
+            while self._tcs_buffer_idx == 0:
+                remaining = deadline - monotonic_ns()
                 if remaining <= 0:
                     return 0
                 self._sampling_cond.wait(timeout=remaining / 1e9)
 
-            total_samples = self._buffer_idx
+            total_samples = self._tcs_buffer_idx
             available = min(total_samples, self.buffer_size)
             count = min(n, available)
 
@@ -552,14 +545,16 @@ class TCS(BaseModel, validate_assignment=True):
             first_chunk = min(self.buffer_size - start_idx, count)
             second_chunk = count - first_chunk
 
-            data[0:first_chunk] = self._buffer[start_idx : start_idx + first_chunk]
+            data[0:first_chunk] = self._tcs_buffer[start_idx : start_idx + first_chunk]
 
             if second_chunk > 0:
-                data[first_chunk:count] = self._buffer[0:second_chunk]
+                data[first_chunk:count] = self._tcs_buffer[0:second_chunk]
+
+            self._tcs_buffer_needle += count
 
             return count
 
-    def _validate_stimulus(self, stimulus: TCSStimulus) -> None:
+    def _tcs_validate_stimulus(self, stimulus: TCSStimulus) -> None:
         """
         Validate stimulus parameters.
 
@@ -575,24 +570,21 @@ class TCS(BaseModel, validate_assignment=True):
             exceed maximum_temperature.
         """
         if not isinstance(stimulus, TCSStimulus):
-            msg = f"Stimulus must be a TCSStimulus instance, got {type(stimulus)}"
-            raise ValueError(msg)
+            raise ValueError(f"Stimulus must be a TCSStimulus instance, got {type(stimulus)}")
 
         if stimulus.target > self.maximum_temperature:
-            msg = (
+            raise ValueError(
                 f"Target temperature {stimulus.target} exceeds "
                 f"maximum temperature {self.maximum_temperature}"
             )
-            raise ValueError(msg)
 
         if stimulus.baseline > self.maximum_temperature:
-            msg = (
+            raise ValueError(
                 f"Baseline temperature {stimulus.baseline} exceeds "
                 f"maximum temperature {self.maximum_temperature}"
             )
-            raise ValueError(msg)
 
-    def _stimulus_timer(self, duration_ms: int):
+    def _tcs_stimulus_timer(self, duration_ms: int):
         """
         Timer function for stimulus duration.
 
@@ -607,7 +599,7 @@ class TCS(BaseModel, validate_assignment=True):
         finally:
             self._stimulus_running = False
 
-    def _ensure_open(self):
+    def _tcs_ensure_open(self):
         """
         Check if serial connection is open.
 
@@ -617,10 +609,9 @@ class TCS(BaseModel, validate_assignment=True):
             If serial connection is not open.
         """
         if not self._serial.is_open:
-            msg = "TCS serial connection is not open. Call open() first."
-            raise RuntimeError(msg)
+            raise RuntimeError("TCS serial connection is not open. Call open() first.")
 
-    def _open_serial(self):
+    def _tcs_open_serial(self):
         """
         Open serial connection with TCS-specific parameters.
 
@@ -640,11 +631,9 @@ class TCS(BaseModel, validate_assignment=True):
                 write_timeout=2,
             )
         except Exception as e:
-            self.close()
-            msg = "Serial initialization failed"
-            raise RuntimeError(msg) from e
+            raise RuntimeError("Serial initialization failed") from e
 
-    def _close_serial(self):
+    def _tcs_close_serial(self):
         """
         Close serial connection safely.
 
@@ -659,39 +648,35 @@ class TCS(BaseModel, validate_assignment=True):
             self._serial.reset_output_buffer()
             self._serial.close()
 
-    def _set_buffer(self):
+    def _tcs_set_buffer(self):
         """Initialize the circular buffer for temperature samples."""
         try:
-            self._buffer = zeros(
+            self._tcs_buffer = zeros(
                 self.buffer_size,
                 dtype=[("timestamp", "uint64"), *((f"s{i}", "float64") for i in range(5))],
             )
-            self._buffer_idx = 0
+            self._tcs_buffer_idx = 0
+            self._tcs_buffer_needle = 0
         except Exception as e:
-            self.close()
-            msg = "Buffer initialization failed"
-            raise RuntimeError(msg) from e
+            raise RuntimeError("Buffer initialization failed") from e
 
-    def _delete_buffer(self):
+    def _tcs_delete_buffer(self):
         """Delete the circular buffer and reset index."""
-        del self._buffer
-        self._buffer_idx = 0
+        del self._tcs_buffer
 
-    def _start_acquisition_thread(self):
+    def _tcs_start_acquisition_thread(self):
         """Start the background acquisition thread."""
         try:
             self.execute_command(TCSCommand.DISPLAY_TEMPERATURES_DURING_STIMULATION)
 
             self._acquisition_thread = Thread(
-                target=self._acquisition_thread_func, name="TCS Acquisition Thread", daemon=True
+                target=self._tcs_acquisition_thread_func, name="TCS Acquisition Thread", daemon=True
             )
             self._acquisition_thread.start()
         except Exception as e:
-            self.close()
-            msg = "Acquisition thread failed to start"
-            raise RuntimeError(msg) from e
+            raise RuntimeError("Acquisition thread failed to start") from e
 
-    def _stop_acquisition_thread(self):
+    def _tcs_stop_acquisition_thread(self):
         """Stop the background acquisition thread."""
         self._stop_acquisition_event.set()
         self._acquisition_thread.join(timeout=5)
@@ -703,7 +688,7 @@ class TCS(BaseModel, validate_assignment=True):
 
         self._stop_acquisition_event.clear()
 
-    def _acquisition_thread_func(self):
+    def _tcs_acquisition_thread_func(self):
         """
         Background thread function for continuous data acquisition.
 
@@ -722,23 +707,22 @@ class TCS(BaseModel, validate_assignment=True):
 
                         if request.pattern is not None:
                             if match := search(request.pattern, line):
-                                request.result = (time_ns(), match)
+                                request.result = (monotonic_ns(), match)
                                 request.event.set()
                                 self._serial_search_queue.popleft()
 
                 if match := search(self._temperature_line_pattern, line):
-                    idx = self._buffer_idx % self.buffer_size
-                    timestamp = time_ns()
+                    idx = self._tcs_buffer_idx % self.buffer_size
+                    timestamp = monotonic_ns()
                     values = tuple(map(float, match.groups()))
-                    self._buffer[idx] = (timestamp, *values)
+                    self._tcs_buffer[idx] = (timestamp, *values)
 
                     with self._sampling_cond:
-                        self._buffer_idx += 1
+                        self._tcs_buffer_idx += 1
                         self._sampling_cond.notify_all()
 
         except Exception as e:
-            msg = f"Read loop failed: {e}"
-            LOGGER.exception(msg)
+            LOGGER.exception(f"Read loop failed: {e}")
             self._stop_acquisition_event.set()
 
     def __enter__(self):

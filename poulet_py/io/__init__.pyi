@@ -11,6 +11,8 @@ from .sources import (
     Max31856Source,
     ThermocoupleType,
     StimuliMetadataSource,
+    INA228Source,
+    DCAMSource,
 )
 from .data_structures import (
     BaseMetadata,
@@ -31,6 +33,7 @@ __all__ = [
     "AcquisitionType",
     "BaseEvent",
     "StimuliMetadataSource",
+    "INA228Source",
     "BaseSink",
     "ThermocoupleType",
     "BaseSource",
@@ -56,4 +59,5 @@ __all__ = [
     "ExplicitDiscovery",
     "GlobBasedDiscovery",
     "BaseMetadata",
+    "DCAMSource",
 ]

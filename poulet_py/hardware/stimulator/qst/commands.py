@@ -3,13 +3,12 @@ try:
 
     from poulet_py import LOGGER
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'qst' module. Install options:
 - Dedicated:    pip install poulet_py[qst]
 - Module:       pip install poulet_py[hardware]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class TCSCommand(bytes, Enum):
@@ -109,5 +108,4 @@ class TCSCommand(bytes, Enum):
             LOGGER.debug(f"Formatting command {self.name} with args {args}")
             return self.value % args
         except TypeError as e:
-            msg = f"Wrong number/type of arguments for {self.name}: {e}"
-            raise ValueError(msg) from e
+            raise ValueError(f"Wrong number/type of arguments for {self.name}: {e}") from e

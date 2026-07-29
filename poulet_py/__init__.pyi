@@ -25,6 +25,8 @@ from .hardware import (
     TCSCommand,
     ThermalCamera,
     Soho,
+    DCAM,
+    DCAMPROP,
 )
 from .io import (
     AcquisitionType,
@@ -40,6 +42,7 @@ from .io import (
     SinkEvent,
     TCSSource,
     Max31856Source,
+    INA228Source,
     ThermocoupleType,
     StimuliMetadataSource,
     BaseData,
@@ -54,6 +57,7 @@ from .io import (
     ExplicitDiscovery,
     GlobBasedDiscovery,
     BaseMetadata,
+    DCAMSource,
 )
 from .stimulus import (
     BaseStimulus,
@@ -87,6 +91,9 @@ from .utils import (
     Session,
     Trial,
     WidefieldAnalysis,
+    StimulatorBlock,
+    StimulatorRuntime,
+    StimulatorTrial,
 )
 
 __all__ = [
@@ -100,11 +107,10 @@ __all__ = [
     "BaseSink",
     "BaseSource",
     "BaseStimulus",
-    "BaseData",
-    "WidefieldData",
     "BaseTrigger",
     "BaslerCamera",
     "Max31856Source",
+    "INA228Source",
     "CounterSource",
     "OpenEphysSource",
     "EmptyStimulus",
@@ -117,6 +123,9 @@ __all__ = [
     "Session",
     "Trial",
     "WidefieldAnalysis",
+    "StimulatorBlock",
+    "StimulatorRuntime",
+    "StimulatorTrial",
     "GPIOTrigger",
     "precise_sleep",
     "NIAnalogCompositeStimulus",
@@ -179,4 +188,7 @@ __all__ = [
     "PatternBasedDiscovery",
     "ExplicitDiscovery",
     "GlobBasedDiscovery",
+    "DCAM",
+    "DCAMPROP",
+    "DCAMSource",
 ]

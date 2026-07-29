@@ -35,5 +35,5 @@ example.sqlite
 .cursor*
 docs/source/_static/switcher.json
 
-*.ipynb
 *.h5
+*.ipynb
