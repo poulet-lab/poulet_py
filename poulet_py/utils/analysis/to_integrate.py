@@ -25,11 +25,6 @@ Also ensure: h5py, numpy, pandas, scikit-image, imageio, matplotlib are installe
 
 
 class WidefieldAnalysisToIntegrate:
-    
-
-    
-
-
     def set_roi(self, roi: tuple[int, int] | dict[str, Any]) -> None:
         """
         Set the region of interest for trace extraction.
