@@ -1,8 +1,3 @@
-from typing import Literal
-
-from pydantic import Field
-
-
 try:
     from abc import ABC, abstractmethod
     from pathlib import Path
@@ -12,7 +7,7 @@ try:
     from h5py import File
     from numpy import array, ndarray
     from pandas import DataFrame, read_csv
-    from pydantic import BaseModel, PrivateAttr
+    from pydantic import BaseModel, Field, PrivateAttr
     from skimage.io import imread
 
     from poulet_py import BaseData, BaseMetadata, DataSignature, DataStructure
@@ -26,13 +21,16 @@ Missing required modules. Install options:
     raise ImportError(msg) from e
 
 
-class WidefieldMaskData(BaseModel):
+class WidefieldMaskMetaData(BaseModel):
     center: tuple[float, float] = Field(default=(0.0, 0.0))
     radius: float = Field(default=0.0)
 
 
 class WidefieldMetadata(BaseMetadata):
-    mask_data: WidefieldMaskData | None = Field(default=None)
+    mask_data: WidefieldMaskMetaData | None = Field(default=None)
+    analog_output: dict[str, Any] = Field(
+        default_factory=dict
+    )  # TODO make explicit metadata classes
 
 
 class WidefieldData(BaseData[WidefieldMetadata], ABC):
@@ -121,23 +119,17 @@ class WidefieldData(BaseData[WidefieldMetadata], ABC):
                 f"  Columns: {list(self.timestamps.columns)}",
             ]
         )
-        # TODO fix make schema for h5 meta
+
         if self.analog_output:
             lines.append("Analog output data:")
             for name, data in self.analog_output.items():
-                attrs = self._metadata.get("analog_output", {}).get(name, {})
+                attrs = self.metadata.analog_output.get(name, {})
                 sr = attrs.get("sr", "unknown")
                 lines.append(f"  {name}: shape={data.shape}, sr={sr} Hz")
 
-        mouse_id = (
-            self._metadata.get("analog_output", {}).get("global", {}).get("mouse_id", "unknown")
-        )
-        protocol = (
-            self._metadata.get("analog_output", {})
-            .get("global", {})
-            .get("protocol_name", "unknown")
-        )
-        comment = self._metadata.get("analog_output", {}).get("global", {}).get("comment", "")
+        mouse_id = self.metadata.analog_output.get("global", {}).get("mouse_id", "unknown")
+        protocol = self.metadata.analog_output.get("global", {}).get("protocol_name", "unknown")
+        comment = self.metadata.analog_output.get("global", {}).get("comment", "")
         lines.extend(["Metadata:", f"  Mouse: {mouse_id}", f"  Protocol: {protocol}"])
         if comment:
             lines.append(f"  Comment: {comment}")
@@ -192,13 +184,10 @@ class WidefieldDataV1(WidefieldData):
             f.visititems(_visit_datasets)
 
     def _analog_output_metadata(self):
-        if "analog_output" not in self._metadata:
-            self._metadata["analog_output"] = {}
-
         def _visit_datasets(name: str, obj: Any) -> None:
-            self._metadata["analog_output"]["global"] = dict(f.attrs)
+            self.metadata.analog_output["global"] = dict(f.attrs)
             if isinstance(obj, h5py.Dataset):
-                self._metadata["analog_output"][name] = dict(obj.attrs)
+                self.metadata.analog_output[name] = dict(obj.attrs)
 
         with File(self._analog_output_path, "r") as f:
             f.visititems(_visit_datasets)
