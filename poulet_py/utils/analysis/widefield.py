@@ -20,6 +20,7 @@ try:
         pad,
         savez_compressed,
         zeros,
+        percentile as percentile_fn
     )
     from prompt_toolkit.shortcuts import ProgressBar
     from pydantic import PrivateAttr
@@ -340,3 +341,161 @@ class WidefieldAnalysis(Session):
                 except Exception as e:
                     raise RuntimeError(f"Error creating movie for trial: {trial_name}") from e
         return self
+
+    def calculate_percentile(
+        self,
+        percentile: float = 15.0,
+        stimulus_start_frame: int | None = None,
+        baseline_ms: float | None = None,
+        *,
+        inplace: bool = False,
+    ) -> Self:
+        """
+        Calculate percentile projection (F0) for each trial.
+
+        Computes the specified percentile for each pixel across time,
+        typically used as the baseline for delta F/F calculations.
+
+        Args:
+            percentile: Percentile value (0-100). Default 15.
+            stimulus_start_frame: If provided with baseline_ms, only
+                frames in the baseline window before this point are
+                used. Otherwise all frames are used.
+            baseline_ms: Duration of baseline period in ms, converted
+                to frames using the trial's fps.
+            inplace: Modify self instead of a copy.
+
+        Returns:
+            Self (or a copy), with `trial.data.percentile` populated
+            for each processed trial.
+        """
+        obj = self if inplace else self.model_copy(deep=True)
+
+        with ProgressBar("Calculating percentile projection") as pb:
+            for trial in pb(obj.trials, label="Trials", total=len(obj.trials)):
+                if not isinstance(trial.data, WidefieldData):
+                    continue
+
+                imaging = trial.data.imaging  # (frames, height, width)
+                data_window = imaging
+
+                if stimulus_start_frame is not None and baseline_ms is not None:
+                    fps = trial.data.metadata.fps  # TODO: confirm attribute path
+                    if fps is None:
+                        LOGGER.warning(
+                            f"FPS not available for trial {trial.path.name}; using full movie"
+                        )
+                    else:
+                        baseline_frames = int(round((baseline_ms / 1000.0) * fps))
+                        start = max(0, stimulus_start_frame - baseline_frames)
+                        end = stimulus_start_frame
+
+                        if end <= start:
+                            LOGGER.warning(
+                                f"Invalid baseline window for trial {trial.path.name}; using full movie"
+                            )
+                        else:
+                            data_window = imaging[start:end]
+
+                if data_window.shape[0] == 0:
+                    LOGGER.warning(f"Empty data window for trial {trial.path.name}; skipping")
+                    continue
+
+                trial.data.percentile = percentile_fn(data_window, percentile, axis=0)
+                # TODO: confirm attribute name on WidefieldData
+
+        return obj
+
+    def calculate_baseline(
+        self,
+        stimulus_start_frame: int = 0,
+        baseline_ms: float = 500.0,
+        *,
+        inplace: bool = False,
+    ) -> Self:
+        """
+        Calculate mean baseline image from pre-stimulus period, per trial.
+
+        Averages frames within the baseline window before stimulus.
+
+        Args:
+            stimulus_start_frame: Frame index of stimulus onset.
+            baseline_ms: Duration of baseline period in ms, converted
+                to frames using the trial's fps.
+            inplace: Modify self instead of a copy.
+
+        Returns:
+            Self (or a copy), with `trial.data.baseline` populated
+            for each processed trial.
+        """
+        obj = self if inplace else self.model_copy(deep=True)
+
+        with ProgressBar("Calculating baseline") as pb:
+            for trial in pb(obj.trials, label="Trials", total=len(obj.trials)):
+                if not isinstance(trial.data, WidefieldData):
+                    continue
+
+                fps = trial.data.metadata.fps  # TODO: confirm attribute path
+                if fps is None:
+                    LOGGER.error(f"Skipping baseline for trial {trial.path.name}: no FPS in metadata")
+                    continue
+
+                imaging = trial.data.imaging  # (frames, height, width)
+
+                baseline_frames = int(round((baseline_ms / 1000.0) * fps))
+                start = max(0, stimulus_start_frame - baseline_frames)
+                end = stimulus_start_frame
+
+                if end <= start:
+                    LOGGER.warning(f"Invalid baseline window for trial {trial.path.name}; skipping")
+                    continue
+
+                data_window = imaging[start:end]
+                if data_window.shape[0] == 0:
+                    LOGGER.warning(f"Empty baseline window for trial {trial.path.name}; skipping")
+                    continue
+
+                trial.data.baseline = data_window.mean(axis=0, dtype="float32")
+                # TODO: confirm attribute name on WidefieldData
+
+        return obj
+
+    def calculate_deltaff(self, *, inplace: bool = False) -> Self:
+        """
+        Calculate delta F/F (relative fluorescence change) for each trial.
+
+        Computes (F - F0) / F0 for each pixel and frame, using the
+        trial's stored baseline as F0.
+
+        Requires `calculate_baseline()` to have been run first (or a
+        `trial.data.baseline` already present).
+
+        Args:
+            inplace: Modify self instead of a copy.
+
+        Returns:
+            Self (or a copy), with `trial.data.deltaff` populated for
+            each processed trial. Trials without a baseline are skipped.
+        """
+        obj = self if inplace else self.model_copy(deep=True)
+
+        with ProgressBar("Calculating delta F/F") as pb:
+            for trial in pb(obj.trials, label="Trials", total=len(obj.trials)):
+                if not isinstance(trial.data, WidefieldData):
+                    continue
+
+                baseline = getattr(trial.data, "baseline", None)  # TODO: confirm attribute name
+                if baseline is None:
+                    LOGGER.warning(
+                        f"No baseline for trial {trial.path.name}; run calculate_baseline() first"
+                    )
+                    continue
+
+                imaging = trial.data.imaging.astype("float32")
+                safe_baseline = baseline.astype("float32")
+                safe_baseline[safe_baseline == 0] = 1e-6  # avoid divide-by-zero
+
+                trial.data.deltaff = (imaging - safe_baseline) / safe_baseline
+                # TODO: confirm attribute name on WidefieldData
+
+        return obj
