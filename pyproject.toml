@@ -30,7 +30,7 @@ dependencies = [
   "python-dotenv<=1.2.2",
   "rich<=15.0.0",
   "deprecated<=1.3.1",
-  "prompt-toolkit<=3.0.52",
+  "prompt-toolkit<=3.0.53",
 
 ]
 
@@ -86,7 +86,7 @@ arduino = ["pyserial<=3.5"]
 julabo = ["pyserial<=3.5"]
 qst = ["pandas<=3.0.2", "pyserial<=3.5"]
 triggers = ["poulet_py[gpio]"]
-gpio = ["gpiozero<=2.0.1", "lgpio<=0.2.2.0; platform_system == 'Linux'"]
+gpio = ["gpiozero<=2.0.1.post3", "lgpio<=0.2.2.0; platform_system == 'Linux'"]
 soho = ["pandas<=3.0.2"]
 # IO
 event = ["numpydantic<=1.10.0"]
