@@ -439,7 +439,7 @@ class DCAM(BaseModel):
 
         return dcam_info
 
-    def read_sample(self) -> ndarray | None:
+    def read_sample(self, timeout: float = 0.01) -> ndarray | None:
         self._ensure_open()
         sample = None
 
@@ -450,6 +450,9 @@ class DCAM(BaseModel):
             self._stop_capture()
 
         with self._acquisition_cond:
+            if self._dcam_buffer_needle == self._dcam_buffer_idx:
+                self._acquisition_cond.wait(timeout)
+
             idx = (self._dcam_buffer_idx - 1) % self.buffer_size
             sample = self._dcam_buffer[idx]
             self._dcam_buffer_needle = self._dcam_buffer_idx
@@ -458,6 +461,10 @@ class DCAM(BaseModel):
 
     def read_many_sample(self, data: ndarray, n: int = -1, timeout: float = -1) -> int:
         self._ensure_open()
+
+        if data.shape[0] < n:
+            raise ValueError(f"Provided array has {data.shape[0]} rows, need at least {n}")
+
         deadline = monotonic_ns() + int(timeout * 1e9) if timeout >= 0 else None
 
         if self.acquisition_type == AcquisitionType.FINITE:
