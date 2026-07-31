@@ -40,7 +40,7 @@ REPITITIONS = 6
 # (physical channels Dev1/ai0 through Dev1/ai3) at 1000 samples/s/channel.
 NIDAQ_DEVICE = "Dev1"
 NIDAQ_RATE_HZ = 1000
-NIDAQ_BUFFER_SAMPLES_PER_CHANNEL = TRIAL_DURATION * NIDAQ_RATE_HZ * 1.5
+NIDAQ_BUFFER_SAMPLES_PER_CHANNEL = (TRIAL_DURATION//1000)* NIDAQ_RATE_HZ * 1.5
 
 
 nidaq_clock = NIClockTask(
@@ -58,6 +58,7 @@ nidaq_analog_input = NIAnalogInputTask(
     clock=nidaq_clock.clock,
     channels=[
         NIAnalogInputChannel(name="Touch_stim", number=0, min_val=-10, max_val=10),
+        NIAnalogInputChannel(name="Cam_trigger", number=4, min_val=-10, max_val=10),
         NIAnalogInputChannel(name="Pad", number=5, min_val=-10, max_val=10),
         NIAnalogInputChannel(name="Mouse", number=6, min_val=-10, max_val=10),
         NIAnalogInputChannel(name="BR_HR_Monitor", number=7, min_val=-10, max_val=10),
