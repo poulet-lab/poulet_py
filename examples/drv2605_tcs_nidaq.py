@@ -109,7 +109,7 @@ sources = [
     INA228Source(
         name="ina228_mouse",
         i2c=i2c,
-        address=0x40,
+        address=0x41,
         buffer_size=50,
         sample_rate_Hz=100,
         mode=Mode.CONT_BUS,
@@ -120,7 +120,7 @@ sources = [
     INA228Source(
         name="ina228_pad",
         i2c=i2c,
-        address=0x41,
+        address=0x40,
         buffer_size=50,
         sample_rate_Hz=100,
         mode=Mode.CONT_BUS,
@@ -177,6 +177,17 @@ base_trials = [
                 pre_delay=PRE_STIMULUS_DURATION,
                 post_delay=POST_STIMULUS_DURATION,
             ),
+    StimulatorTrial(
+        stimuli=[
+            DRV2605Stimulus(
+                mode="rtp",
+                drive_voltage=DRIVE_VOLTAGE,
+                duration=STIMULUS_DURATION_TOUCH,
+                pre_delay=PRE_STIMULUS_DURATION,
+                post_delay=POST_STIMULUS_DURATION,
+            ),
+        ]
+    ),
         ]
     ),
 ]
