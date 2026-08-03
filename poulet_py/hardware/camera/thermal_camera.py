@@ -400,12 +400,10 @@ class ThermalCamera:
 
         pressed = False
 
-        #if platform.system() == "Windows":
+        # if platform.system() == "Windows":
         plt.ion()  # Enable interactive mode
 
         fig = plt.figure()
-
-
 
         if platform.system() == "Windows":
             fig.canvas.manager.window.wm_attributes("-topmost", 1)
@@ -421,7 +419,7 @@ class ThermalCamera:
             interpolation="nearest",
             vmin=self.vminT,
             vmax=self.vmaxT,
-            #animated=True,
+            # animated=True,
             cmap="coolwarm",
         )
         ax.set_xticks([])
@@ -434,17 +432,18 @@ class ThermalCamera:
 
         fig.colorbar(img, cax=cax)
 
+        key_command = {"value": None}
 
-        key_command = {"value":None}
         def on_key(event):
             if event.key:
                 key_command["value"] = event.key.lower()
+
         fig.canvas.mpl_connect("key_press_event", on_key)
         plt.show(block=False)
-        #if platform.system() == "Windows":
+        # if platform.system() == "Windows":
         plt.show(block=False)
         fig.canvas.draw()
-            #plt.pause(0.1)
+        # plt.pause(0.1)
 
         try:
             while True:
@@ -477,7 +476,7 @@ class ThermalCamera:
                     img.set_clim(vmin=self.vminT, vmax=self.vmaxT)
                     fig.canvas.draw_idle()
                     fig.canvas.flush_events()
-                    #LOGGER.info(f"Min: {np.min(data_celsius):.2f} °C, Max: {np.max(data_celsius):.2f} °C")
+                    # LOGGER.info(f"Min: {np.min(data_celsius):.2f} °C, Max: {np.max(data_celsius):.2f} °C")
 
                 plt.pause(0.0005)
 
