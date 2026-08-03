@@ -149,7 +149,7 @@ class ThermalCamera:
                     res = libuvc.uvc_open(dev, byref(devh))
                     LOGGER.debug(res)
                     if res < 0:
-                        LOGGER.error("uvc_open error")
+                        LOGGER.error(f"uvc_open error {res}")
                         exit(1)
 
                     LOGGER.info("device opened!")
@@ -278,7 +278,7 @@ class ThermalCamera:
         if self.windows:
             self.windows_camera.stop_streaming()
         else:
-            libuvc.uvc_stop_streaminging(devh)
+            libuvc.uvc_stop_streaming(devh)
 
     def create_hdf5_file(self):
         """
@@ -400,10 +400,13 @@ class ThermalCamera:
 
         pressed = False
 
-        if platform.system() == "Windows":
-            plt.ion()  # Enable interactive mode
+        #if platform.system() == "Windows":
+        plt.ion()  # Enable interactive mode
 
         fig = plt.figure()
+
+
+
         if platform.system() == "Windows":
             fig.canvas.manager.window.wm_attributes("-topmost", 1)
             fig.canvas.manager.window.wm_attributes("-topmost", 0)
@@ -418,7 +421,7 @@ class ThermalCamera:
             interpolation="nearest",
             vmin=self.vminT,
             vmax=self.vmaxT,
-            animated=True,
+            #animated=True,
             cmap="coolwarm",
         )
         ax.set_xticks([])
@@ -431,10 +434,17 @@ class ThermalCamera:
 
         fig.colorbar(img, cax=cax)
 
-        if platform.system() == "Windows":
-            plt.show(block=False)
-            fig.canvas.draw()
-            plt.pause(0.1)
+
+        key_command = {"value":None}
+        def on_key(event):
+            if event.key:
+                key_command["value"] = event.key.lower()
+        fig.canvas.mpl_connect("key_press_event", on_key)
+        plt.show(block=False)
+        #if platform.system() == "Windows":
+        plt.show(block=False)
+        fig.canvas.draw()
+            #plt.pause(0.1)
 
         try:
             while True:
@@ -463,19 +473,21 @@ class ThermalCamera:
                     fig.canvas.draw()
                     fig.canvas.flush_events()
                 else:
-                    ax.clear()
-                    img = ax.imshow(data, vmin=self.vminT, vmax=self.vmaxT)
-                    fig.colorbar(img, cax=cax)
+                    img.set_data(data_celsius)
+                    img.set_clim(vmin=self.vminT, vmax=self.vmaxT)
+                    fig.canvas.draw_idle()
+                    fig.canvas.flush_events()
+                    #LOGGER.info(f"Min: {np.min(data_celsius):.2f} °C, Max: {np.max(data_celsius):.2f} °C")
 
                 plt.pause(0.0005)
 
-                if keyboard.is_pressed("r"):
+                if key_command["value"] == "r":
                     if not pressed:
                         print("Manual FFC")
                         self.perform_manual_ffc()
                         pressed = True
 
-                elif keyboard.is_pressed("t"):
+                elif key_command["value"] == "t":
                     if not pressed:
                         try:
                             now = datetime.now()
@@ -499,13 +511,14 @@ class ThermalCamera:
 
                     pressed = True
 
-                elif keyboard.is_pressed("e"):
+                elif key_command["value"] == "e":
                     if not pressed:
                         LOGGER.info("Exiting live plot")
                         break
 
                 else:
                     pressed = False
+                    key_command["value"] = None
 
         except Exception as e:
             self.log_error(e)
