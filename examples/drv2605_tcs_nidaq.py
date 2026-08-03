@@ -177,17 +177,17 @@ base_trials = [
                 pre_delay=PRE_STIMULUS_DURATION,
                 post_delay=POST_STIMULUS_DURATION,
             ),
-    StimulatorTrial(
-        stimuli=[
-            DRV2605Stimulus(
-                mode="rtp",
-                drive_voltage=DRIVE_VOLTAGE,
-                duration=STIMULUS_DURATION_TOUCH,
-                pre_delay=PRE_STIMULUS_DURATION,
-                post_delay=POST_STIMULUS_DURATION,
+            StimulatorTrial(
+                stimuli=[
+                    DRV2605Stimulus(
+                        mode="rtp",
+                        drive_voltage=DRIVE_VOLTAGE,
+                        duration=STIMULUS_DURATION_TOUCH,
+                        pre_delay=PRE_STIMULUS_DURATION,
+                        post_delay=POST_STIMULUS_DURATION,
+                    ),
+                ]
             ),
-        ]
-    ),
         ]
     ),
 ]
