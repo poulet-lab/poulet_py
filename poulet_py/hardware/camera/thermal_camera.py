@@ -22,7 +22,6 @@ try:
     import signal
     import sys
 
-    import clr
     from scipy import ndimage
 
     from poulet_py import LOGGER, setup_logging
@@ -52,6 +51,20 @@ try:
     if not platform.system() == "Windows":
         from poulet_py.hardware.camera.uvctypes import *
 
+        class lep_rad_flux_linear_params(Structure):
+            """Lepton RAD Flux Linear Parameters (eight 16-bit words)."""
+
+            _fields_ = [
+                ("sceneEmissivity", c_uint16),
+                ("TBkgK", c_uint16),
+                ("tauWindow", c_uint16),
+                ("TWindowK", c_uint16),
+                ("tauAtm", c_uint16),
+                ("TAtmK", c_uint16),
+                ("reflWindow", c_uint16),
+                ("TReflK", c_uint16),
+            ]
+
         BUF_SIZE = 2
         q = Queue(BUF_SIZE)
         PTR_PY_FRAME_CALLBACK = CFUNCTYPE(None, POINTER(uvc_frame), c_void_p)(py_frame_callback)
@@ -59,6 +72,8 @@ try:
         colorMapType = 0
 
     else:
+        import clr
+
         folder = "x64" if platform.architecture()[0] == "64bit" else "x86"
         path = os.path.sep.join(__file__.split(os.path.sep)[:-4])
         sys.path.append(os.path.sep.join([path, "artifacts", "leptonUVC", folder]))
@@ -90,20 +105,36 @@ class ThermalCamera:
     A class to interact with the Lepton 3.5 thermal camera.
     """
 
-    def __init__(self, vminT=30, vmaxT=34):
+    def __init__(self, vminT=30, vmaxT=40, frame_rate_fps=8.7, emissivity=0.95):
         """
         Initializes the ThermalCamera object.
 
         Args:
             vminT (int, optional): Minimum temperature threshold. Defaults to 30.
-            vmaxT (int, optional): Maximum temperature threshold. Defaults to 34.
+            vmaxT (int, optional): Maximum temperature threshold. Defaults to 40.
+            frame_rate_fps (float, optional): Requested UVC acquisition frame rate.
+                The Lepton/PureThermal combination normally exposes a nominal 9 Hz
+                stream. Defaults to 8.7.
+            emissivity (float, optional): Scene emissivity used by the Lepton's
+                native T-Linear radiometry calculation. Must be in [0.01, 1.0].
+                Defaults to 0.95.
         """
+        frame_rate_fps = float(frame_rate_fps)
+        emissivity = float(emissivity)
+        if not 0 < frame_rate_fps <= 9:
+            raise ValueError("frame_rate_fps must be greater than 0 and at most 9")
+        if not 0.01 <= emissivity <= 1.0:
+            raise ValueError("emissivity must be between 0.01 and 1.0")
+
         self.vminT = int(vminT)
         self.vmaxT = int(vmaxT)
-        self.frames_per_second = 8.7
+        self.requested_frames_per_second = frame_rate_fps
+        self.frames_per_second = frame_rate_fps
+        self.emissivity = emissivity
         self.width = 160
         self.height = 120
         self.video_format = None
+        self._flux_linear_params = None
 
         self.shutter_manual = False
 
@@ -113,7 +144,14 @@ class ThermalCamera:
             self.windows_camera = CameraWindows()
 
         LOGGER.info("Object thermal camera initialized")
-        LOGGER.info(f"vminT = {self.vminT} and vmaxT = {self.vmaxT}")
+        LOGGER.info(
+            "vminT = %s, vmaxT = %s, requested frame rate = %.3f fps, "
+            "emissivity = %.4f",
+            self.vminT,
+            self.vmaxT,
+            self.requested_frames_per_second,
+            self.emissivity,
+        )
 
     def start_streaming(self):
         global devh
@@ -124,6 +162,13 @@ class ThermalCamera:
         """
         if self.windows:
             self.windows_camera.initialise_camera()
+            self.set_emissivity(self.emissivity)
+            if abs(self.requested_frames_per_second - 8.7) > 0.01:
+                LOGGER.warning(
+                    "The Windows IR16Capture backend does not expose frame-rate "
+                    "negotiation; using the camera's nominal 8.7 fps stream"
+                )
+            self.frames_per_second = 8.7
             time.sleep(1)
             self.windows_camera.start_streaming()
         else:
@@ -149,7 +194,7 @@ class ThermalCamera:
                     res = libuvc.uvc_open(dev, byref(devh))
                     LOGGER.debug(res)
                     if res < 0:
-                        LOGGER.error(f"uvc_open error {res}")
+                        LOGGER.error("uvc_open error")
                         exit(1)
 
                     LOGGER.info("device opened!")
@@ -159,14 +204,37 @@ class ThermalCamera:
                         LOGGER.error("device does not support Y16")
                         exit(1)
 
-                    libuvc.uvc_get_stream_ctrl_format_size(
+                    requested_uvc_fps = max(
+                        1, int(self.requested_frames_per_second + 0.5)
+                    )
+                    res = libuvc.uvc_get_stream_ctrl_format_size(
                         devh,
                         byref(ctrl),
                         UVC_FRAME_FORMAT_Y16,
                         frame_formats[0].wWidth,
                         frame_formats[0].wHeight,
-                        int(1e7 / frame_formats[0].dwDefaultFrameInterval),
+                        requested_uvc_fps,
                     )
+                    if res < 0:
+                        raise RuntimeError(
+                            "The camera rejected the requested frame rate "
+                            f"{self.requested_frames_per_second:.3f} fps "
+                            f"(UVC request {requested_uvc_fps} fps): {res}"
+                        )
+
+                    if ctrl.dwFrameInterval:
+                        self.frames_per_second = 1e7 / ctrl.dwFrameInterval
+                    else:
+                        self.frames_per_second = float(requested_uvc_fps)
+
+                    LOGGER.info(
+                        "UVC frame rate requested %.3f fps; negotiated %.3f fps",
+                        self.requested_frames_per_second,
+                        self.frames_per_second,
+                    )
+
+                    # Configure radiometry before the first frame is produced.
+                    self.set_emissivity(self.emissivity)
 
                     res = libuvc.uvc_start_streaming(
                         devh, byref(ctrl), PTR_PY_FRAME_CALLBACK, None, 0
@@ -191,6 +259,53 @@ class ThermalCamera:
                 libuvc.uvc_exit(ctx)
                 LOGGER.error("Failed to Find Device")
                 exit(1)
+
+    def set_emissivity(self, emissivity):
+        """Set scene emissivity used by the camera's T-Linear calculation.
+
+        Only ``sceneEmissivity`` is changed. The camera's existing background,
+        atmosphere, and window parameters are read once and retained.
+        """
+        emissivity = float(emissivity)
+        if not 0.01 <= emissivity <= 1.0:
+            raise ValueError("emissivity must be between 0.01 and 1.0")
+
+        if self.windows:
+            self.windows_camera.set_emissivity(emissivity)
+        else:
+            global devh
+
+            if not devh:
+                raise RuntimeError("Thermal camera must be opened before setting emissivity")
+
+            if self._flux_linear_params is None:
+                self._flux_linear_params = lep_rad_flux_linear_params()
+                get_command = 0xBC
+                control_id = (get_command >> 2) + 1
+                res = call_extension_unit(
+                    devh,
+                    RAD_UNIT_ID,
+                    control_id,
+                    byref(self._flux_linear_params),
+                    sizeof(self._flux_linear_params),
+                )
+                if res < 0:
+                    raise RuntimeError(f"Failed to read radiometry parameters: {res}")
+
+            self._flux_linear_params.sceneEmissivity = round(emissivity * 8192)
+            set_command = 0xBD
+            control_id = (set_command >> 2) + 1
+            res = set_extension_unit(
+                devh,
+                RAD_UNIT_ID,
+                control_id,
+                byref(self._flux_linear_params),
+                sizeof(self._flux_linear_params),
+            )
+            if res < 0:
+                raise RuntimeError(f"Failed to set emissivity to {emissivity}: {res}")
+
+        self.emissivity = emissivity
 
     def set_timer(self, start_time):
         """
@@ -336,7 +451,7 @@ class ThermalCamera:
                     vmin=self.vminT,
                     vmax=self.vmaxT,
                 )
-                fig.colorbar(im, ax=ax, label="Temperature (°C)")
+                fig.colorbar(im, ax=ax, label="Temperature (Â°C)")
                 ax.axis("off")
                 plt.tight_layout()
                 plt.savefig(png_filename, bbox_inches="tight")
@@ -400,13 +515,10 @@ class ThermalCamera:
 
         pressed = False
 
-        #if platform.system() == "Windows":
-        plt.ion()  # Enable interactive mode
+        if platform.system() == "Windows":
+            plt.ion()  # Enable interactive mode
 
         fig = plt.figure()
-
-
-
         if platform.system() == "Windows":
             fig.canvas.manager.window.wm_attributes("-topmost", 1)
             fig.canvas.manager.window.wm_attributes("-topmost", 0)
@@ -421,7 +533,7 @@ class ThermalCamera:
             interpolation="nearest",
             vmin=self.vminT,
             vmax=self.vmaxT,
-            #animated=True,
+            animated=True,
             cmap="coolwarm",
         )
         ax.set_xticks([])
@@ -434,17 +546,10 @@ class ThermalCamera:
 
         fig.colorbar(img, cax=cax)
 
-
-        key_command = {"value":None}
-        def on_key(event):
-            if event.key:
-                key_command["value"] = event.key.lower()
-        fig.canvas.mpl_connect("key_press_event", on_key)
-        plt.show(block=False)
-        #if platform.system() == "Windows":
-        plt.show(block=False)
-        fig.canvas.draw()
-            #plt.pause(0.1)
+        if platform.system() == "Windows":
+            plt.show(block=False)
+            fig.canvas.draw()
+            plt.pause(0.1)
 
         try:
             while True:
@@ -473,21 +578,19 @@ class ThermalCamera:
                     fig.canvas.draw()
                     fig.canvas.flush_events()
                 else:
-                    img.set_data(data_celsius)
-                    img.set_clim(vmin=self.vminT, vmax=self.vmaxT)
-                    fig.canvas.draw_idle()
-                    fig.canvas.flush_events()
-                    #LOGGER.info(f"Min: {np.min(data_celsius):.2f} °C, Max: {np.max(data_celsius):.2f} °C")
+                    ax.clear()
+                    img = ax.imshow(data, vmin=self.vminT, vmax=self.vmaxT)
+                    fig.colorbar(img, cax=cax)
 
                 plt.pause(0.0005)
 
-                if key_command["value"] == "r":
+                if keyboard.is_pressed("r"):
                     if not pressed:
                         print("Manual FFC")
                         self.perform_manual_ffc()
                         pressed = True
 
-                elif key_command["value"] == "t":
+                elif keyboard.is_pressed("t"):
                     if not pressed:
                         try:
                             now = datetime.now()
@@ -511,14 +614,13 @@ class ThermalCamera:
 
                     pressed = True
 
-                elif key_command["value"] == "e":
+                elif keyboard.is_pressed("e"):
                     if not pressed:
                         LOGGER.info("Exiting live plot")
                         break
 
                 else:
                     pressed = False
-                    key_command["value"] = None
 
         except Exception as e:
             self.log_error(e)
@@ -545,6 +647,8 @@ class ThermalCamera:
             "resolution_width": self.width,
             "resolution_height": self.height,
             "frame_rate_fps": self.frames_per_second,
+            "requested_frame_rate_fps": self.requested_frames_per_second,
+            "emissivity": self.emissivity,
             "output_file": self.output_file_name,
             "temperature_min": self.vminT,
             "temperature_max": self.vmaxT,
@@ -647,6 +751,20 @@ class CameraWindows:
         Perform a manual flat field correction.
         """
         self.device.sys.RunFFCNormalization()
+
+    def set_emissivity(self, emissivity):
+        """Set the Lepton RAD scene-emissivity parameter."""
+        params = self.device.rad.GetFluxLinearParams()
+        scaled_emissivity = round(float(emissivity) * 8192)
+
+        if hasattr(params, "sceneEmissivity"):
+            params.sceneEmissivity = scaled_emissivity
+        elif hasattr(params, "SceneEmissivity"):
+            params.SceneEmissivity = scaled_emissivity
+        else:
+            raise AttributeError("FluxLinearParams has no scene-emissivity field")
+
+        self.device.rad.SetFluxLinearParams(params)
 
     def stop_streaming(self):
         """

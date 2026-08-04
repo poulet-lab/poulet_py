@@ -22,11 +22,12 @@ from poulet_py import (
     TCSStimulus,
 )
 from poulet_py.hardware.camera.hamamatzu.dcam import DCAMPROP
+from poulet_py.io.sources.tcam  import TCAMSource
 
 # DURATION
-ITI = 15000
-STIMULUS_DURATION = 3000
-STIMULUS_DURATION_TOUCH = 3000
+ITI = 1500#0
+STIMULUS_DURATION = 300#0
+STIMULUS_DURATION_TOUCH = 300#0
 PRE_STIMULUS_DURATION = round(ITI / 2)
 POST_STIMULUS_DURATION = round(ITI / 2)
 TRIAL_DURATION = PRE_STIMULUS_DURATION + STIMULUS_DURATION + POST_STIMULUS_DURATION
@@ -34,14 +35,15 @@ RAMP_UP = 300
 RAMP_DOWN = 300
 BASELINE = 32
 DRIVE_VOLTAGE = 3
-STIMULUS_TEMPS = [1, -1, 2, -2, 3, -3, 5, -5, 10, -10]
+STIMULUS_TEMPS = [1, -1]#, 2, -2, 3, -3, 5, -5, 10, -10]
 REPITITIONS = 6
 # NI-DAQ configuration: continuously sample the first four analog inputs
 # (physical channels Dev1/ai0 through Dev1/ai3) at 1000 samples/s/channel.
 NIDAQ_DEVICE = "Dev1"
 NIDAQ_RATE_HZ = 1000
 NIDAQ_BUFFER_SAMPLES_PER_CHANNEL = (TRIAL_DURATION // 1000) * NIDAQ_RATE_HZ * 1.5
-
+#OUTPUT_DIR = None
+#OUTPUT_FILE = "drv2605_tcs_nidaq.h5"
 
 nidaq_clock = NIClockTask(
     name="nidaq_clock",
@@ -98,13 +100,20 @@ sources = [
     DCAMSource(
         name="dcam",
         acquisition_type=AcquisitionType.CONTINUOUS,
-        resolution=(1024, 1024),
         frame_rate=20,
         binning=DCAMPROP.BINNING._2,
         exposure_time=35,
         buffer_size=10,
         timing_mode="masterpulse",
         output_trigger_kind=DCAMPROP.OUTPUTTRIGGER_KIND.GLOBALEXPOSURE,
+    ),
+        TCAMSource(
+        name="tcam",
+        buffer_size=16,
+        vminT=30,
+        vmaxT=40,
+        frame_rate_fps=8.7,
+        emissivity=0.95,
     ),
     INA228Source(
         name="ina228_mouse",
@@ -177,16 +186,16 @@ base_trials = [
                 pre_delay=PRE_STIMULUS_DURATION,
                 post_delay=POST_STIMULUS_DURATION,
             ),
-            StimulatorTrial(
-                stimuli=[
-                    DRV2605Stimulus(
-                        mode="rtp",
-                        drive_voltage=DRIVE_VOLTAGE,
-                        duration=STIMULUS_DURATION_TOUCH,
-                        pre_delay=PRE_STIMULUS_DURATION,
-                        post_delay=POST_STIMULUS_DURATION,
-                    ),
-                ]
+        ]
+    ),
+    StimulatorTrial(
+        stimuli=[
+            DRV2605Stimulus(
+                mode="rtp",
+                drive_voltage=DRIVE_VOLTAGE,
+                duration=STIMULUS_DURATION_TOUCH,
+                pre_delay=PRE_STIMULUS_DURATION,
+                post_delay=POST_STIMULUS_DURATION,
             ),
         ]
     ),
