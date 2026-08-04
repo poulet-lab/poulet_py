@@ -208,6 +208,10 @@ class TCS(BaseModel, validate_assignment=True):
 
         self.execute_command(TCSCommand.SET_MAX_TEMPERATURE, int(self.maximum_temperature * 10))
         self.execute_command(TCSCommand.DISPLAY_TEMPERATURES_DURING_STIMULATION)
+        # Between-stim stream (~1 Hz). Needed so CONTINUOUS actually receives
+        # samples outside trigger windows; Ob alone only streams during stim.
+        if self.acquisition_type == AcquisitionType.CONTINUOUS:
+            self.execute_command(TCSCommand.DISPLAY_TEMPERATURES_BETWEEN_STIMULATION)
 
         info = self.info()
         match = compile(r"Firmware:(.*)\nProbe ID:(.*)\nProbe TYPE:(.*)\n").search(info)
