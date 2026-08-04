@@ -29,6 +29,18 @@ class TCAMSource(BaseSource):
 
     vminT: int = Field(default=30, description="Lower preview temperature in Celsius")
     vmaxT: int = Field(default=34, description="Upper preview temperature in Celsius")
+    frame_rate_fps: float = Field(
+        default=8.0,
+        gt=0,
+        le=8.7,
+        description="Requested UVC acquisition frame rate (max 8.7)",
+    )
+    emissivity: float = Field(
+        default=0.95,
+        ge=0.01,
+        le=1.0,
+        description="Scene emissivity for Lepton T-Linear radiometry",
+    )
     frame_timeout_s: float = Field(
         default=0.25,
         gt=0,
@@ -89,7 +101,12 @@ class TCAMSource(BaseSource):
             except Empty:
                 break
 
-        self._camera = ThermalCamera(vminT=self.vminT, vmaxT=self.vmaxT)
+        self._camera = ThermalCamera(
+            vminT=self.vminT,
+            vmaxT=self.vmaxT,
+            frame_rate_fps=self.frame_rate_fps,
+            emissivity=self.emissivity,
+        )
         self._camera.start_streaming()
 
     def _close(self) -> None:
