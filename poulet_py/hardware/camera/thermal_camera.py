@@ -145,8 +145,7 @@ class ThermalCamera:
 
         LOGGER.info("Object thermal camera initialized")
         LOGGER.info(
-            "vminT = %s, vmaxT = %s, requested frame rate = %.3f fps, "
-            "emissivity = %.4f",
+            "vminT = %s, vmaxT = %s, requested frame rate = %.3f fps, emissivity = %.4f",
             self.vminT,
             self.vmaxT,
             self.requested_frames_per_second,
@@ -204,9 +203,7 @@ class ThermalCamera:
                         LOGGER.error("device does not support Y16")
                         exit(1)
 
-                    requested_uvc_fps = max(
-                        1, int(self.requested_frames_per_second + 0.5)
-                    )
+                    requested_uvc_fps = max(1, int(self.requested_frames_per_second + 0.5))
                     res = libuvc.uvc_get_stream_ctrl_format_size(
                         devh,
                         byref(ctrl),

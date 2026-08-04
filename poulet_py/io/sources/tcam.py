@@ -1,4 +1,3 @@
-
 """Continuous PureThermal/Lepton source for Poulet_py.
 
 The camera implementation owns the UVC callback and its small frame queue.
@@ -127,4 +126,3 @@ class TCAMSource(BaseSource):
             temperature_celsius *= 0.01
             temperature_celsius -= 273.15
             self._write_sample((timestamp, temperature_celsius))
-
