@@ -202,20 +202,44 @@ class StimulatorRuntime(BaseModel):
         if self._is_open:
             return
 
-        if not self._external_bus:
-            self.bus.open()
+        opened_sources: list = []
+        opened_sinks: list = []
+        bus_opened = False
 
-        for source in self.sources:
-            source.bus = self.bus
-            source.open()
+        try:
+            if not self._external_bus:
+                self.bus.open()
+                bus_opened = True
 
-        for sink in self.sinks:
-            sink.bus = self.bus
-            sink.open()
+            for source in self.sources:
+                source.bus = self.bus
+                source.open()
+                opened_sources.append(source)
 
-        self._key_bindings = self._create_key_bindings()
+            for sink in self.sinks:
+                sink.bus = self.bus
+                sink.open()
+                opened_sinks.append(sink)
 
-        self._is_open = True
+            self._key_bindings = self._create_key_bindings()
+            self._is_open = True
+        except Exception:
+            for sink in reversed(opened_sinks):
+                try:
+                    sink.close()
+                except Exception:
+                    pass
+            for source in reversed(opened_sources):
+                try:
+                    source.close()
+                except Exception:
+                    pass
+            if bus_opened and not self._external_bus:
+                try:
+                    self.bus.close()
+                except Exception:
+                    pass
+            raise
 
     def close(self):
         """
@@ -237,13 +261,22 @@ class StimulatorRuntime(BaseModel):
         self._stopped.clear()
 
         for sink in self.sinks:
-            sink.close()
+            try:
+                sink.close()
+            except Exception:
+                pass
 
         for source in self.sources:
-            source.close()
+            try:
+                source.close()
+            except Exception:
+                pass
 
         if not self._external_bus:
-            self.bus.close()
+            try:
+                self.bus.close()
+            except Exception:
+                pass
 
     def run(self):
         """

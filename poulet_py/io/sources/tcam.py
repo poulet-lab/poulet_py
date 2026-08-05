@@ -29,12 +29,6 @@ class TCAMSource(BaseSource):
 
     vminT: int = Field(default=30, description="Lower preview temperature in Celsius")
     vmaxT: int = Field(default=34, description="Upper preview temperature in Celsius")
-    frame_rate_fps: float = Field(
-        default=8.0,
-        gt=0,
-        le=8.7,
-        description="Requested UVC acquisition frame rate (max 8.7)",
-    )
     emissivity: float = Field(
         default=0.95,
         ge=0.01,
@@ -66,17 +60,24 @@ class TCAMSource(BaseSource):
         self._acquisition_thread.start()
 
     def close(self) -> None:
-        if not self._is_open:
-            return
-
-        # Stop all writes before BaseSource removes its circular buffer.
+        # Always stop the drain thread and release UVC, even if open() failed
+        # before BaseSource marked the source as open.
         self._stop_acquisition.set()
         if self._acquisition_thread is not None:
             self._acquisition_thread.join(timeout=self.frame_timeout_s + 1.0)
             if self._acquisition_thread.is_alive():
                 LOGGER.warning("%s frame-drain thread did not stop", self.name)
         self._acquisition_thread = None
-        super().close()
+
+        if self._camera is not None:
+            try:
+                self._camera.stop_streaming()
+            except Exception:
+                LOGGER.exception("%s failed to stop thermal camera", self.name)
+            self._camera = None
+
+        if self._is_open:
+            super().close()
 
     def _set_buffer_dtype(self) -> None:
         if self._camera is None:
@@ -104,7 +105,6 @@ class TCAMSource(BaseSource):
         self._camera = ThermalCamera(
             vminT=self.vminT,
             vmaxT=self.vmaxT,
-            frame_rate_fps=self.frame_rate_fps,
             emissivity=self.emissivity,
         )
         self._camera.start_streaming()
