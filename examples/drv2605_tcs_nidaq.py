@@ -112,7 +112,6 @@ sources = [
         buffer_size=16,
         vminT=30,
         vmaxT=40,
-        frame_rate_fps=8.7,
         emissivity=0.95,
     ),
     INA228Source(

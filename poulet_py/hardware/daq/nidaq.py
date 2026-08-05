@@ -200,6 +200,8 @@ class NIBaseTask(BaseModel, ABC):
         if self._is_open:
             return
 
+        if self._task is None:
+            self._task = Task()
         self._open()
         self._is_open = True
 
@@ -213,8 +215,11 @@ class NIBaseTask(BaseModel, ABC):
         if not self._is_open:
             return
 
-        self._task.close()
-        self._task = Task()
+        if self._task is not None:
+            try:
+                self._task.close()
+            finally:
+                self._task = None
         self._is_open = False
 
     def start(self) -> None:
@@ -698,7 +703,10 @@ class NIDaQ(BaseModel):
             return
 
         for task in self.tasks:
-            task.close()
+            try:
+                task.close()
+            except Exception:
+                pass
 
         if self._executor is not None:
             self._executor.shutdown(wait=True)

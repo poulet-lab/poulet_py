@@ -22,8 +22,6 @@ try:
     import signal
     import sys
 
-    from scipy import ndimage
-
     from poulet_py import LOGGER, setup_logging
 
     def py_frame_callback(frame, userptr):
@@ -105,36 +103,33 @@ class ThermalCamera:
     A class to interact with the Lepton 3.5 thermal camera.
     """
 
-    def __init__(self, vminT=30, vmaxT=40, frame_rate_fps=8.7, emissivity=0.95):
+    def __init__(self, vminT=30, vmaxT=40, emissivity=0.95):
         """
         Initializes the ThermalCamera object.
 
         Args:
             vminT (int, optional): Minimum temperature threshold. Defaults to 30.
             vmaxT (int, optional): Maximum temperature threshold. Defaults to 40.
-            frame_rate_fps (float, optional): Requested UVC acquisition frame rate.
-                The Lepton/PureThermal combination normally exposes a nominal 9 Hz
-                stream. Defaults to 8.7.
             emissivity (float, optional): Scene emissivity used by the Lepton's
                 native T-Linear radiometry calculation. Must be in [0.01, 1.0].
                 Defaults to 0.95.
         """
-        frame_rate_fps = float(frame_rate_fps)
         emissivity = float(emissivity)
-        if not 0 < frame_rate_fps <= 9:
-            raise ValueError("frame_rate_fps must be greater than 0 and at most 9")
         if not 0.01 <= emissivity <= 1.0:
             raise ValueError("emissivity must be between 0.01 and 1.0")
 
         self.vminT = int(vminT)
         self.vmaxT = int(vmaxT)
-        self.requested_frames_per_second = frame_rate_fps
-        self.frames_per_second = frame_rate_fps
+        self.frames_per_second = None
         self.emissivity = emissivity
         self.width = 160
         self.height = 120
         self.video_format = None
         self._flux_linear_params = None
+        self._ctx = None
+        self._dev = None
+        self._devh = None
+        self._streaming = False
 
         self.shutter_manual = False
 
@@ -145,117 +140,110 @@ class ThermalCamera:
 
         LOGGER.info("Object thermal camera initialized")
         LOGGER.info(
-            "vminT = %s, vmaxT = %s, requested frame rate = %.3f fps, emissivity = %.4f",
+            "vminT = %s, vmaxT = %s, emissivity = %.4f (native frame rate)",
             self.vminT,
             self.vmaxT,
-            self.requested_frames_per_second,
             self.emissivity,
         )
 
     def start_streaming(self):
-        global devh
-        global dev
         """
         Method to start streaming. This method needs to be called always
         before you can extract the data from the camera.
         """
+        if self._streaming:
+            return
+
         if self.windows:
             self.windows_camera.initialise_camera()
             self.set_emissivity(self.emissivity)
-            if abs(self.requested_frames_per_second - 8.7) > 0.01:
-                LOGGER.warning(
-                    "The Windows IR16Capture backend does not expose frame-rate "
-                    "negotiation; using the camera's nominal 8.7 fps stream"
-                )
             self.frames_per_second = 8.7
             time.sleep(1)
             self.windows_camera.start_streaming()
-        else:
-            ctx = POINTER(uvc_context)()
-            dev = POINTER(uvc_device)()
-            devh = POINTER(uvc_device_handle)()
-            ctrl = uvc_stream_ctrl()
-            LOGGER.debug(ctrl.__dict__)
+            self._streaming = True
+            return
 
-            res = libuvc.uvc_init(byref(ctx), 0)
+        ctx = POINTER(uvc_context)()
+        dev = POINTER(uvc_device)()
+        devh = POINTER(uvc_device_handle)()
+        ctrl = uvc_stream_ctrl()
+
+        res = libuvc.uvc_init(byref(ctx), 0)
+        if res < 0:
+            raise RuntimeError(f"uvc_init error: {res}")
+        self._ctx = ctx
+
+        try:
+            res = libuvc.uvc_find_device(
+                ctx, byref(dev), PT_USB_VID, PT_USB_PID, 0
+            )
             if res < 0:
-                LOGGER.error("uvc_init error")
-                exit(1)
+                raise RuntimeError(f"uvc_find_device error: {res}")
+            self._dev = dev
 
-            try:
-                res = libuvc.uvc_find_device(ctx, byref(dev), PT_USB_VID, PT_USB_PID, 0)
-                LOGGER.debug(res)
-                if res < 0:
-                    LOGGER.error("uvc_find_device error")
-                    exit(1)
+            res = libuvc.uvc_open(dev, byref(devh))
+            if res < 0:
+                raise RuntimeError(f"uvc_open error: {res}")
+            self._devh = devh
+            LOGGER.info("device opened!")
 
-                try:
-                    res = libuvc.uvc_open(dev, byref(devh))
-                    LOGGER.debug(res)
-                    if res < 0:
-                        LOGGER.error("uvc_open error")
-                        exit(1)
+            frame_formats = uvc_get_frame_formats_by_guid(
+                devh, VS_FMT_GUID_Y16
+            )
+            if len(frame_formats) == 0:
+                raise RuntimeError("device does not support Y16")
 
-                    LOGGER.info("device opened!")
+            default_interval = int(frame_formats[0].dwDefaultFrameInterval)
+            native_fps = (
+                max(1, int(round(1e7 / default_interval)))
+                if default_interval > 0
+                else 9
+            )
+            res = libuvc.uvc_get_stream_ctrl_format_size(
+                devh,
+                byref(ctrl),
+                UVC_FRAME_FORMAT_Y16,
+                frame_formats[0].wWidth,
+                frame_formats[0].wHeight,
+                native_fps,
+            )
+            if res < 0:
+                raise RuntimeError(
+                    "uvc_get_stream_ctrl_format_size failed for native "
+                    f"{native_fps} fps: {res}"
+                )
 
-                    frame_formats = uvc_get_frame_formats_by_guid(devh, VS_FMT_GUID_Y16)
-                    if len(frame_formats) == 0:
-                        LOGGER.error("device does not support Y16")
-                        exit(1)
+            if ctrl.dwFrameInterval:
+                self.frames_per_second = 1e7 / ctrl.dwFrameInterval
+            else:
+                self.frames_per_second = float(native_fps)
 
-                    requested_uvc_fps = max(1, int(self.requested_frames_per_second + 0.5))
-                    res = libuvc.uvc_get_stream_ctrl_format_size(
-                        devh,
-                        byref(ctrl),
-                        UVC_FRAME_FORMAT_Y16,
-                        frame_formats[0].wWidth,
-                        frame_formats[0].wHeight,
-                        requested_uvc_fps,
-                    )
-                    if res < 0:
-                        raise RuntimeError(
-                            "The camera rejected the requested frame rate "
-                            f"{self.requested_frames_per_second:.3f} fps "
-                            f"(UVC request {requested_uvc_fps} fps): {res}"
-                        )
+            LOGGER.info(
+                "UVC native frame rate negotiated %.3f fps",
+                self.frames_per_second,
+            )
 
-                    if ctrl.dwFrameInterval:
-                        self.frames_per_second = 1e7 / ctrl.dwFrameInterval
-                    else:
-                        self.frames_per_second = float(requested_uvc_fps)
+            # Configure radiometry before the first frame is produced.
+            self.set_emissivity(self.emissivity)
 
-                    LOGGER.info(
-                        "UVC frame rate requested %.3f fps; negotiated %.3f fps",
-                        self.requested_frames_per_second,
-                        self.frames_per_second,
-                    )
+            res = libuvc.uvc_start_streaming(
+                devh, byref(ctrl), PTR_PY_FRAME_CALLBACK, None, 0
+            )
+            if res < 0:
+                raise RuntimeError(f"uvc_start_streaming failed: {res}")
+            self._streaming = True
 
-                    # Configure radiometry before the first frame is produced.
-                    self.set_emissivity(self.emissivity)
-
-                    res = libuvc.uvc_start_streaming(
-                        devh, byref(ctrl), PTR_PY_FRAME_CALLBACK, None, 0
-                    )
-                    if res < 0:
-                        LOGGER.error(f"uvc_start_streaming failed: {res}")
-                        exit(1)
-
-                    LOGGER.info("done starting stream, displaying settings")
-                    print_shutter_info(devh)
-                    LOGGER.info("resetting settings to default")
-                    set_auto_ffc(devh)
-                    set_gain_high(devh)
-                    LOGGER.info("current settings")
-                    print_shutter_info(devh)
-
-                except:
-                    libuvc.uvc_unref_device(dev)
-                    LOGGER.error("Failed to Open Device")
-                    exit(1)
-            except:
-                libuvc.uvc_exit(ctx)
-                LOGGER.error("Failed to Find Device")
-                exit(1)
+            LOGGER.info("done starting stream, displaying settings")
+            print_shutter_info(devh)
+            LOGGER.info("resetting settings to default")
+            set_auto_ffc(devh)
+            set_gain_high(devh)
+            LOGGER.info("current settings")
+            print_shutter_info(devh)
+        except Exception:
+            LOGGER.exception("Failed to start thermal camera stream")
+            self.stop_streaming()
+            raise
 
     def set_emissivity(self, emissivity):
         """Set scene emissivity used by the camera's T-Linear calculation.
@@ -270,37 +258,41 @@ class ThermalCamera:
         if self.windows:
             self.windows_camera.set_emissivity(emissivity)
         else:
-            global devh
-
-            if not devh:
-                raise RuntimeError("Thermal camera must be opened before setting emissivity")
+            if not self._devh:
+                raise RuntimeError(
+                    "Thermal camera must be opened before setting emissivity"
+                )
 
             if self._flux_linear_params is None:
                 self._flux_linear_params = lep_rad_flux_linear_params()
                 get_command = 0xBC
                 control_id = (get_command >> 2) + 1
                 res = call_extension_unit(
-                    devh,
+                    self._devh,
                     RAD_UNIT_ID,
                     control_id,
                     byref(self._flux_linear_params),
                     sizeof(self._flux_linear_params),
                 )
                 if res < 0:
-                    raise RuntimeError(f"Failed to read radiometry parameters: {res}")
+                    raise RuntimeError(
+                        f"Failed to read radiometry parameters: {res}"
+                    )
 
             self._flux_linear_params.sceneEmissivity = round(emissivity * 8192)
             set_command = 0xBD
             control_id = (set_command >> 2) + 1
             res = set_extension_unit(
-                devh,
+                self._devh,
                 RAD_UNIT_ID,
                 control_id,
                 byref(self._flux_linear_params),
                 sizeof(self._flux_linear_params),
             )
             if res < 0:
-                raise RuntimeError(f"Failed to set emissivity to {emissivity}: {res}")
+                raise RuntimeError(
+                    f"Failed to set emissivity to {emissivity}: {res}"
+                )
 
         self.emissivity = emissivity
 
@@ -351,16 +343,14 @@ class ThermalCamera:
         """
         Sets the camera shutter to manual mode.
         """
-        global devh
-
         LOGGER.info("Shutter is now manual.")
         try:
             if self.windows:
                 self.windows_camera.set_shutter_manual()
-            else:
-                set_manual_ffc(devh)
-        except:
-            LOGGER.error("Failed to set shutter to manual.")
+            elif self._devh:
+                set_manual_ffc(self._devh)
+        except Exception:
+            LOGGER.exception("Failed to set shutter to manual.")
         finally:
             self.shutter_manual = True
 
@@ -368,29 +358,63 @@ class ThermalCamera:
         """
         Performs a manual Flat Field Correction (FFC).
         """
-        global devh
-
         LOGGER.info("Manual FFC")
         if self.windows:
             self.windows_camera.perform_manual_ffc()
-        else:
-            perform_manual_ffc(devh)
-            print_shutter_info(devh)
+        elif self._devh:
+            perform_manual_ffc(self._devh)
+            print_shutter_info(self._devh)
 
     def stop_streaming(self):
         """
-        Stops the camera stream.
+        Stops the camera stream and fully releases the UVC device.
         """
-        global devh
-
-        if self.video_format == "hdf5" and self.create_hdf5_file:
-            self.hpy_file.close()
+        if (
+            self.video_format == "hdf5"
+            and getattr(self, "hpy_file", None) is not None
+        ):
+            try:
+                self.hpy_file.close()
+            except Exception:
+                LOGGER.exception("Failed to close thermal HDF5 file")
 
         LOGGER.info("Stop streaming")
         if self.windows:
-            self.windows_camera.stop_streaming()
-        else:
-            libuvc.uvc_stop_streaming(devh)
+            if self._streaming:
+                try:
+                    self.windows_camera.stop_streaming()
+                except Exception:
+                    LOGGER.exception("Failed to stop Windows thermal stream")
+            self._streaming = False
+            return
+
+        if self._streaming and self._devh:
+            try:
+                libuvc.uvc_stop_streaming(self._devh)
+            except Exception:
+                LOGGER.exception("uvc_stop_streaming failed")
+        self._streaming = False
+
+        if self._devh:
+            try:
+                libuvc.uvc_close(self._devh)
+            except Exception:
+                LOGGER.exception("uvc_close failed")
+            self._devh = None
+
+        if self._dev:
+            try:
+                libuvc.uvc_unref_device(self._dev)
+            except Exception:
+                LOGGER.exception("uvc_unref_device failed")
+            self._dev = None
+
+        if self._ctx:
+            try:
+                libuvc.uvc_exit(self._ctx)
+            except Exception:
+                LOGGER.exception("uvc_exit failed")
+            self._ctx = None
 
     def create_hdf5_file(self):
         """
@@ -644,7 +668,6 @@ class ThermalCamera:
             "resolution_width": self.width,
             "resolution_height": self.height,
             "frame_rate_fps": self.frames_per_second,
-            "requested_frame_rate_fps": self.requested_frames_per_second,
             "emissivity": self.emissivity,
             "output_file": self.output_file_name,
             "temperature_min": self.vminT,
@@ -680,9 +703,8 @@ class CameraWindows:
         """
         Add a new frame to the buffer of read data.
         """
-        img = np.fromiter(array, dtype="uint16").reshape(height, width)  # parse
-        img = ndimage.rotate(img, angle=0, reshape=True)  # rotation
-        self.latest_frame = img.astype(np.float16)  # update the last reading
+        img = np.fromiter(array, dtype="uint16").reshape(height, width)
+        self.latest_frame = img.astype(np.float16)
 
     def initialise_camera(self):
         """
