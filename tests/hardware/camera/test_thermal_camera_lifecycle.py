@@ -40,7 +40,7 @@ def test_start_streaming_raises_instead_of_exiting(monkeypatch):
     monkeypatch.setattr(
         module,
         "POINTER",
-        lambda *_args, **_kwargs: (lambda: _FakePointer()),
+        lambda *_args, **_kwargs: lambda: _FakePointer(),
     )
     monkeypatch.setattr(module, "byref", lambda value: value)
     monkeypatch.setattr(module, "uvc_context", object)

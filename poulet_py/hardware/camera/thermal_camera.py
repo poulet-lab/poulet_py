@@ -174,9 +174,7 @@ class ThermalCamera:
         self._ctx = ctx
 
         try:
-            res = libuvc.uvc_find_device(
-                ctx, byref(dev), PT_USB_VID, PT_USB_PID, 0
-            )
+            res = libuvc.uvc_find_device(ctx, byref(dev), PT_USB_VID, PT_USB_PID, 0)
             if res < 0:
                 raise RuntimeError(f"uvc_find_device error: {res}")
             self._dev = dev
@@ -187,18 +185,12 @@ class ThermalCamera:
             self._devh = devh
             LOGGER.info("device opened!")
 
-            frame_formats = uvc_get_frame_formats_by_guid(
-                devh, VS_FMT_GUID_Y16
-            )
+            frame_formats = uvc_get_frame_formats_by_guid(devh, VS_FMT_GUID_Y16)
             if len(frame_formats) == 0:
                 raise RuntimeError("device does not support Y16")
 
             default_interval = int(frame_formats[0].dwDefaultFrameInterval)
-            native_fps = (
-                max(1, int(round(1e7 / default_interval)))
-                if default_interval > 0
-                else 9
-            )
+            native_fps = max(1, int(round(1e7 / default_interval))) if default_interval > 0 else 9
             res = libuvc.uvc_get_stream_ctrl_format_size(
                 devh,
                 byref(ctrl),
@@ -209,8 +201,7 @@ class ThermalCamera:
             )
             if res < 0:
                 raise RuntimeError(
-                    "uvc_get_stream_ctrl_format_size failed for native "
-                    f"{native_fps} fps: {res}"
+                    f"uvc_get_stream_ctrl_format_size failed for native {native_fps} fps: {res}"
                 )
 
             if ctrl.dwFrameInterval:
@@ -226,9 +217,7 @@ class ThermalCamera:
             # Configure radiometry before the first frame is produced.
             self.set_emissivity(self.emissivity)
 
-            res = libuvc.uvc_start_streaming(
-                devh, byref(ctrl), PTR_PY_FRAME_CALLBACK, None, 0
-            )
+            res = libuvc.uvc_start_streaming(devh, byref(ctrl), PTR_PY_FRAME_CALLBACK, None, 0)
             if res < 0:
                 raise RuntimeError(f"uvc_start_streaming failed: {res}")
             self._streaming = True
@@ -259,9 +248,7 @@ class ThermalCamera:
             self.windows_camera.set_emissivity(emissivity)
         else:
             if not self._devh:
-                raise RuntimeError(
-                    "Thermal camera must be opened before setting emissivity"
-                )
+                raise RuntimeError("Thermal camera must be opened before setting emissivity")
 
             if self._flux_linear_params is None:
                 self._flux_linear_params = lep_rad_flux_linear_params()
@@ -275,9 +262,7 @@ class ThermalCamera:
                     sizeof(self._flux_linear_params),
                 )
                 if res < 0:
-                    raise RuntimeError(
-                        f"Failed to read radiometry parameters: {res}"
-                    )
+                    raise RuntimeError(f"Failed to read radiometry parameters: {res}")
 
             self._flux_linear_params.sceneEmissivity = round(emissivity * 8192)
             set_command = 0xBD
@@ -290,9 +275,7 @@ class ThermalCamera:
                 sizeof(self._flux_linear_params),
             )
             if res < 0:
-                raise RuntimeError(
-                    f"Failed to set emissivity to {emissivity}: {res}"
-                )
+                raise RuntimeError(f"Failed to set emissivity to {emissivity}: {res}")
 
         self.emissivity = emissivity
 
@@ -369,10 +352,7 @@ class ThermalCamera:
         """
         Stops the camera stream and fully releases the UVC device.
         """
-        if (
-            self.video_format == "hdf5"
-            and getattr(self, "hpy_file", None) is not None
-        ):
+        if self.video_format == "hdf5" and getattr(self, "hpy_file", None) is not None:
             try:
                 self.hpy_file.close()
             except Exception:
