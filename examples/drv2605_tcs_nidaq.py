@@ -40,7 +40,7 @@ REPITITIONS = 6
 # (physical channels Dev1/ai0 through Dev1/ai3) at 1000 samples/s/channel.
 NIDAQ_DEVICE = "Dev1"
 NIDAQ_RATE_HZ = 1000
-NIDAQ_BUFFER_SAMPLES_PER_CHANNEL = TRIAL_DURATION * NIDAQ_RATE_HZ * 1.5
+NIDAQ_BUFFER_SAMPLES_PER_CHANNEL = (TRIAL_DURATION // 1000) * NIDAQ_RATE_HZ * 1.5
 
 
 nidaq_clock = NIClockTask(
@@ -58,6 +58,7 @@ nidaq_analog_input = NIAnalogInputTask(
     clock=nidaq_clock.clock,
     channels=[
         NIAnalogInputChannel(name="Touch_stim", number=0, min_val=-10, max_val=10),
+        NIAnalogInputChannel(name="Cam_trigger", number=4, min_val=-10, max_val=10),
         NIAnalogInputChannel(name="Pad", number=5, min_val=-10, max_val=10),
         NIAnalogInputChannel(name="Mouse", number=6, min_val=-10, max_val=10),
         NIAnalogInputChannel(name="BR_HR_Monitor", number=7, min_val=-10, max_val=10),
@@ -108,7 +109,7 @@ sources = [
     INA228Source(
         name="ina228_mouse",
         i2c=i2c,
-        address=0x40,
+        address=0x41,
         buffer_size=50,
         sample_rate_Hz=100,
         mode=Mode.CONT_BUS,
@@ -119,7 +120,7 @@ sources = [
     INA228Source(
         name="ina228_pad",
         i2c=i2c,
-        address=0x41,
+        address=0x40,
         buffer_size=50,
         sample_rate_Hz=100,
         mode=Mode.CONT_BUS,
@@ -175,6 +176,17 @@ base_trials = [
                 return_speed=RAMP_DOWN,
                 pre_delay=PRE_STIMULUS_DURATION,
                 post_delay=POST_STIMULUS_DURATION,
+            ),
+            StimulatorTrial(
+                stimuli=[
+                    DRV2605Stimulus(
+                        mode="rtp",
+                        drive_voltage=DRIVE_VOLTAGE,
+                        duration=STIMULUS_DURATION_TOUCH,
+                        pre_delay=PRE_STIMULUS_DURATION,
+                        post_delay=POST_STIMULUS_DURATION,
+                    ),
+                ]
             ),
         ]
     ),
