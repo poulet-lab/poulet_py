@@ -28,9 +28,7 @@ try:
     from typing import Self
 
     from nidaqmx import Task
-    from nidaqmx.constants import (
-        AcquisitionType as NIAcquisitionType,
-    )
+    from nidaqmx.constants import AcquisitionType as NIAcquisitionType, OverwriteMode
     from nidaqmx.constants import (
         Edge,
         LineGrouping,
@@ -328,6 +326,7 @@ class NIAnalogInputTask(NIBaseTask):
             sample_mode=self._clock.to_ni_acquisition_type(),
             samps_per_chan=self._clock.samps_per_chan,
         )
+        self._task.in_stream.overwrite = OverwriteMode.OVERWRITE_UNREAD_SAMPLES
 
         self._ai_buffer = zeros((len(self.channels), self._clock.samps_per_chan), dtype="float64")
         self._buffer = zeros(
@@ -337,22 +336,18 @@ class NIAnalogInputTask(NIBaseTask):
         self._reader = AnalogMultiChannelReader(self._task.in_stream)
 
     def read(self, samples: int = -1, timeout: float = 0.0) -> ndarray:
-        """Read analog input samples as a timestamped structured array.
+        """
+        Read analog input samples as a timestamped structured array.
 
-        ``samples=-1`` reads all samples currently available in the NI-DAQmx
-        input buffer. ``AnalogMultiChannelReader`` requires the supplied NumPy
-        array to have exactly ``(channel_count, requested_samples)`` shape, so
-        the read buffer is resized to the current chunk length before reading.
+        Parameters
+        ----------
+        samples : int, optional
+            Number of samples to read per channel. Use -1 to read all available samples.
+        timeout : float, optional
+            Timeout in seconds to wait for data. Use -1 to wait indefinitely.
         """
         self._ensure_open()
 
-        if samples == -1:
-            samples = self._task.in_stream.avail_samp_per_chan
-
-        if samples <= 0:
-            return self._buffer[:0].copy()
-
-        self._ensure_buffer(samples)
         n = self._reader.read_many_sample(
             self._ai_buffer,
             number_of_samples_per_channel=samples,
@@ -371,17 +366,7 @@ class NIAnalogInputTask(NIBaseTask):
             timestamp[:] = t0
             timestamp += dt * arange(n, dtype="uint64")
 
-        return self._buffer[:n].copy()
-
-    def _ensure_buffer(self, samples: int) -> None:
-        required_shape = (len(self.channels), samples)
-
-        if self._ai_buffer.shape != required_shape:
-            self._ai_buffer = zeros(required_shape, dtype="float64")
-            self._buffer = zeros(
-                samples,
-                dtype=[("timestamp", "uint64"), *((ch.name, "float64") for ch in self.channels)],
-            )
+        return self._buffer[:n]
 
 
 class NIAnalogOutputTask(NIBaseTask):
@@ -474,6 +459,7 @@ class NIDigitalInputTask(NIBaseTask):
             sample_mode=self._clock.to_ni_acquisition_type(),
             samps_per_chan=self._clock.samps_per_chan,
         )
+        self._task.in_stream.overwrite = OverwriteMode.OVERWRITE_UNREAD_SAMPLES
 
         self._di_buffer = zeros((len(self.channels), self._clock.samps_per_chan), dtype="uint32")
         self._buffer = zeros(
@@ -483,35 +469,24 @@ class NIDigitalInputTask(NIBaseTask):
 
         self._reader = DigitalMultiChannelReader(self._task.in_stream)
 
-    def read(self, samples: int = -1, timeout: float = 10.0) -> ndarray:
+    def read(self, samples: int = -1, timeout: float = 0) -> ndarray:
         """
         Read digital input data.
 
         Parameters
         ----------
-        data : ndarray
-            Pre-allocated numpy array to store the read data.
-            Shape depends on line_grouping configuration.
         samples : int, optional
             Number of samples to read per channel. Use -1 to read all available samples.
-            Defaults to -1.
         timeout : float, optional
-            Timeout in seconds to wait for data. Defaults to 10.0.
-
-        Raises
-        ------
-        RuntimeError
-            If the task has not been opened.
+            Timeout in seconds to wait for data. Use -1 to wait indefinitely.
         """
         self._ensure_open()
-        self._ensure_buffer(samples)
 
         n = self._reader.read_many_sample_port_uint32(self._di_buffer, samples, timeout)
 
         if n > 0:
-            data = self._di_buffer[:, :n]
             for idx, col in enumerate(self._buffer.dtype.names[1:]):
-                self._buffer[col][:n] = data[idx]
+                self._buffer[col][:n] = self._di_buffer[idx, :n]
 
             t_read = monotonic_ns()
             dt = uint64(1e9 / self._clock.rate)
@@ -521,20 +496,7 @@ class NIDigitalInputTask(NIBaseTask):
             timestamp[:] = t0
             timestamp += dt * arange(n, dtype="uint64")
 
-        return self._buffer[:n].copy()
-
-    def _ensure_buffer(self, samples: int):
-        capacity = self._di_buffer.shape[1]
-
-        if samples > capacity:
-            new_capacity = max(samples, capacity * 2)
-
-            self._di_buffer = zeros((len(self.channels), new_capacity), dtype="uint32")
-
-            self._buffer = zeros(
-                new_capacity,
-                dtype=[("timestamp", "uint64"), *((ch.name, "uint32") for ch in self.channels)],
-            )
+        return self._buffer[:n]
 
 
 class NIDigitalOutputTask(NIBaseTask):
@@ -612,7 +574,7 @@ class NIDaQ(BaseModel):
         default=AcquisitionType.FINITE, description="The acquisition type (FINITE or CONTINUOUS)."
     )
 
-    _clock_task: NIClockTask | None = PrivateAttr(default=None)
+    _clock_task: NIClockTask = PrivateAttr()
     _read_tasks: Sequence[NIAnalogInputTask | NIDigitalInputTask] = PrivateAttr(
         default_factory=list
     )
@@ -620,7 +582,7 @@ class NIDaQ(BaseModel):
         default_factory=list
     )
     _is_open: bool = PrivateAttr(default=False)
-    _executor: ThreadPoolExecutor | None = PrivateAttr(default=None)
+    _executor: ThreadPoolExecutor = PrivateAttr()
 
     @staticmethod
     def get_available_devices() -> Sequence:
@@ -700,9 +662,8 @@ class NIDaQ(BaseModel):
         for task in self.tasks:
             task.close()
 
-        if self._executor is not None:
-            self._executor.shutdown(wait=True)
-            self._executor = None
+        self._executor.shutdown(wait=True)
+        del self._executor
 
         self._is_open = False
 
