@@ -81,7 +81,7 @@ camera = [
   "pythonnet<=3.1.0; platform_system == 'Windows'",
 ]
 daq = ["poulet_py[nidaq]"]
-nidaq = ["nidaqmx<=1.5.0"]
+nidaq = ["nidaqmx<=1.6.0"]
 arduino = ["pyserial<=3.5"]
 julabo = ["pyserial<=3.5"]
 qst = ["pandas<=3.0.2", "pyserial<=3.5"]
