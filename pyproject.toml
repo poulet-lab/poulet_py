@@ -36,6 +36,9 @@ dependencies = [
 
 keywords = ["poulet_py"]
 
+[project.scripts]
+build-exp = "poulet_py.cli.experiment:main"
+
 [project.urls]
 Homepage = "https://github.com/poulet-lab/poulet_py"
 Documentation = "https://github.com/poulet-lab/poulet_py"
