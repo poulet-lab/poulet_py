@@ -14,7 +14,12 @@ try:
     from pydantic import ConfigDict, Field, PrivateAttr, model_validator
 
     from poulet_py import LOGGER, AcquisitionType, BaseSource, DRV2605Stimulus, precise_sleep
-
+    from poulet_py.hardware.stimulator.texas_instruments._drv260x_regs import (
+        AutoCalibrationBackEMFResult,
+        AutoCalibrationCompensationResult,
+        Libraries,
+        Modes,
+    )
 except ImportError as e:
     raise ImportError(
         """
@@ -28,62 +33,7 @@ Install options:
     ) from e
 
 
-DIAG_RESULT = 0x08
-N_ERM_LRA = 0x80
-BEMF_GAIN = 0x03
-DRIVE_TIME = 0x1F
-BIDIR_INPUT = 0x80
-SAMPLE_TIME = 0x30
-ERM_OPEN_LOOP = 0x20
-RTP_UNSIGNED = 0x08
-LRA_OPEN_LOOP = 0x01
-
-MODE_CODE_RTP = 0
-MODE_CODE_WAVEFORM = 1
-LRA_PERIOD_LSB_US = 98.46
-REGISTER_FULL_SCALE_V = 5.6
-LRA_SAMPLE_TIME_US = (150, 200, 250, 300)
-
-
-@dataclass(frozen=True, slots=True)
-class DRV2605CalibrationResult:
-    success: bool
-    status: int
-    auto_cal_comp: int
-    auto_cal_bemf: int
-    bemf_gain: int
-    elapsed_s: float
-
-
 class DRV2605(BaseSource):
-    class Register(IntEnum):
-        STATUS = 0x00
-        MODE = 0x01
-        RTP_INPUT = 0x02
-        LIBRARY = 0x03
-        WAVESEQ1 = 0x04
-        GO = 0x0C
-        RATED_VOLTAGE = 0x16
-        OD_CLAMP = 0x17
-        AUTO_CAL_COMP = 0x18
-        AUTO_CAL_BEMF = 0x19
-        FEEDBACK_CONTROL = 0x1A
-        CONTROL1 = 0x1B
-        CONTROL2 = 0x1C
-        CONTROL3 = 0x1D
-        OL_LRA_PERIOD = 0x20
-        LRA_PERIOD = 0x22
-
-    class Mode(IntEnum):
-        INTERNAL_TRIGGER = 0x00
-        RTP = 0x05
-        AUTO_CALIBRATION = 0x07
-        STANDBY = 0x40
-
-    class Library(IntEnum):
-        ERM_A = 0x01
-        LRA = 0x06
-
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     address: int = Field(default=0x5A)
@@ -93,30 +43,21 @@ class DRV2605(BaseSource):
     acquisition_type: AcquisitionType = Field(
         default=AcquisitionType.FINITE, description="Type of data acquisition, continuous or finite"
     )
+    mode: Modes = Field(
+        default=Modes.INTERNAL_TRIGGER
+    )  # TODO maybe hide and automate based on stimulus
     motor_type: Literal["erm", "lra"] = Field(default="erm")
+    library: Libraries = Field(default=Libraries.ERM_A)  # TODO if motor_type switch to lra lib
+
     loop_mode: Literal["closed_loop", "open_loop"] = Field(default="closed_loop")
-    rated_voltage: float = Field(
-        default=3.0,
-        gt=0.0,
-        le=REGISTER_FULL_SCALE_V,
+    rated_voltage: int = Field(default=3.0, gt=0.0)
+    maximum_voltage: float = Field(default=5.0, gt=0.0)
+    calibrate: bool = Field(default=False)
+    calibration_timeout: float = Field(default=2.0, gt=0.0, le=10.0)
+    calibration_compensation: int = Field(
+        default=AutoCalibrationCompensationResult.DEFAULT, ge=0, le=0xFF
     )
-    maximum_voltage: float = Field(
-        default=5.0,
-        gt=0.0,
-        le=REGISTER_FULL_SCALE_V,
-    )
-    auto_cal_comp: int | None = Field(
-        default=0x05,
-        ge=0,
-        le=0xFF,
-        repr=False,
-    )
-    auto_cal_bemf: int | None = Field(
-        default=0xA5,
-        ge=0,
-        le=0xFF,
-        repr=False,
-    )
+    calibration_back_emf: int = Field(default=AutoCalibrationBackEMFResult.DEFAULT, ge=0, le=0xFF)
     bemf_gain: int | None = Field(
         default=0x01,
         ge=0,
@@ -124,9 +65,6 @@ class DRV2605(BaseSource):
         repr=False,
     )
     lra_frequency_hz: float = Field(default=175.0, ge=80.0, le=500.0)
-
-    calibrate: bool = Field(default=False)
-    calibration_timeout: float = Field(default=2.0, gt=0.0, le=10.0)
 
     i2c_retry_attempts: int = Field(default=5, ge=0)
     i2c_retry_backoff_s: float = Field(default=0.001, ge=0.0)
@@ -167,6 +105,7 @@ class DRV2605(BaseSource):
     def _validate_configuration(self):
         if self.loop_mode == "closed_loop" and self.maximum_voltage < self.rated_voltage:
             raise ValueError("maximum_voltage must be >= rated_voltage in closed loop.")
+
         if self.calibrate and self.loop_mode != "closed_loop":
             raise ValueError("Auto-calibration requires loop_mode='closed_loop'.")
 
