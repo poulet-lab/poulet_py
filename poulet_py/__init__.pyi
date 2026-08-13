@@ -5,7 +5,8 @@ from .hardware import (
     TCS,
     Arduino,
     BaseTrigger,
-    BaslerCamera,
+    Basler,
+    BaslerPixelType,
     GPIOTrigger,
     JulaboChiller,
     KeyboardTrigger,
@@ -46,6 +47,7 @@ from .io import (
     ThermocoupleType,
     StimuliMetadataSource,
     DCAMSource,
+    BaslerSource
 )
 from .stimulus import (
     BaseStimulus,
@@ -85,7 +87,8 @@ __all__ = [
     "BaseSource",
     "BaseStimulus",
     "BaseTrigger",
-    "BaslerCamera",
+    "Basler",
+    "BaslerPixelType",
     "Max31856Source",
     "INA228Source",
     "CounterSource",
@@ -144,6 +147,7 @@ __all__ = [
     "TCSStimulus",
     "ThermalCamera",
     "go_to",
+    "BaslerSource",
     "json_serializer",
     "repeat",
     "sanitize_path",

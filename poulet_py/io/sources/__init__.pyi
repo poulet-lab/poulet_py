@@ -8,8 +8,10 @@ from .max31856 import Max31856Source, ThermocoupleType
 from .ina228 import INA228Source
 from .stimuli_metadata import StimuliMetadataSource
 from .dcam import DCAMSource
+from .basler import BaslerSource
 
 __all__ = [
+    "BaslerSource",
     "BaseSource",
     "Max31856Source",
     "StimuliMetadataSource",
