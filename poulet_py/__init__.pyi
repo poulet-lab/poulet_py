@@ -47,7 +47,7 @@ from .io import (
     ThermocoupleType,
     StimuliMetadataSource,
     DCAMSource,
-    BaslerSource
+    BaslerSource,
 )
 from .stimulus import (
     BaseStimulus,
