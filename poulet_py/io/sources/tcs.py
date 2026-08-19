@@ -1,15 +1,20 @@
 try:
-    from numpy import ndarray
+    from numpy import ndarray, zeros
     from pydantic import PrivateAttr
 
-    from poulet_py import TCS, BaseSource, TCSStimulus, precise_sleep
+    from poulet_py import TCS, BaseSource, TCSStimulus
+
 except ImportError as e:
-    raise ImportError("""
-Missing 'sources' module. Install options:
-- Dedicated:    pip install poulet_py[sources]
-- Module:       pip install poulet_py[io]
-- Full:         pip install poulet_py[all]
-""") from e
+    raise ImportError(
+        """
+Missing 'sources' module.
+
+Install options:
+- Dedicated: pip install poulet_py[sources]
+- Module:    pip install poulet_py[io]
+- Full:      pip install poulet_py[all]
+"""
+    ) from e
 
 
 class TCSSource(BaseSource, TCS):
@@ -20,45 +25,20 @@ class TCSSource(BaseSource, TCS):
 
     def _open(self):
         TCS.open(self)
+        self._temp_buffer = zeros(self.buffer_size, dtype=self._tcs_buffer.dtype)
 
     def _close(self):
         TCS.close(self)
 
     def _fire(self) -> bool:
         for st in self._stimuli:
-            if isinstance(st, TCSStimulus):
-                precise_sleep(st.pre_delay / 1000.0)
+            if not isinstance(st, TCSStimulus):
+                continue
 
-                self.trigger(st)
-
-                while self.stimulus_running:
-                    precise_sleep(0.001)
-
-                precise_sleep(st.post_delay / 1000.0)
-
-                with self._sampling_cond:
-                    count = self._tcs_buffer_idx - self._tcs_buffer_needle
-                    if count <= 0:
-                        return True
-
-                    size = self.buffer_size
-                    buffer = self._tcs_buffer
-                    needle = self._tcs_buffer_needle
-
-                    if count > size:
-                        needle = self._tcs_buffer_idx - size
-                        count = size
-
-                    start = needle % size
-                    end = start + count
-
-                    if end <= size:
-                        self._write_samples(buffer[start:end])
-                    else:
-                        first = size - start
-                        self._write_samples(buffer[start:])
-                        self._write_samples(buffer[: count - first])
-
-                    self._tcs_buffer_needle = needle + count
+            self.trigger(st, wait=True)
 
         return True
+
+    def _acquire(self) -> None:
+        samples = self.read_many_sample(data=self._temp_buffer)
+        self._write_samples(self._temp_buffer[:samples])
