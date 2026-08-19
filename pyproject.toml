@@ -7,7 +7,7 @@ version = "0.2.0"
 name = "poulet_py"
 description = "A library which hosts various neuroscience python methods"
 readme = "README.md"
-requires-python = ">=3.10,<3.14"
+requires-python = ">=3.10,<3.15"
 license = "GPL-3.0-or-later"
 authors = [
   { name = "Viktor Karamanis", email = "viktor.karamanis@outlook.com" },
