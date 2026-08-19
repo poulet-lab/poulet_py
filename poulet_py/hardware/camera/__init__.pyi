@@ -1,6 +1,6 @@
 # ruff: noqa TID252
-from .basler import BaslerCamera
+from .basler import Basler
 from .flir import Lepton
 from .hamamatzu import DCAM, DCAMPROP
 
-__all__ = ["BaslerCamera", "Lepton", "DCAM", "DCAMPROP"]
+__all__ = ["Basler", "Lepton", "DCAM", "DCAMPROP"]
