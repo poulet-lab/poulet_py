@@ -4,7 +4,11 @@ try:
     from pydantic import Field
 
     from poulet_py.hardware.camera.basler.aca800 import ACA800
-    from poulet_py.hardware.camera.basler.common import SupportedModels, _GenericBaslerCamera
+    from poulet_py.hardware.camera.basler.common import (
+        PixelTypeMixIn,
+        SupportedModels,
+        _GenericBaslerCamera,
+    )
 except ImportError as e:
     raise ImportError("""
 Missing 'camera' module. Install options:
@@ -14,7 +18,7 @@ Missing 'camera' module. Install options:
 """) from e
 
 
-class PixelType(StrEnum):
+class PixelType(PixelTypeMixIn, StrEnum):
     MONO_8 = "Mono8"
     MONO_10 = "Mono10"
 
@@ -41,7 +45,7 @@ class PixelType(StrEnum):
 class Basler(_GenericBaslerCamera[PixelType]):
     pixel_type: PixelType = Field(default=PixelType.MONO_8)
 
-    def __new__(cls, model: SupportedModels, **kwargs):
+    def __new__(cls, model: SupportedModels = SupportedModels.OTHER, **kwargs):
         if cls is Basler:
             if ACA800.MODEL == model:
                 return ACA800(model=model, **kwargs)

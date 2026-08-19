@@ -2,7 +2,7 @@ try:
     from enum import StrEnum
     from threading import Condition, Event, Thread
     from time import monotonic_ns
-    from typing import Any, ClassVar, Generic, Literal, Protocol, TypeVar
+    from typing import Any, ClassVar, Generic, Literal, TypeVar
 
     from numpy import ndarray, zeros
     from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
@@ -28,11 +28,11 @@ class SupportedModels(StrEnum):
     OTHER = "other"
 
 
-class PixelTypeProtocol(Protocol):
+class PixelTypeMixIn:
     def to_numpy(self) -> str: ...
 
 
-PixelTypeT = TypeVar("PixelTypeT", bound=PixelTypeProtocol)
+PixelTypeT = TypeVar("PixelTypeT", bound=PixelTypeMixIn)
 
 
 class _GenericBaslerCamera(BaseModel, Generic[PixelTypeT]):
@@ -41,7 +41,7 @@ class _GenericBaslerCamera(BaseModel, Generic[PixelTypeT]):
     model_config = ConfigDict(arbitrary_types_allowed=True)  # TODO find solution for PixelTypeMixin
 
     model: SupportedModels = Field(
-        SupportedModels.OTHER, description="camera model for specific options"
+        default=SupportedModels.OTHER, description="camera model for specific options"
     )
     device_index: int = Field(default=0, description="")
     acquisition_type: AcquisitionType = Field(
