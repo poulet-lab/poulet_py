@@ -2,10 +2,10 @@ try:
     from enum import StrEnum
     from threading import Condition, Event, Thread
     from time import monotonic_ns
-    from typing import Any, Generic, Literal, Protocol, TypeVar
+    from typing import Any, ClassVar, Generic, Literal, Protocol, TypeVar
 
     from numpy import ndarray, zeros
-    from pydantic import BaseModel, Field, PrivateAttr
+    from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
     from pypylon.pylon import (
         GrabStrategy_LatestImageOnly,
         InstantCamera,
@@ -23,6 +23,11 @@ Missing 'camera' module. Install options:
 """) from e
 
 
+class SupportedModels(StrEnum):
+    ACA800 = "aca800"
+    OTHER = "other"
+
+
 class PixelTypeProtocol(Protocol):
     def to_numpy(self) -> str: ...
 
@@ -31,6 +36,13 @@ PixelTypeT = TypeVar("PixelTypeT", bound=PixelTypeProtocol)
 
 
 class _GenericBaslerCamera(BaseModel, Generic[PixelTypeT]):
+    MODEL: ClassVar[SupportedModels] = SupportedModels.OTHER
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)  # TODO find solution for PixelTypeMixin
+
+    model: SupportedModels = Field(
+        SupportedModels.OTHER, description="camera model for specific options"
+    )
     device_index: int = Field(default=0, description="")
     acquisition_type: AcquisitionType = Field(
         default=AcquisitionType.FINITE, description="Type of data acquisition, continuous or finite"
@@ -368,31 +380,3 @@ class _GenericBaslerCamera(BaseModel, Generic[PixelTypeT]):
 
     def __exit__(self, exc_type, exc, tb):
         self.close()
-
-
-class PixelType(StrEnum):
-    MONO_8 = "Mono8"
-    MONO_10 = "Mono10"
-
-    BAYER_BG_8 = "BayerBG8"
-    BAYER_BG_10 = "BayerBG10"
-    BAYER_BG_10_PACKED = "BayerBG10Packed"
-
-    YUV_422_PACKED = "YUV422Packed"
-    YUV_422_YUYV_PACKED = "YUV422_YUYV_Packed"
-
-    # TODO: add more if needed for other cameras
-    # https://docs.baslerweb.com/image-format-converter-vtool#supported-pixel-formats
-
-    def to_numpy(self) -> str:
-        if self in (self.MONO_8, self.BAYER_BG_8, self.YUV_422_PACKED, self.YUV_422_YUYV_PACKED):
-            return "uint8"
-
-        if self in (self.MONO_10, self.BAYER_BG_10, self.BAYER_BG_10_PACKED):
-            return "uint16"
-
-        return "O"
-
-
-class BaslerCamera(_GenericBaslerCamera[PixelType]):
-    pixel_type: PixelType = Field(default=PixelType.MONO_8)

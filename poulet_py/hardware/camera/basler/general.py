@@ -3,6 +3,7 @@ try:
 
     from pydantic import Field
 
+    from poulet_py.hardware.camera.basler.aca800 import ACA800
     from poulet_py.hardware.camera.basler.common import SupportedModels, _GenericBaslerCamera
 except ImportError as e:
     raise ImportError("""
@@ -13,14 +14,19 @@ Missing 'camera' module. Install options:
 """) from e
 
 
-class ACA800PixelType(StrEnum):
+class PixelType(StrEnum):
     MONO_8 = "Mono8"
     MONO_10 = "Mono10"
+
     BAYER_BG_8 = "BayerBG8"
     BAYER_BG_10 = "BayerBG10"
     BAYER_BG_10_PACKED = "BayerBG10Packed"
+
     YUV_422_PACKED = "YUV422Packed"
     YUV_422_YUYV_PACKED = "YUV422_YUYV_Packed"
+
+    # TODO: add more if needed for other cameras
+    # https://docs.baslerweb.com/image-format-converter-vtool#supported-pixel-formats
 
     def to_numpy(self) -> str:
         if self in (self.MONO_8, self.BAYER_BG_8, self.YUV_422_PACKED, self.YUV_422_YUYV_PACKED):
@@ -32,7 +38,12 @@ class ACA800PixelType(StrEnum):
         return "O"
 
 
-class ACA800(_GenericBaslerCamera[ACA800PixelType]):
-    MODEL = SupportedModels.ACA800
+class Basler(_GenericBaslerCamera[PixelType]):
+    pixel_type: PixelType = Field(default=PixelType.MONO_8)
 
-    pixel_type: ACA800PixelType = Field(default=ACA800PixelType.MONO_8)
+    def __new__(cls, model: SupportedModels, **kwargs):
+        if cls is Basler:
+            if ACA800.MODEL == model:
+                return ACA800(model=model, **kwargs)
+
+        return super().__new__(cls)
