@@ -2,7 +2,7 @@ try:
     from enum import StrEnum
     from threading import Condition, Event, Thread
     from time import monotonic_ns
-    from typing import Any, Literal
+    from typing import Any, Generic, Literal, Protocol, TypeVar
 
     from numpy import ndarray, zeros
     from pydantic import BaseModel, Field, PrivateAttr
@@ -23,31 +23,14 @@ Missing 'camera' module. Install options:
 """) from e
 
 
-class BaslerPixelType(StrEnum):
-    MONO_8 = "Mono8"
-    MONO_10 = "Mono10"
-
-    BAYER_BG_8 = "BayerBG8"
-    BAYER_BG_10 = "BayerBG10"
-    BAYER_BG_10_PACKED = "BayerBG10Packed"
-
-    YUV_422_PACKED = "YUV422Packed"
-    YUV_422_YUYV_PACKED = "YUV422_YUYV_Packed"
-
-    # TODO: add more if needed for other cameras
-    # https://docs.baslerweb.com/image-format-converter-vtool#supported-pixel-formats
-
-    def to_numpy(self) -> str:
-        if self in (self.MONO_8, self.BAYER_BG_8, self.YUV_422_PACKED, self.YUV_422_YUYV_PACKED):
-            return "uint8"
-
-        if self in (self.MONO_10, self.BAYER_BG_10, self.BAYER_BG_10_PACKED):
-            return "uint16"
-
-        return "O"
+class PixelTypeProtocol(Protocol):
+    def to_numpy(self) -> str: ...
 
 
-class Basler(BaseModel):
+PixelTypeT = TypeVar("PixelTypeT", bound=PixelTypeProtocol)
+
+
+class _GenericBaslerCamera(BaseModel, Generic[PixelTypeT]):
     device_index: int = Field(default=0, description="")
     acquisition_type: AcquisitionType = Field(
         default=AcquisitionType.FINITE, description="Type of data acquisition, continuous or finite"
@@ -71,7 +54,10 @@ class Basler(BaseModel):
         default=None,
         description=("Optional ROI offset. If None, ROI is centered"),
     )
-    pixel_type: BaslerPixelType = Field(default=BaslerPixelType.MONO_8)
+    pixel_type: PixelTypeT  # overwrite in inherited classes
+    trigger_mode: Literal["free_run", "frame", "burst"] = "free_run"
+    trigger_line: Literal["Line1", "Line3"] = "Line1"
+    trigger_activation: Literal["RisingEdge", "FallingEdge"] = "RisingEdge"
     # TODO add more features https://docs.baslerweb.com/features
 
     _is_open: bool = PrivateAttr(default=False)
@@ -255,10 +241,13 @@ class Basler(BaseModel):
         self._basler_camera.Close()
         del self._basler_camera
 
-    def _set_basler_params(self):
-        self._basler_camera.AcquisitionFrameRateEnable.Value = True
-        self._basler_camera.AcquisitionFrameRateAbs.Value = self.fps
+    def _set_model_dedicated_params(self):
+        """
+        implement in subclass if needed
+        """
+        return
 
+    def _set_basler_params(self):
         if self.exposure_time != "auto":
             self._basler_camera.ExposureMode.Value = "Timed"
             self._basler_camera.ExposureAuto.Value = "Off"
@@ -274,6 +263,30 @@ class Basler(BaseModel):
         else:
             self._basler_camera.Height.Value = self._basler_camera.Height.Max
             self._basler_camera.Width.Value = self._basler_camera.Width.Max
+
+        if self.trigger_mode == "free_run":
+            self._basler_camera.TriggerSelector.Value = "FrameStart"
+            self._basler_camera.TriggerMode.Value = "Off"
+
+            self._basler_camera.AcquisitionFrameRateEnable.Value = True
+            self._basler_camera.AcquisitionFrameRateAbs.Value = self.fps
+
+        elif self.trigger_mode == "frame":
+            self._basler_camera.TriggerSelector.Value = "FrameStart"
+            self._basler_camera.TriggerMode.Value = "On"
+            self._basler_camera.TriggerSource.Value = self.trigger_line
+            self._basler_camera.TriggerActivation.Value = self.trigger_activation
+
+        elif self.trigger_mode == "gate":
+            self._basler_camera.AcquisitionFrameRateEnable.Value = True
+            self._basler_camera.AcquisitionFrameRateAbs.Value = self.fps
+
+            self._basler_camera.TriggerSelector.Value = "AcquisitionStart"
+            self._basler_camera.TriggerMode.Value = "On"
+            self._basler_camera.TriggerSource.Value = self.trigger_line
+            self._basler_camera.TriggerActivation.Value = self.trigger_activation
+
+        self._set_model_dedicated_params()
 
     def _set_buffer(self) -> None:
         resolution = self.resolution or (
@@ -355,3 +368,31 @@ class Basler(BaseModel):
 
     def __exit__(self, exc_type, exc, tb):
         self.close()
+
+
+class PixelType(StrEnum):
+    MONO_8 = "Mono8"
+    MONO_10 = "Mono10"
+
+    BAYER_BG_8 = "BayerBG8"
+    BAYER_BG_10 = "BayerBG10"
+    BAYER_BG_10_PACKED = "BayerBG10Packed"
+
+    YUV_422_PACKED = "YUV422Packed"
+    YUV_422_YUYV_PACKED = "YUV422_YUYV_Packed"
+
+    # TODO: add more if needed for other cameras
+    # https://docs.baslerweb.com/image-format-converter-vtool#supported-pixel-formats
+
+    def to_numpy(self) -> str:
+        if self in (self.MONO_8, self.BAYER_BG_8, self.YUV_422_PACKED, self.YUV_422_YUYV_PACKED):
+            return "uint8"
+
+        if self in (self.MONO_10, self.BAYER_BG_10, self.BAYER_BG_10_PACKED):
+            return "uint16"
+
+        return "O"
+
+
+class BaslerCamera(_GenericBaslerCamera[PixelType]):
+    pixel_type: PixelType = Field(default=PixelType.MONO_8)
