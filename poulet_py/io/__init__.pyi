@@ -1,6 +1,7 @@
 # ruff: noqa TID252
 from .eventing import BaseEvent, EventBus, EventHandler, SinkEvent
 from .sinks import BaseSink, HDFSink
+
 from .sources import (
     AcquisitionType,
     BaseSource,
@@ -14,6 +15,7 @@ from .sources import (
     INA228Source,
     DCAMSource,
     BaslerSource,
+    DRV2605Source,
 )
 
 __all__ = [
@@ -36,4 +38,5 @@ __all__ = [
     "OpenEphysSource",
     "DCAMSource",
     "BaslerSource",
+    "DRV2605Source",
 ]

@@ -15,7 +15,7 @@ from .daq import (
     NIDigitalOutputChannel,
     NIDigitalOutputTask,
 )
-from .stimulator import TCS, Arduino, JulaboChiller, TCSCommand
+from .stimulator import TCS, Arduino, JulaboChiller, TCSCommand, DRV2605Stimulus
 from .triggers import BaseTrigger, GPIOTrigger, KeyboardTrigger
 from .sensor import Soho
 
@@ -46,4 +46,5 @@ __all__ = [
     "Soho",
     "DCAM",
     "DCAMPROP",
+    "DRV2605Stimulus",
 ]

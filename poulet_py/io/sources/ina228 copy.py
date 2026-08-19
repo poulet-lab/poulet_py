@@ -22,7 +22,7 @@ Install options:
     ) from e
 
 
-class INA228Source(BaseSource):
+class FT232H(BaseSource):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     address: int = Field(default=0x40, description="INA228 I2C address")
@@ -35,15 +35,8 @@ class INA228Source(BaseSource):
         description="FTDI USB latency timer in ms. Use None to leave unchanged.",
     )
 
-    maximum_valid_voltage: float = Field(
-        default=5.6,
-        ge=0.0,
-        le=85.0,
-        description=("Maximum voltage that doesnt get rejected"),
-    )
-
-    sample_rate_Hz: int = Field(
-        default=10, ge=1, le=1000, description=("target sample rate for voltage measurement")
+    sample_rate_Hz: float = Field(
+        default=10.0, ge=0.0, le=1000.0, description=("target sample rate for voltage measurement")
     )
 
     mode: int = Field(
@@ -75,14 +68,6 @@ class INA228Source(BaseSource):
         default=False,
         description="Pass skip_reset to the Adafruit INA228 driver.",
     )
-    calibration_offset_voltage: float = Field(
-        default=0.0,
-        description="Voltage added for safety checks and temperature conversion.",
-    )
-    temperature: bool = Field(
-        default=True,
-        description="Convert the corrected voltage to temperature for safety checks.",
-    )
 
     i2c: I2C | None = Field(default=None)
 
@@ -96,7 +81,6 @@ class INA228Source(BaseSource):
             ("timestamp", "uint64"),
             ("time_roundtrip", "uint64"),
             ("bus_voltage", "float32"),
-            ("invalid_value_count", "int16"),
         ]
 
     def open(self) -> None:
@@ -196,86 +180,88 @@ class INA228Source(BaseSource):
         self._acquisition_thread = None
 
     def _acquisition_thread_func(self):
-        ina228 = self._ina228
-        if ina228 is None:
-            return
-
-        clock, wait, write = monotonic_ns, precise_sleep, self._write_sample
-        stop = self._stop_acquisition_event
-
-        period = round(1_000_000_000 / self.sample_rate_Hz)
-        check_every = max(1, round(2 * self.sample_rate_Hz))
-        deadline = clock()
-
-        maximum = self.maximum_valid_voltage
-        temperature = self.temperature
-        offset = self.calibration_offset_voltage
-
-        invalid = errors = samples = 0
-
-        while not stop.is_set():
-            deadline += period
-
+        missed_deadlines = 0
+        period_ns = 1 / self.sample_rate_Hz * 1e9
+        t0 = monotonic_ns()
+        next_deadline = monotonic_ns()
+        n = 0
+        consecutive_errors = 0
+        while not self._stop_acquisition_event.is_set():
+            next_deadline += period_ns
             try:
-                request = clock()
-                voltage = ina228.bus_voltage
-                answer = clock()
-                errors = 0
+                if self._ina228 is None:
+                    LOGGER.warning("INA228 %s stopped: device not initialized", self.name)
+                    break
 
-                voltage += offset if temperature else 0.0
+                time_request = monotonic_ns()
+                voltage = float(self._ina228.bus_voltage)
+                time_answer = monotonic_ns()
 
-                if voltage <= maximum:
-                    write(
-                        (
-                            (request + answer) // 2,
-                            answer - request,
-                            voltage,
-                            invalid,
-                        )
+                # approximate read time based on 1/2 roundtrip time
+                time_roundtrip = time_answer - time_request
+                time_read = (time_request + time_answer) // 2
+
+                # reset consecutive error timer if sucessful read was possible
+                consecutive_errors = 0
+                self._write_sample(
+                    (
+                        time_read,
+                        time_roundtrip,
+                        voltage,
                     )
-
-                    samples += 1
-
-                    if temperature and samples >= check_every:
-                        samples = 0
-                        temperature_c = 25.0 + voltage * 10.0
-
-                        if temperature_c >= 42.0:
-                            LOGGER.error(
-                                "INA228 %s temperature too high: %.2f °C",
-                                self.name,
-                                temperature_c,
-                            )
-                        elif temperature_c >= 41.0:
-                            LOGGER.warning(
-                                "INA228 %s approaching unsafe temperature: %.2f °C",
-                                self.name,
-                                temperature_c,
-                            )
-                else:
-                    invalid += 1
-
-                remaining = deadline - clock()
-                if remaining > 0:
-                    wait(remaining * 1e-9)
-
-            except Exception as error:
-                errors += 1
-                LOGGER.warning(
-                    "INA228 %s acquisition error %d/10 at 0x%02X: %s",
-                    self.name,
-                    errors,
-                    self.address,
-                    error,
                 )
 
-                if errors >= 10:
+                n += 1
+
+                if n % 1000 == 0:
+                    now = monotonic_ns()
+                    hz = 1000 / ((now - t0) * 1e-9)
+                    LOGGER.info("INA228 %s acquisition rate: %.1f Hz", self.name, hz)
+                    LOGGER.info(
+                        "INA228 I2C: %.0f Hz (configured=%s)",
+                        self.i2c._i2c._i2c.frequency,
+                        self.i2c._i2c._i2c.configured,
+                    )
+                    if 1.7 >= voltage >= 1.6:
+                        LOGGER.warning(
+                            "INA228 %s caution approaching unsafe temperature", self.name
+                        )
+                    elif voltage >= 1.7:
+                        LOGGER.error(
+                            "INA228 %s temperature too high, terminate experiment!", self.name
+                        )
+                    t0 = now
+
+                remaining_ns = next_deadline - monotonic_ns()
+                if remaining_ns > 0:
+                    precise_sleep(remaining_ns / 1e9)
+                else:
+                    # Yield very lightly; the I2C call already dominates timing,
+                    # but this helps avoid starving other Python threads.
+                    missed_deadlines += 1
+                    # LOGGER.warning(
+                    #    "INA228 %s slow acquisition %s/100 at address 0x%02X: %s",
+                    #    missed_deadlines,
+
+                # )
+
+            except Exception as e:
+                consecutive_errors += 1
+                LOGGER.warning(
+                    "INA228 %s transient acquisition error %s/100 at address 0x%02X: %s",
+                    self.name,
+                    consecutive_errors,
+                    self.address,
+                    e,
+                )
+
+                if consecutive_errors >= 10:
                     LOGGER.exception(
-                        "INA228 %s stopped after repeated errors at 0x%02X",
+                        "INA228 %s stopping after repeated acquisition errors at address 0x%02X",
                         self.name,
                         self.address,
                     )
-                    return
+                    break
 
     def _set_ftdi_latency_timer(self):
         if self.ftdi_latency_ms is None:

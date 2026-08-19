@@ -9,6 +9,7 @@ from .ina228 import INA228Source
 from .stimuli_metadata import StimuliMetadataSource
 from .dcam import DCAMSource
 from .basler import BaslerSource
+from .drv2605l import DRV2605Source
 
 __all__ = [
     "BaslerSource",
@@ -23,4 +24,5 @@ __all__ = [
     "AcquisitionType",
     "OpenEphysSource",
     "DCAMSource",
+    "DRV2605Source",
 ]

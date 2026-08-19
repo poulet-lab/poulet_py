@@ -1,6 +1,7 @@
 try:
     import platform
     from ctypes import *
+    from ctypes import cdll
 except ImportError as e:
     msg = """
 Missing 'camera' module. Install options:
@@ -14,7 +15,7 @@ try:
     if platform.system() == "Darwin":
         libuvc = cdll.LoadLibrary("libuvc.dylib")
     elif platform.system() == "Linux":
-        libuvc = cdll.LoadLibrary("libuvc.so")
+        libuvc = cdll.LoadLibrary("/home/lallewe/libuvc/build/libuvc.so")
     else:
         libuvc = cdll.LoadLibrary("libuvc")
 except OSError:
@@ -329,7 +330,7 @@ UVC_FRAME_FORMAT_UYVY = 4
 UVC_FRAME_FORMAT_I420 = 5
 UVC_FRAME_FORMAT_RGB = 7
 UVC_FRAME_FORMAT_BGR = 8
-UVC_FRAME_FORMAT_Y16 = 13
+UVC_FRAME_FORMAT_Y16 = 10
 
 VS_FMT_GUID_GREY = create_string_buffer(b"Y8  \x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71", 16)
 
