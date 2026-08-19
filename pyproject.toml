@@ -7,7 +7,7 @@ version = "0.2.0"
 name = "poulet_py"
 description = "A library which hosts various neuroscience python methods"
 readme = "README.md"
-requires-python = ">=3.10,<3.14"
+requires-python = ">=3.10,<3.15"
 license = "GPL-3.0-or-later"
 authors = [
   { name = "Viktor Karamanis", email = "viktor.karamanis@outlook.com" },
@@ -90,7 +90,7 @@ gpio = ["gpiozero<=2.0.1.post3", "lgpio<=0.2.2.0; platform_system == 'Linux'"]
 soho = ["pandas<=3.0.2"]
 # IO
 event = ["numpydantic<=1.10.0"]
-sinks = ["poulet_py[event]", "h5py<=3.16.0", "orjson<=3.12.0", "numpy<=2.4.4"]
+sinks = ["poulet_py[event]", "h5py<=3.16.0", "numpy<=2.4.4"]
 sources = [
   "poulet_py[event]",
   "numpy<=2.4.4",
