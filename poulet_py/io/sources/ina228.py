@@ -1,6 +1,3 @@
-from ast import If
-
-
 try:
     from threading import Event, Thread
     from time import monotonic_ns, sleep
@@ -45,10 +42,7 @@ class INA228Source(BaseSource):
     )
 
     sample_rate_Hz: int = Field(
-        default=10,
-        ge=1,
-        le=10000,
-        description=("target sample rate for voltage measurement")
+        default=10, ge=1, le=10000, description=("target sample rate for voltage measurement")
     )
 
     mode: int = Field(
@@ -111,10 +105,13 @@ class INA228Source(BaseSource):
 
     def _set_buffer_dtype(self):
         self._source_buffer_dtype = [
-            ("timestamp", "uint64"), #midpoint between read i2c transaction and value read timepoint
-            ("time_roundtrip", "uint64"), #time passed between read i2c request and read timepoint
-            ("bus_voltage", "float32"), #bus voltage in V
-            ("invalid_value_count", "int16"), #number of invalid values from sensor for debugging
+            (
+                "timestamp",
+                "uint64",
+            ),  # midpoint between read i2c transaction and value read timepoint
+            ("time_roundtrip", "uint64"),  # time passed between read i2c request and read timepoint
+            ("bus_voltage", "float32"),  # bus voltage in V
+            ("invalid_value_count", "int16"),  # number of invalid values from sensor for debugging
         ]
 
     def _open(self):
@@ -135,7 +132,7 @@ class INA228Source(BaseSource):
         except Exception as e:
             raise RuntimeError(
                 f"Failed to initialize INA228 at address 0x{self.address:02X}"
-                               ) from e
+            ) from e
         self._start_acquisition_thread()
 
     def _close(self):
@@ -155,13 +152,12 @@ class INA228Source(BaseSource):
             self.i2c = None
             self._internal_i2c = False
 
-
-    #calculate time until call of def fire for higher accuracy??
+    # calculate time until call of def fire for higher accuracy??
     def _fire(self) -> bool:
         precise_sleep(self._max_stimulus_duration_ms / 1000.0)
         return True
 
-    def _configure_ina228(self): #initializes INA228 with user settings
+    def _configure_ina228(self):  # initializes INA228 with user settings
         if self._ina228 is None:
             raise RuntimeError("INA228 is not initialized.")
 
@@ -200,7 +196,12 @@ class INA228Source(BaseSource):
         if ina228 is None:
             return
 
-        clock, wait, write, sample_rate = monotonic_ns, precise_sleep, self._write_sample, self.sample_rate_Hz
+        clock, wait, write, sample_rate = (
+            monotonic_ns,
+            precise_sleep,
+            self._write_sample,
+            self.sample_rate_Hz,
+        )
         stop = self._stop_acquisition_event
 
         period = round(1_000_000_000 / sample_rate)
@@ -238,10 +239,12 @@ class INA228Source(BaseSource):
 
                     if temperature and samples >= check_every:
                         samples = 0
-                        #Conversion: voltage to temp [°C], based on FHC DC Controller datasheet
-                        #Offset needs to be calibrated for each FHC DC Controller
+                        # Conversion: voltage to temp [°C], based on FHC DC Controller datasheet
+                        # Offset needs to be calibrated for each FHC DC Controller
                         temperature_c = 25.0 + voltage * 10.0
-                        if temperature_c >= self.temperature_maximum: #this is dependant on the animal license
+                        if (
+                            temperature_c >= self.temperature_maximum
+                        ):  # this is dependant on the animal license
                             LOGGER.error(
                                 "INA228 %s temperature too high: %.2f °C",
                                 self.name,
