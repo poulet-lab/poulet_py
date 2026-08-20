@@ -644,8 +644,8 @@ class NIDaQ(BaseModel):
 
         for task in self.tasks:
             task.close()
-       
-        if hasattr(self,"_executor"):
+
+        if hasattr(self, "_executor"):
             self._executor.shutdown(wait=True)
             del self._executor
 
