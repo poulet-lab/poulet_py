@@ -1,5 +1,5 @@
 # ruff: noqa TID252
-from .camera import Basler, ThermalCamera, DCAM, DCAMPROP
+from .camera import BaslerCamera, ThermalCamera, DCAM, DCAMPROP
 from .daq import (
     NIAnalogInputChannel,
     NIAnalogInputTask,
@@ -23,7 +23,7 @@ __all__ = [
     "TCS",
     "Arduino",
     "BaseTrigger",
-    "Basler",
+    "BaslerCamera",
     "GPIOTrigger",
     "JulaboChiller",
     "KeyboardTrigger",

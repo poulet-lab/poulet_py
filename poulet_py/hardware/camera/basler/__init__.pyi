@@ -1,4 +1,4 @@
 # ruff: noqa TID252
-from .general import Basler
+from .common import BaslerCamera
 
-__all__ = ["Basler"]
+__all__ = ["BaslerCamera"]
