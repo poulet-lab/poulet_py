@@ -327,7 +327,7 @@ class BaslerCamera(BaseModel):
         self._basler_camera.AutoGainRawUpperLimit.Value = (
             self._basler_camera.AutoGainRawUpperLimit.Max
         )
-        
+
         # self._basler_camera.AutoExposureTimeLowerLimit.Value = (
         #     self._basler_camera.AutoExposureTimeLowerLimit.Min
         # )
