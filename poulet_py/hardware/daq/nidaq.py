@@ -156,16 +156,6 @@ class NIBaseTask(BaseModel, ABC):
     _task: Task = PrivateAttr(default_factory=Task)
     _is_open: bool = PrivateAttr(default=False)
 
-    @model_validator(mode="after")
-    def validate_task(self) -> Self:
-        if self._requires_clock and not self.clock:
-            raise RuntimeError(f"{type(self)} requires a clock")
-
-        if self.clock:
-            self._clock = self.clock
-
-        return self
-
     @property
     def requires_clock(self) -> bool:
         return self._requires_clock
@@ -188,16 +178,15 @@ class NIBaseTask(BaseModel, ABC):
     def open(self) -> None:
         """
         Open the task with the given clock configuration.
-
-        Parameters
-        ----------
-        clock : NIClockHandle | None, optional
-            Clock configuration for task synchronization. Required for tasks
-            that require a clock.
-
         """
         if self._is_open:
             return
+
+        if self._requires_clock and not self.clock:
+            raise RuntimeError(f"{type(self).__name__} requires a clock")
+
+        if self.clock:
+            self._clock = self.clock
 
         self._open()
         self._is_open = True
@@ -227,7 +216,7 @@ class NIBaseTask(BaseModel, ABC):
 
     def _ensure_open(self) -> None:
         if not self._is_open:
-            raise RuntimeError("{type(self).__name__} needs to be opened first")
+            raise RuntimeError(f"{type(self).__name__} needs to be opened first")
 
     def __enter__(self):
         self.open()
@@ -258,8 +247,12 @@ class NIClockTask(NIBaseTask):
 
     _requires_clock: bool = PrivateAttr(default=False)
 
-    @model_validator(mode="after")
-    def validate_fields(self) -> Self:
+    def _open(self) -> None:
+        """
+        open the clock task.
+
+        Creates a counter output channel configured as a pulse train.
+        """
         if not self.clock:
             self.clock = NIClockHandle(
                 terminal=f"/{self.device}/Ctr{self.line}InternalOutput",
@@ -269,14 +262,6 @@ class NIClockTask(NIBaseTask):
             )
             self._clock = self.clock
 
-        return self
-
-    def _open(self) -> None:
-        """
-        open the clock task.
-
-        Creates a counter output channel configured as a pulse train.
-        """
         self._task.co_channels.add_co_pulse_chan_freq(
             f"{self.device}/ctr{self.line}", freq=self.rate
         )
@@ -599,7 +584,7 @@ class NIDaQ(BaseModel):
                 raise ValueError("Task device mismatch")
 
             if isinstance(t, NIClockTask):
-                if self._clock_task:
+                if hasattr(self, "_clock_task"):
                     raise ValueError("Only one NIClockTask allowed")
 
                 t.acquisition_type = self.acquisition_type
@@ -616,12 +601,8 @@ class NIDaQ(BaseModel):
 
             names.append(t.name)
 
-        if not self._clock_task:
+        if not hasattr(self, "_clock_task"):
             raise RuntimeError("No NIClockTask registered")
-
-        for task in self.tasks:
-            if task != self._clock_task:
-                task.clock = self._clock_task.clock
 
         return self
 
@@ -644,6 +625,7 @@ class NIDaQ(BaseModel):
 
         for task in self.tasks:
             if task != self._clock_task:
+                task.clock = self._clock_task.clock
                 task.open()
 
         if self._read_tasks:
@@ -662,9 +644,10 @@ class NIDaQ(BaseModel):
 
         for task in self.tasks:
             task.close()
-
-        self._executor.shutdown(wait=True)
-        del self._executor
+       
+        if hasattr(self,"_executor"):
+            self._executor.shutdown(wait=True)
+            del self._executor
 
         self._is_open = False
 
@@ -746,7 +729,7 @@ class NIDaQ(BaseModel):
 
     def _ensure_open(self) -> None:
         if not self._is_open:
-            raise RuntimeError("{type(self).__name__} needs to be opened first")
+            raise RuntimeError(f"{type(self).__name__} needs to be opened first")
 
     def __enter__(self):
         self.open()

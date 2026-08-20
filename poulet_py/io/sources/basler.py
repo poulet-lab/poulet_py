@@ -46,4 +46,6 @@ class BaslerSource(BaseSource, BaslerCamera):
     def _acquire(self) -> None:
         if self.acquisition_type == AcquisitionType.CONTINUOUS:
             samples = self.read_many_sample(data=self._temp_buffer)
+            print(samples)
+            print(self._temp_buffer[:samples])
             self._write_samples(self._temp_buffer[:samples])
