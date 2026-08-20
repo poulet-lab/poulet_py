@@ -7,7 +7,7 @@ try:
     from numpy import ndarray, zeros
     from pydantic import BaseModel, Field, PrivateAttr
     from pypylon.pylon import (
-        GrabStrategy_LatestImageOnly,
+        GrabStrategy_OneByOne,
         InstantCamera,
         TimeoutHandling_Return,
         TlFactory,
@@ -93,7 +93,7 @@ class BaslerCamera(BaseModel):
     trigger_source: TriggerSource = Field(default=TriggerSource.INTERNAL)
     trigger_activation: TriggerActivationMode = Field(default=TriggerActivationMode.RISING_EDGE)
     timeout: int | None = Field(default=None, description="handle timeout in ms")
-    pixel_type: PixelType
+    pixel_type: PixelType = Field(default=PixelType.MONO_8)
     fps: int = Field(default=30)
     resolution: tuple[int, int] | None = Field(
         default=None,
@@ -327,29 +327,29 @@ class BaslerCamera(BaseModel):
         self._basler_camera.AutoGainRawUpperLimit.Value = (
             self._basler_camera.AutoGainRawUpperLimit.Max
         )
-
-        self._basler_camera.AutoExposureTimeLowerLimitRaw.Value = (
-            self._basler_camera.AutoExposureTimeLowerLimitRaw.Min
-        )
-        self._basler_camera.AutoExposureTimeUpperLimitRaw.Value = (
-            self._basler_camera.AutoExposureTimeUpperLimitRaw.Max
-        )
-
-        self._basler_camera.AutoTargetValue.Value = (
+        
+        # self._basler_camera.AutoExposureTimeLowerLimit.Value = (
+        #     self._basler_camera.AutoExposureTimeLowerLimit.Min
+        # )
+        # self._basler_camera.AutoExposureTimeUpperLimit.Value = (
+        #     self._basler_camera.AutoExposureTimeUpperLimit.Max
+        # )
+        auto_target = (
             self._basler_camera.AutoTargetValue.Min + self._basler_camera.AutoTargetValue.Max
-        ) / 2
+        ) // 2
+        self._basler_camera.AutoTargetValue.Value = auto_target
         self._basler_camera.AutoFunctionAOISelector.Value = "AOI1"
         self._basler_camera.AutoFunctionAOIUsageIntensity.Value = True
-        self._basler_camera.AutoFunctionProfile.Value = self.auto_function_profile
+        self._basler_camera.AutoFunctionProfile.Value = self.auto_function_profile.value
 
-        if self.auto_exposure == "auto":
-            self._basler_camera.ExposureAuto.Value = "Continuous"
-        elif self.auto_exposure == "once":
-            self._basler_camera.ExposureAuto.Value = "Once"
-        else:
-            self._basler_camera.ExposureMode.Value = "Timed"
-            self._basler_camera.ExposureAuto.Value = "Off"
-            self._basler_camera.ExposureTimeAbs.Value = self.exposure
+        # if self.auto_exposure == "auto":
+        #     self._basler_camera.ExposureAuto.Value = "Continuous"
+        # elif self.auto_exposure == "once":
+        #     self._basler_camera.ExposureAuto.Value = "Once"
+        # else:
+        #     self._basler_camera.ExposureMode.Value = "Timed"
+        #     self._basler_camera.ExposureAuto.Value = "Off"
+        #     self._basler_camera.ExposureTimeAbs.Value = self.exposure
 
         if self.auto_gain == "auto":
             self._basler_camera.GainAuto.Value = "Continuous"
@@ -409,7 +409,7 @@ class BaslerCamera(BaseModel):
         self._basler_buffer_idx = 0
 
     def _start_capture(self) -> None:
-        self._basler_camera.StartGrabbing(GrabStrategy_LatestImageOnly)
+        self._basler_camera.StartGrabbing(GrabStrategy_OneByOne)
 
     def _capture_status(self) -> bool:
         return self._basler_camera.IsGrabbing()
@@ -464,7 +464,7 @@ class BaslerCamera(BaseModel):
         )
 
         if result.GrabSucceeded():
-            ticks = result.ChunkTimestamp.Value
+            ticks = result.GetTimeStamp()
             timestamp = ticks if self.precise_time_protocol else ticks * 8
             self._basler_frames_to_buffer(result.GetArray(), timestamp)
 
