@@ -126,7 +126,6 @@ class BaseSource(BaseModel, ABC):
         self._close()
         self._del_source_buffer()
 
-
         if not self._external_bus:
             self.bus.close()
 
