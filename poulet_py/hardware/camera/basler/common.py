@@ -48,6 +48,19 @@ class PixelType(StrEnum):
         return "O"
 
 
+class TriggerType(StrEnum):
+    FRAME_START = "FrameStart"
+    FRAME_END = "FrameEnd"
+    FRAME_ACTIVE = "FrameActive"
+    ACQUISITION_START = "AcquisitionStart"
+    FRAME_BURST_END = "FrameBurstEnd"
+    FRAME_BURST_ACTIVE = "FrameBurstActive"
+    EXPOSURE_START = "ExposureStart"
+    EXPOSURE_END = "ExposureEnd"
+    EXPOPSURE_ACTIVE = "ExposureActive"
+    LINE_START = "LineStart"
+
+
 class TriggerSource(StrEnum):
     INTERNAL = "Internal"
     SOFTWARE = "Software"  # TODO
@@ -89,7 +102,7 @@ class BaslerCamera(BaseModel):
     acquisition_type: AcquisitionType = Field(
         default=AcquisitionType.FINITE, description="Type of data acquisition, continuous or finite"
     )
-    acquisition_mode: Literal["free_run", "frame", "burst"] = Field(default="free_run")
+    trigger_type: TriggerType = Field(default=TriggerType.FRAME_START)
     trigger_source: TriggerSource = Field(default=TriggerSource.INTERNAL)
     trigger_activation: TriggerActivationMode = Field(default=TriggerActivationMode.RISING_EDGE)
     timeout: int | None = Field(default=None, description="handle timeout in ms")
@@ -304,11 +317,18 @@ class BaslerCamera(BaseModel):
         del self._basler_camera
 
     def _set_resolution_offset(self):
+        min_limits = (self._basler_camera.Width.Min, self._basler_camera.Height.Min)
+        max_limits = (self._basler_camera.Width.Min, self._basler_camera.Height.Min)
         if self.resolution:
-            self._basler_camera.Width.Value = max(self.resolution[0], self._basler_camera.Width.Min)
-            self._basler_camera.Height.Value = max(
-                self.resolution[1], self._basler_camera.Height.Min
-            )
+            if (min_limits[0] <= self.resolution[0] <= max_limits[0]) or (
+                min_limits[1] <= self.resolution[1] <= max_limits[1]
+            ):
+                raise AttributeError(
+                    f"Resolution {self.resolution} is out of limits, "
+                    f"Lower: {min_limits}, Upper {max_limits}"
+                )
+            self._basler_camera.Width.Value = self.resolution[0]
+            self._basler_camera.Height.Value = self.resolution[1]
         else:
             self._basler_camera.Width.Value = self._basler_camera.Width.Max
             self._basler_camera.Height.Value = self._basler_camera.Height.Max
@@ -321,19 +341,26 @@ class BaslerCamera(BaseModel):
             self._basler_camera.OffsetY.Value = self.offset[1]
 
     def _set_exposure_gain(self):
-        self._basler_camera.AutoGainRawLowerLimit.Value = (
-            self._basler_camera.AutoGainRawLowerLimit.Min
-        )
-        self._basler_camera.AutoGainRawUpperLimit.Value = (
-            self._basler_camera.AutoGainRawUpperLimit.Max
-        )
+        try:
+            self._basler_camera.AutoGainRawLowerLimit.Value = (
+                self._basler_camera.AutoGainRawLowerLimit.Min
+            )
+            self._basler_camera.AutoGainRawUpperLimit.Value = (
+                self._basler_camera.AutoGainRawUpperLimit.Max
+            )
+        except Exception as e:
+            LOGGER.warning(f"Could not setup gain limits: {e}")
 
-        # self._basler_camera.AutoExposureTimeLowerLimit.Value = (
-        #     self._basler_camera.AutoExposureTimeLowerLimit.Min
-        # )
-        # self._basler_camera.AutoExposureTimeUpperLimit.Value = (
-        #     self._basler_camera.AutoExposureTimeUpperLimit.Max
-        # )
+        try:
+            self._basler_camera.AutoExposureTimeLowerLimit.Value = (
+                self._basler_camera.AutoExposureTimeLowerLimit.Min
+            )
+            self._basler_camera.AutoExposureTimeUpperLimit.Value = (
+                self._basler_camera.AutoExposureTimeUpperLimit.Max
+            )
+        except Exception as e:
+            LOGGER.warning(f"Could not setup exposure limits: {e}")
+
         auto_target = (
             self._basler_camera.AutoTargetValue.Min + self._basler_camera.AutoTargetValue.Max
         ) // 2
@@ -342,47 +369,48 @@ class BaslerCamera(BaseModel):
         self._basler_camera.AutoFunctionAOIUsageIntensity.Value = True
         self._basler_camera.AutoFunctionProfile.Value = self.auto_function_profile.value
 
-        # if self.auto_exposure == "auto":
-        #     self._basler_camera.ExposureAuto.Value = "Continuous"
-        # elif self.auto_exposure == "once":
-        #     self._basler_camera.ExposureAuto.Value = "Once"
-        # else:
-        #     self._basler_camera.ExposureMode.Value = "Timed"
-        #     self._basler_camera.ExposureAuto.Value = "Off"
-        #     self._basler_camera.ExposureTimeAbs.Value = self.exposure
+        try:
+            if self.auto_exposure == "auto":
+                self._basler_camera.ExposureAuto.Value = "Continuous"
+            elif self.auto_exposure == "once":
+                self._basler_camera.ExposureAuto.Value = "Once"
+            else:
+                self._basler_camera.ExposureMode.Value = "Timed"
+                self._basler_camera.ExposureAuto.Value = "Off"
+                self._basler_camera.ExposureTimeAbs.Value = self.exposure
+        except Exception as e:
+            LOGGER.warning(f"Could not setup exposure: {e}")
 
-        if self.auto_gain == "auto":
-            self._basler_camera.GainAuto.Value = "Continuous"
-        elif self.auto_gain == "once":
-            self._basler_camera.GainAuto.Value = "Once"
-        else:
-            self._basler_camera.GainAuto.Value = "Off"
-            self._basler_camera.GainRaw.Value = (
-                self.gain if not self.gain_to_raw else self.db_to_raw(self.gain)
-            )
+        try:
+            if self.auto_gain == "auto":
+                self._basler_camera.GainAuto.Value = "Continuous"
+            elif self.auto_gain == "once":
+                self._basler_camera.GainAuto.Value = "Once"
+            else:
+                self._basler_camera.GainAuto.Value = "Off"
+                self._basler_camera.GainRaw.Value = (
+                    self.gain if not self.gain_to_raw else self.db_to_raw(self.gain)
+                )
+        except Exception as e:
+            LOGGER.warning(f"Could not setup gain: {e}")
 
     def _set_trigger(self):
-        if self.acquisition_mode == "free_run":
-            self._basler_camera.TriggerSelector.Value = "FrameStart"
+        if self.trigger_source == TriggerSource.INTERNAL:
+            self._basler_camera.TriggerSelector.Value = self.trigger_type.value
             self._basler_camera.TriggerMode.Value = "Off"
 
+        elif self.trigger_source not in (TriggerSource.INTERNAL, TriggerSource.SOFTWARE):
+            self._basler_camera.TriggerSelector.Value = self.trigger_type.value
+            self._basler_camera.TriggerMode.Value = "On"
+            self._basler_camera.TriggerSource.Value = self.trigger_source.value
+            self._basler_camera.TriggerActivation.Value = self.trigger_activation.value
+
+        if self.trigger_source == TriggerSource.INTERNAL or self.trigger_type in (
+            TriggerType.FRAME_BURST_ACTIVE,
+            TriggerType.FRAME_BURST_END,
+        ):
             self._basler_camera.AcquisitionFrameRateEnable.Value = True
             self._basler_camera.AcquisitionFrameRateAbs.Value = self.fps
-
-        elif self.acquisition_mode == "frame":
-            self._basler_camera.TriggerSelector.Value = "FrameStart"
-            self._basler_camera.TriggerMode.Value = "On"
-            self._basler_camera.TriggerSource.Value = self.trigger_source
-            self._basler_camera.TriggerActivation.Value = self.trigger_activation
-
-        elif self.acquisition_mode == "burst":
-            self._basler_camera.AcquisitionFrameRateEnable.Value = True
-            self._basler_camera.AcquisitionFrameRateAbs.Value = self.fps
-
-            self._basler_camera.TriggerSelector.Value = "AcquisitionStart"
-            self._basler_camera.TriggerMode.Value = "On"
-            self._basler_camera.TriggerSource.Value = self.trigger_source
-            self._basler_camera.TriggerActivation.Value = self.trigger_activation
 
     def _set_basler_params(self):
         self._basler_camera.GevIEEE1588.Value = self.precise_time_protocol
