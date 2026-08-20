@@ -2,15 +2,16 @@ try:
     from enum import StrEnum
     from threading import Condition, Event, Thread
     from time import monotonic_ns
-    from typing import Any, ClassVar, Generic, Literal, TypeVar
+    from typing import Any, Literal
 
     from numpy import ndarray, zeros
-    from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
+    from pydantic import BaseModel, Field, PrivateAttr
     from pypylon.pylon import (
         GrabStrategy_LatestImageOnly,
         InstantCamera,
         TimeoutHandling_Return,
         TlFactory,
+        waitForever,
     )
 
     from poulet_py import LOGGER, AcquisitionType
@@ -23,38 +24,77 @@ Missing 'camera' module. Install options:
 """) from e
 
 
-class SupportedModels(StrEnum):
-    ACA800 = "aca800"
-    OTHER = "other"
+class PixelType(StrEnum):
+    MONO_8 = "Mono8"
+    MONO_10 = "Mono10"
+
+    BAYER_BG_8 = "BayerBG8"
+    BAYER_BG_10 = "BayerBG10"
+    BAYER_BG_10_PACKED = "BayerBG10Packed"
+
+    YUV_422_PACKED = "YUV422Packed"
+    YUV_422_YUYV_PACKED = "YUV422_YUYV_Packed"
+
+    # TODO: add more if needed for other cameras
+    # https://docs.baslerweb.com/image-format-converter-vtool#supported-pixel-formats
+
+    def to_numpy(self) -> str:
+        if self in (self.MONO_8, self.BAYER_BG_8, self.YUV_422_PACKED, self.YUV_422_YUYV_PACKED):
+            return "uint8"
+
+        if self in (self.MONO_10, self.BAYER_BG_10, self.BAYER_BG_10_PACKED):
+            return "uint16"
+
+        return "O"
 
 
-class PixelTypeMixIn:
-    def to_numpy(self) -> str: ...
+class TriggerSource(StrEnum):
+    INTERNAL = "Internal"
+    SOFTWARE = "Software"  # TODO
+    # GPIO
+    LINE_1 = "Line1"
+    LINE_2 = "Line2"
+    LINE_3 = "Line3"
+    LINE_4 = "Line4"
+    # CXP-12 interface card
+    CXP_TRIGGER_0 = "CXPTrigger0"
+    CXP_TRIGGER_1 = "CXPTrigger1"
+    # GMSL host system, more can be available
+    LINK_SIGNAL_1 = "LinkSignal1"
+    LINK_SIGNAL_2 = "LinkSignal2"
+    LINK_SIGNAL_3 = "LinkSignal3"
+    LINK_SIGNAL_4 = "LinkSignal4"
 
 
-PixelTypeT = TypeVar("PixelTypeT", bound=PixelTypeMixIn)
+class TriggerActivationMode(StrEnum):
+    RISING_EDGE = "RisingEdge"
+    FALLING_EDGE = "FallingEdge"
+    ANY_EDGE = "AnyEdge"
+    LEVEL_HIGH = "LevelHigh"
+    LEVEL_LOW = "LevelLow"
 
 
-class _GenericBaslerCamera(BaseModel, Generic[PixelTypeT]):
-    MODEL: ClassVar[SupportedModels] = SupportedModels.OTHER
+class AutoFunctionProfile(StrEnum):
+    GAIN_MINIMUM = "GainMinimum"
+    EXPOSURE_MINIMUM = "ExposureMinimum"
+    GAIN_MINIMUM_QUICK = "GainMinimumQuick"
+    EXPOSURE_MINIMUM_QUICK = "ExposureMinimumQuick"
+    SMART = "Smart"
+    ANTIFLICKER_50HZ = "AntiFlicker50Hz"
+    ANTIFLICKER_60HZ = "AntiFlicker60Hz"
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)  # TODO find solution for PixelTypeMixin
 
-    model: SupportedModels = Field(
-        default=SupportedModels.OTHER, description="camera model for specific options"
-    )
+class BaslerCamera(BaseModel):
     device_index: int = Field(default=0, description="")
     acquisition_type: AcquisitionType = Field(
         default=AcquisitionType.FINITE, description="Type of data acquisition, continuous or finite"
     )
-    buffer_size: int = Field(default=100, description="")
-    timeout: int = Field(default=5000, description="handle timeout in ms")
-
+    acquisition_mode: Literal["free_run", "frame", "burst"] = Field(default="free_run")
+    trigger_source: TriggerSource = Field(default=TriggerSource.INTERNAL)
+    trigger_activation: TriggerActivationMode = Field(default=TriggerActivationMode.RISING_EDGE)
+    timeout: int | None = Field(default=None, description="handle timeout in ms")
+    pixel_type: PixelType
     fps: int = Field(default=30)
-    exposure_time: int | Literal["auto"] = Field(
-        default="auto", description="in ms", ge=1, le=10000
-    )
-    contrast_gain: int | Literal["auto"] = Field(default="auto", description="db", ge=1, le=24)
     resolution: tuple[int, int] | None = Field(
         default=None,
         description=(
@@ -62,15 +102,19 @@ class _GenericBaslerCamera(BaseModel, Generic[PixelTypeT]):
             "Implemented through Basler subarray properties, not software resizing."
         ),
     )
-    offset: tuple[int, int] | None = Field(
-        default=None,
+    offset: tuple[int, int] | Literal["center"] = Field(
+        default="center",
         description=("Optional ROI offset. If None, ROI is centered"),
     )
-    pixel_type: PixelTypeT  # overwrite in inherited classes
-    trigger_mode: Literal["free_run", "frame", "burst"] = "free_run"
-    trigger_line: Literal["Line1", "Line3"] = "Line1"
-    trigger_activation: Literal["RisingEdge", "FallingEdge"] = "RisingEdge"
+    auto_exposure: Literal["auto", "once"] = Field(default="auto")
+    exposure: float = Field(default=10, description="in ms", ge=1, le=10000)
+    auto_gain: Literal["auto", "once"] = Field(default="auto")
+    gain: float = Field(default=5)
+    gain_to_raw: bool = Field(default=False)
+    auto_function_profile: AutoFunctionProfile = Field(default=AutoFunctionProfile.EXPOSURE_MINIMUM)
+    precise_time_protocol: bool = Field(default=True)
     # TODO add more features https://docs.baslerweb.com/features
+    buffer_size: int = Field(default=100, description="")
 
     _is_open: bool = PrivateAttr(default=False)
     _basler_tl_factory: TlFactory = PrivateAttr()
@@ -84,6 +128,12 @@ class _GenericBaslerCamera(BaseModel, Generic[PixelTypeT]):
     _basler_acquisition_thread: Thread = PrivateAttr()
     _basler_stop_acquisition_event: Event = PrivateAttr(default_factory=Event)
     _basler_acquisition_cond: Condition = PrivateAttr(default_factory=Condition)
+    _basler_first_monotonic_time: int = PrivateAttr(default=0)
+    _basler_first_sample_time: int = PrivateAttr(default=0)
+
+    @staticmethod
+    def db_to_raw(db_value: float) -> float:
+        return pow(10, db_value / 20) * 136
 
     @staticmethod
     def get_available_devices() -> list[dict[str, str]]:
@@ -253,63 +303,104 @@ class _GenericBaslerCamera(BaseModel, Generic[PixelTypeT]):
         self._basler_camera.Close()
         del self._basler_camera
 
-    def _set_model_dedicated_params(self):
-        """
-        implement in subclass if needed
-        """
-        return
+    def _set_resolution_offset(self):
+        if self.resolution:
+            self._basler_camera.Width.Value = max(self.resolution[0], self._basler_camera.Width.Min)
+            self._basler_camera.Height.Value = max(
+                self.resolution[1], self._basler_camera.Height.Min
+            )
+        else:
+            self._basler_camera.Width.Value = self._basler_camera.Width.Max
+            self._basler_camera.Height.Value = self._basler_camera.Height.Max
 
-    def _set_basler_params(self):
-        if self.exposure_time != "auto":
+        if self.offset == "center":
+            self._basler_camera.CenterX.Value = True
+            self._basler_camera.CenterY.Value = True
+        else:
+            self._basler_camera.OffsetX.Value = self.offset[0]
+            self._basler_camera.OffsetY.Value = self.offset[1]
+
+    def _set_exposure_gain(self):
+        self._basler_camera.AutoGainRawLowerLimit.Value = (
+            self._basler_camera.AutoGainRawLowerLimit.Min
+        )
+        self._basler_camera.AutoGainRawUpperLimit.Value = (
+            self._basler_camera.AutoGainRawUpperLimit.Max
+        )
+
+        self._basler_camera.AutoExposureTimeLowerLimitRaw.Value = (
+            self._basler_camera.AutoExposureTimeLowerLimitRaw.Min
+        )
+        self._basler_camera.AutoExposureTimeUpperLimitRaw.Value = (
+            self._basler_camera.AutoExposureTimeUpperLimitRaw.Max
+        )
+
+        self._basler_camera.AutoTargetValue.Value = (
+            self._basler_camera.AutoTargetValue.Min + self._basler_camera.AutoTargetValue.Max
+        ) / 2
+        self._basler_camera.AutoFunctionAOISelector.Value = "AOI1"
+        self._basler_camera.AutoFunctionAOIUsageIntensity.Value = True
+        self._basler_camera.AutoFunctionProfile.Value = self.auto_function_profile
+
+        if self.auto_exposure == "auto":
+            self._basler_camera.ExposureAuto.Value = "Continuous"
+        elif self.auto_exposure == "once":
+            self._basler_camera.ExposureAuto.Value = "Once"
+        else:
             self._basler_camera.ExposureMode.Value = "Timed"
             self._basler_camera.ExposureAuto.Value = "Off"
-            self._basler_camera.ExposureTimeAbs.Value = self.exposure_time
+            self._basler_camera.ExposureTimeAbs.Value = self.exposure
 
-        if self.contrast_gain != "auto":
-            self._basler_camera.GainAuto.Value = "Off"
-            self._basler_camera.GainRaw.Value = self.contrast_gain
-
-        if self.resolution:
-            self._basler_camera.Height.Value = self.resolution[0]
-            self._basler_camera.Width.Value = self.resolution[1]
+        if self.auto_gain == "auto":
+            self._basler_camera.GainAuto.Value = "Continuous"
+        elif self.auto_gain == "once":
+            self._basler_camera.GainAuto.Value = "Once"
         else:
-            self._basler_camera.Height.Value = self._basler_camera.Height.Max
-            self._basler_camera.Width.Value = self._basler_camera.Width.Max
+            self._basler_camera.GainAuto.Value = "Off"
+            self._basler_camera.GainRaw.Value = (
+                self.gain if not self.gain_to_raw else self.db_to_raw(self.gain)
+            )
 
-        if self.trigger_mode == "free_run":
+    def _set_trigger(self):
+        if self.acquisition_mode == "free_run":
             self._basler_camera.TriggerSelector.Value = "FrameStart"
             self._basler_camera.TriggerMode.Value = "Off"
 
             self._basler_camera.AcquisitionFrameRateEnable.Value = True
             self._basler_camera.AcquisitionFrameRateAbs.Value = self.fps
 
-        elif self.trigger_mode == "frame":
+        elif self.acquisition_mode == "frame":
             self._basler_camera.TriggerSelector.Value = "FrameStart"
             self._basler_camera.TriggerMode.Value = "On"
-            self._basler_camera.TriggerSource.Value = self.trigger_line
+            self._basler_camera.TriggerSource.Value = self.trigger_source
             self._basler_camera.TriggerActivation.Value = self.trigger_activation
 
-        elif self.trigger_mode == "gate":
+        elif self.acquisition_mode == "burst":
             self._basler_camera.AcquisitionFrameRateEnable.Value = True
             self._basler_camera.AcquisitionFrameRateAbs.Value = self.fps
 
             self._basler_camera.TriggerSelector.Value = "AcquisitionStart"
             self._basler_camera.TriggerMode.Value = "On"
-            self._basler_camera.TriggerSource.Value = self.trigger_line
+            self._basler_camera.TriggerSource.Value = self.trigger_source
             self._basler_camera.TriggerActivation.Value = self.trigger_activation
 
-        self._set_model_dedicated_params()
+    def _set_basler_params(self):
+        self._basler_camera.GevIEEE1588.Value = self.precise_time_protocol
+
+        self._set_resolution_offset()
+        self._set_exposure_gain()
+        self._set_trigger()
 
     def _set_buffer(self) -> None:
-        resolution = self.resolution or (
-            self._basler_camera.Height.Max,
+        width, height = self.resolution or (
             self._basler_camera.Width.Max,
+            self._basler_camera.Height.Max,
         )
         self._basler_buffer = zeros(
             self.buffer_size,
             dtype=[
                 ("timestamp", "uint64"),
-                ("basler", self.pixel_type.to_numpy(), resolution),
+                ("basler", self.pixel_type.to_numpy(), (height, width)),
             ],
         )
 
@@ -342,13 +433,24 @@ class _GenericBaslerCamera(BaseModel, Generic[PixelTypeT]):
         del self._acquisition_thread
         self._basler_stop_acquisition_event.clear()
 
-    def _basler_frames_to_buffer(self, data: ndarray) -> None:
+    def _basler_frames_to_buffer(self, data: ndarray, ts: int | None = None) -> None:
+        now = monotonic_ns()
+
+        if ts is None:
+            timestamp = now
+        else:
+            if self._basler_first_sample_time == 0:
+                self._basler_first_sample_time = ts
+                self._basler_first_monotonic_time = now
+
+            timestamp = self._basler_first_monotonic_time + ts - self._basler_first_sample_time
+
         with self._basler_acquisition_cond:
             idx = self._basler_buffer_idx % self.buffer_size
 
             self._basler_buffer[idx]["basler"] = data
 
-            self._basler_buffer[idx]["timestamp"] = monotonic_ns()
+            self._basler_buffer[idx]["timestamp"] = timestamp
             self._basler_buffer_idx += 1
 
             self._basler_acquisition_cond.notify_all()
@@ -357,10 +459,14 @@ class _GenericBaslerCamera(BaseModel, Generic[PixelTypeT]):
         if not self._capture_status():
             return False
 
-        result = self._basler_camera.RetrieveResult(self.timeout, TimeoutHandling_Return)
+        result = self._basler_camera.RetrieveResult(
+            self.timeout if self.timeout is not None else waitForever, TimeoutHandling_Return
+        )
 
         if result.GrabSucceeded():
-            self._basler_frames_to_buffer(result.GetArray())
+            ticks = result.ChunkTimestamp.Value
+            timestamp = ticks if self.precise_time_protocol else ticks * 8
+            self._basler_frames_to_buffer(result.GetArray(), timestamp)
 
         result.Release()
 
@@ -372,7 +478,9 @@ class _GenericBaslerCamera(BaseModel, Generic[PixelTypeT]):
                 self._acquire_sample()
             except Exception as e:
                 self._basler_stop_acquisition_event.set()
-                raise e
+                with self._basler_acquisition_cond:
+                    self._basler_acquisition_cond.notify_all()
+                LOGGER.exception(e)
 
     def __enter__(self):
         self.open()

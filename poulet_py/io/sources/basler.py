@@ -4,7 +4,7 @@ try:
     from numpy import ndarray, zeros
     from pydantic import PrivateAttr
 
-    from poulet_py import LOGGER, AcquisitionType, BaseSource, Basler
+    from poulet_py import LOGGER, AcquisitionType, BaseSource, BaslerCamera
 
 except ImportError as e:
     raise ImportError("""
@@ -15,18 +15,18 @@ Missing 'sources' module. Install options:
 """) from e
 
 
-class BaslerSource(BaseSource, Basler):
+class BaslerSource(BaseSource, BaslerCamera):
     _temp_buffer: ndarray = PrivateAttr()
 
     def _set_buffer_dtype(self) -> None:
         self._source_buffer_dtype = self._basler_buffer.dtype
 
     def _open(self) -> None:
-        Basler.open(self)
+        BaslerCamera.open(self)
         self._temp_buffer = zeros(self._basler_buffer.size, dtype=self._basler_buffer.dtype)
 
     def _close(self) -> None:
-        Basler.close(self)
+        BaslerCamera.close(self)
 
     def _fire(self) -> bool:
         if self.acquisition_type == AcquisitionType.FINITE:

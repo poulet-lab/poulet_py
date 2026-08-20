@@ -5,7 +5,7 @@ from .hardware import (
     TCS,
     Arduino,
     BaseTrigger,
-    Basler,
+    BaslerCamera,
     GPIOTrigger,
     JulaboChiller,
     KeyboardTrigger,
