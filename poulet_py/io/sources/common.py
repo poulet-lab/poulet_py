@@ -98,8 +98,8 @@ class BaseSource(BaseModel, ABC):
         if not self._external_bus:
             self.bus.open()
 
-        self._open()
         self._set_source_buffer()
+        self._open()
 
         self._fire_thread = Thread(
             target=self._fire_loop, daemon=True, name=f"{self.name}-fire-loop"
@@ -123,8 +123,8 @@ class BaseSource(BaseModel, ABC):
         if self._publish_thread.is_alive():
             self._publish_thread.join()
 
-        self._del_source_buffer()
         self._close()
+        self._del_source_buffer()
 
         if not self._external_bus:
             self.bus.close()
