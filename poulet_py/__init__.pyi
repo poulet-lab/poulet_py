@@ -70,7 +70,7 @@ from .stimulus import (
     NITriangleAnalogStimulus,
     NIWhiteNoiseAnalogStimulus,
     TCSStimulus,
-    DRV2605Stimulus
+    DRV2605Stimulus,
 )
 from .tools import go_to, json_serializer, repeat, sanitize_path, precise_sleep, dumps
 from .utils import StimulatorBlock, StimulatorRuntime, StimulatorTrial, Oscilloscope
