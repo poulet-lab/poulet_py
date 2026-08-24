@@ -11,8 +11,8 @@ try:
     from pydantic import ConfigDict, Field, PrivateAttr, model_validator
     from pyftdi.i2c import I2cIOError, I2cNackError
 
-    from poulet_py import LOGGER, BaseSource, precise_sleep, DRV2605Stimulus
-    #from poulet_py.stimulus.drv2605l import DRV2605Stimulus
+    from poulet_py import LOGGER, BaseSource, DRV2605Stimulus, precise_sleep
+    # from poulet_py.stimulus.drv2605l import DRV2605Stimulus
 except ImportError as e:
     raise ImportError(
         """
@@ -76,7 +76,7 @@ LRA_SAMPLE_TIME_US = (150, 200, 250, 300)
 # printed output. Normal closed-loop experiments will then require no
 # per-experiment calibration arguments.
 
-#This is for the currently attatched ERM do not change
+# This is for the currently attatched ERM do not change
 CURRENT_ERM_RATED_VOLTAGE = 3.000000
 CURRENT_ERM_MAXIMUM_VOLTAGE = 5.000000
 CURRENT_ERM_CALIBRATED_RATED_VOLTAGE: float | None = 3.000000
@@ -115,13 +115,11 @@ class DRV2605Source(BaseSource):
         "if multiple devices are needed, use a multiplexer or multiple buses.",
     )
 
-
     bus_frequency: int = Field(
         default=400_000,
         gt=1,
         le=1_000_000,
         description="I2C clock speed in Hz, has no effect in Linux",
-
     )
 
     ftdi_latency_ms: int | None = Field(
@@ -131,16 +129,14 @@ class DRV2605Source(BaseSource):
         description="FTDI USB latency timer in ms. Use None to leave unchanged.",
     )
 
-    i2c: I2C | None = Field(
-        default=None)
+    i2c: I2C | None = Field(default=None)
 
     motor_type: Literal["erm", "lra"] = Field(
         default="erm",
         description="Motor type. 'erm': eccentric rotating mass, 'lra': linear resonant actuator.",
     )
 
-    loop_mode: Literal["closed_loop", "open_loop"] = Field(
-        default="closed_loop")
+    loop_mode: Literal["closed_loop", "open_loop"] = Field(default="closed_loop")
 
     rated_voltage: float = Field(
         default=CURRENT_ERM_RATED_VOLTAGE,
@@ -206,7 +202,7 @@ class DRV2605Source(BaseSource):
     auto_calibration_timeout_s: float = Field(default=2.0, gt=0.0, le=10.0)
     auto_calibration_poll_s: float = Field(default=0.01, gt=0.0, le=0.1)
 
-    #transfer functions to hardware class
+    # transfer functions to hardware class
     i2c_retry_attempts: int = Field(default=5, ge=0)
     i2c_retry_backoff_s: float = Field(default=0.001, ge=0.0)
     continue_on_i2c_error: bool = Field(default=True)
@@ -288,7 +284,6 @@ class DRV2605Source(BaseSource):
             ("loop_mode", "uint8"),
             ("resonance_frequency_hz", "float32"),
         ]
-
 
     def _open(self):
         if self.i2c is None:
