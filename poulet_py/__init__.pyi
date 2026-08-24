@@ -47,6 +47,7 @@ from .io import (
     StimuliMetadataSource,
     DCAMSource,
     LeptonSource,
+    DRV2605Source,
 )
 from .stimulus import (
     BaseStimulus,
@@ -70,6 +71,7 @@ from .stimulus import (
     NITriangleAnalogStimulus,
     NIWhiteNoiseAnalogStimulus,
     TCSStimulus,
+    DRV2605Stimulus,
 )
 from .tools import go_to, json_serializer, repeat, sanitize_path, precise_sleep, dumps
 from .utils import Oscilloscope
@@ -87,6 +89,7 @@ __all__ = [
     "BaseStimulus",
     "BaseTrigger",
     "BaslerCamera",
+    "DRV2605Source",
     "dumps",
     "Max31856Source",
     "INA228Source",
@@ -142,6 +145,7 @@ __all__ = [
     "TCSSource",
     "TCSStimulus",
     "Lepton",
+    "DRV2605Stimulus",
     "go_to",
     "json_serializer",
     "repeat",
