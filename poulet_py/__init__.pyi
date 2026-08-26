@@ -46,6 +46,7 @@ from .io import (
     ThermocoupleType,
     StimuliMetadataSource,
     DCAMSource,
+    DRV2605Source,
 )
 from .stimulus import (
     BaseStimulus,
@@ -69,6 +70,7 @@ from .stimulus import (
     NITriangleAnalogStimulus,
     NIWhiteNoiseAnalogStimulus,
     TCSStimulus,
+    DRV2605Stimulus,
 )
 from .tools import go_to, json_serializer, repeat, sanitize_path, precise_sleep, dumps
 from .utils import StimulatorBlock, StimulatorRuntime, StimulatorTrial, Oscilloscope
@@ -86,6 +88,7 @@ __all__ = [
     "BaseStimulus",
     "BaseTrigger",
     "BaslerCamera",
+    "DRV2605Source",
     "dumps",
     "Max31856Source",
     "INA228Source",
@@ -143,6 +146,7 @@ __all__ = [
     "TCSCommand",
     "TCSSource",
     "TCSStimulus",
+    "DRV2605Stimulus",
     "ThermalCamera",
     "go_to",
     "json_serializer",
