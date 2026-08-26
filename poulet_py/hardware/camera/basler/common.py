@@ -119,11 +119,10 @@ class BaslerCamera(BaseModel):
         default="center",
         description=("Optional ROI offset. If None, ROI is centered"),
     )
-    auto_exposure: Literal["auto", "once"] = Field(default="auto")
-    exposure: float = Field(default=10, description="in ms", ge=1, le=10000)
-    auto_gain: Literal["auto", "once"] = Field(default="auto")
-    gain: float = Field(default=5)
-    gain_to_raw: bool = Field(default=False)
+    auto_exposure: Literal["auto", "once"] | None = Field(default=None)
+    exposure: float = Field(default=10000, description="in ms", ge=1, le=10000)
+    auto_gain: Literal["auto", "once"] | None = Field(default=None)
+    gain: float = Field(default=200)
     auto_function_profile: AutoFunctionProfile = Field(default=AutoFunctionProfile.EXPOSURE_MINIMUM)
     precise_time_protocol: bool = Field(default=True)
     # TODO add more features https://docs.baslerweb.com/features
@@ -143,10 +142,6 @@ class BaslerCamera(BaseModel):
     _basler_acquisition_cond: Condition = PrivateAttr(default_factory=Condition)
     _basler_first_monotonic_time: int = PrivateAttr(default=0)
     _basler_first_sample_time: int = PrivateAttr(default=0)
-
-    @staticmethod
-    def db_to_raw(db_value: float) -> float:
-        return pow(10, db_value / 20) * 136
 
     @staticmethod
     def get_available_devices() -> list[dict[str, str]]:
@@ -317,15 +312,16 @@ class BaslerCamera(BaseModel):
         del self._basler_camera
 
     def _set_resolution_offset(self):
-        min_limits = (self._basler_camera.Width.Min, self._basler_camera.Height.Min)
-        max_limits = (self._basler_camera.Width.Min, self._basler_camera.Height.Min)
         if self.resolution:
-            if (min_limits[0] <= self.resolution[0] <= max_limits[0]) or (
-                min_limits[1] <= self.resolution[1] <= max_limits[1]
+            min_limits = (self._basler_camera.Width.Min, self._basler_camera.Height.Min)
+            max_limits = (self._basler_camera.Width.Max, self._basler_camera.Height.Max)
+            if not (
+                min_limits[0] <= self.resolution[0] <= max_limits[0]
+                and min_limits[1] <= self.resolution[1] <= max_limits[1]
             ):
                 raise AttributeError(
                     f"Resolution {self.resolution} is out of limits, "
-                    f"Lower: {min_limits}, Upper {max_limits}"
+                    f"Lower: {min_limits}, Upper: {max_limits}"
                 )
             self._basler_camera.Width.Value = self.resolution[0]
             self._basler_camera.Height.Value = self.resolution[1]
@@ -368,8 +364,10 @@ class BaslerCamera(BaseModel):
         self._basler_camera.AutoFunctionAOISelector.Value = "AOI1"
         self._basler_camera.AutoFunctionAOIUsageIntensity.Value = True
         self._basler_camera.AutoFunctionProfile.Value = self.auto_function_profile.value
-
         try:
+            if self.trigger_source != TriggerSource.INTERNAL:
+                self._basler_camera.ExposureMode.Value = "Timed"
+
             if self.auto_exposure == "auto":
                 self._basler_camera.ExposureAuto.Value = "Continuous"
             elif self.auto_exposure == "once":
@@ -388,9 +386,7 @@ class BaslerCamera(BaseModel):
                 self._basler_camera.GainAuto.Value = "Once"
             else:
                 self._basler_camera.GainAuto.Value = "Off"
-                self._basler_camera.GainRaw.Value = (
-                    self.gain if not self.gain_to_raw else self.db_to_raw(self.gain)
-                )
+                self._basler_camera.GainRaw.Value = self.gain
         except Exception as e:
             LOGGER.warning(f"Could not setup gain: {e}")
 
@@ -400,6 +396,15 @@ class BaslerCamera(BaseModel):
             self._basler_camera.TriggerMode.Value = "Off"
 
         elif self.trigger_source not in (TriggerSource.INTERNAL, TriggerSource.SOFTWARE):
+            if self.trigger_source in (
+                TriggerSource.LINE_1,
+                TriggerSource.LINE_2,
+                TriggerSource.LINE_3,
+                TriggerSource.LINE_4,
+            ):
+                self._basler_camera.LineSelector.Value = self.trigger_source.value
+                self._basler_camera.LineMode.Value = "Input"
+
             self._basler_camera.TriggerSelector.Value = self.trigger_type.value
             self._basler_camera.TriggerMode.Value = "On"
             self._basler_camera.TriggerSource.Value = self.trigger_source.value
