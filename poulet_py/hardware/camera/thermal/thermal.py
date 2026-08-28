@@ -66,7 +66,6 @@ class ThermalFrame:
     raw: NDArray[np.uint16]
 
 
-
 def _load_uvctypes() -> Any:
     """Load the frozen ctypes/libuvc compatibility module on demand."""
 
@@ -99,11 +98,12 @@ class ThermalCamera(BaseModel):
 
     gain_mode: GainMode = Field(
         default="high",
-        description="Lepton gain mode (high, low, or auto)",)
+        description="Lepton gain mode (high, low, or auto)",
+    )
 
     ffc_mode: FfcMode = Field(
-        default="auto",
-        description="Lepton FFC shutter mode (auto, manual, or external)")
+        default="auto", description="Lepton FFC shutter mode (auto, manual, or external)"
+    )
 
     # only during initialization
     frame_queue_size: int = Field(
@@ -138,6 +138,7 @@ class ThermalCamera(BaseModel):
 
     _windows_sequence = PrivateAttr(default=0)
     _LIBUVC_FRAME_FORMAT_GREY16: int = PrivateAttr(default=10)
+
     def model_post_init(self, __context: Any) -> None:
         self._frames = Queue(maxsize=self.frame_queue_size)
         self._is_windows = platform.system() == "Windows"
@@ -149,7 +150,6 @@ class ThermalCamera(BaseModel):
     @property
     def frame_size(self) -> tuple[int, int]:
         return self._width, self._height
-
 
     def open(self) -> None:
         """Open the camera and negotiate its first Y16 stream format."""
@@ -183,9 +183,8 @@ class ThermalCamera(BaseModel):
                 raise RuntimeError(f"uvc_init failed: {result}")
             self._ctx = ctx
 
-
-            #This could allow for different devices, but for now we just use the first one found
-            #For that the o placeholder would need to be the correct serial number of the device
+            # This could allow for different devices, but for now we just use the first one found
+            # For that the o placeholder would need to be the correct serial number of the device
             result = uvc.libuvc.uvc_find_device(
                 ctx,
                 byref(device),
@@ -269,13 +268,13 @@ class ThermalCamera(BaseModel):
 
         self._is_streaming = True
         try:
-            #Sequence: stream first, then FFC and gain.
+            # Sequence: stream first, then FFC and gain.
             self._apply_ffc_mode(self.ffc_mode)
             self._apply_gain_mode(self.gain_mode)
         except Exception:
             self.stop_streaming()
             raise
-        #if frames were recorded during the FFC and gain application, they are now dropped.
+        # if frames were recorded during the FFC and gain application, they are now dropped.
         self.clear_frames()
         self._dropped_frames = 0
 
@@ -375,7 +374,7 @@ class ThermalCamera(BaseModel):
 
     def perform_manual_ffc(self) -> None:
         """Run one flat-field correction normalization."""
-        #Needs changes to uvctypes to read back changes and not silently assume changes
+        # Needs changes to uvctypes to read back changes and not silently assume changes
         self._ensure_open()
         if self._is_windows:
             self._windows_camera.perform_manual_ffc()
