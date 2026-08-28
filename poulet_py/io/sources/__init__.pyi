@@ -22,5 +22,5 @@ __all__ = [
     "AcquisitionType",
     "OpenEphysSource",
     "DCAMSource",
-    "TCAMSource"
+    "TCAMSource",
 ]
