@@ -27,12 +27,6 @@ class WidefieldMaskMetaData(BaseModel):
 
 
 class WidefieldMetadata(BaseMetadata):
-    """Trial-level widefield metadata, including v1 analog-output HDF5 attrs.
-
-    ``analog_output`` is still a nested dict of raw HDF5 attributes. Replace
-    it with explicit Pydantic models once the v1 field set is agreed.
-    """
-
     mask_data: WidefieldMaskMetaData | None = Field(default=None)
     analog_output: dict[str, Any] = Field(
         default_factory=dict
