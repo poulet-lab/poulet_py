@@ -70,10 +70,7 @@ def _upsampled_dft(
     if not hasattr(upsampled_region_size, "__iter__"):
         upsampled_region_size = [upsampled_region_size] * frequency_domain_data.ndim
     elif len(upsampled_region_size) != frequency_domain_data.ndim:
-        msg = (
-            "shape of upsampled region sizes must be equal "
-            "to input data's number of dimensions."
-        )
+        msg = "shape of upsampled region sizes must be equal to input data's number of dimensions."
         raise ValueError(msg)
 
     if axis_offsets is None:
@@ -88,9 +85,7 @@ def _upsampled_dft(
     )
 
     for n_items, ups_size, ax_offset in dimension_properties[::-1]:
-        kernel = (arange(ups_size) - ax_offset)[:, None] * fftfreq(
-            n_items, upsample_factor
-        )
+        kernel = (arange(ups_size) - ax_offset)[:, None] * fftfreq(n_items, upsample_factor)
         kernel = exp(-imaginary_2pi * kernel)
         frequency_domain_data = tensordot(kernel, frequency_domain_data, axes=(1, -1))
 
@@ -144,18 +139,12 @@ def estimate_image_shift(
     midpoints = array([fix(axis_size / 2) for axis_size in image_shape])
 
     shift_vector = array(maxima_indices, dtype=float64)
-    shift_vector[shift_vector > midpoints] -= array(image_shape)[
-        shift_vector > midpoints
-    ]
+    shift_vector[shift_vector > midpoints] -= array(image_shape)[shift_vector > midpoints]
 
     if upsample_factor == 1:
         if return_error:
-            source_amplitude = (
-                sum(abs(reference_frequency) ** 2) / reference_frequency.size
-            )
-            target_amplitude = (
-                sum(abs(target_frequency) ** 2) / target_frequency.size
-            )
+            source_amplitude = sum(abs(reference_frequency) ** 2) / reference_frequency.size
+            target_amplitude = sum(abs(target_frequency) ** 2) / target_frequency.size
             cross_correlation_max = cross_correlation[maxima_indices]
     else:
         shift_vector = round(shift_vector * upsample_factor) / upsample_factor
@@ -255,9 +244,7 @@ def estimate_motion_vectors(
         n_frames = movie_copy.shape[0]
         if n_frames > MAX_REFERENCE_FRAMES:
             random_generator = default_rng()
-            frame_indices = random_generator.choice(
-                n_frames, MAX_REFERENCE_FRAMES, replace=False
-            )
+            frame_indices = random_generator.choice(n_frames, MAX_REFERENCE_FRAMES, replace=False)
         else:
             frame_indices = slice(None)
 
