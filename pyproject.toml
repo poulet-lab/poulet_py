@@ -27,7 +27,7 @@ dependencies = [
   "lazy_loader<=0.5",
   "pydantic<=2.13.4",
   "pydantic-settings<=2.15.0",
-  "python-dotenv<=1.2.2",
+  "python-dotenv<=1.2.3",
   "rich<=15.0.0",
   "deprecated<=1.3.1",
   "prompt-toolkit<=3.0.53",
@@ -91,7 +91,7 @@ soho = ["pandas<=3.0.2"]
 # IO
 data = ["h5py<=3.16.0", "pandas<=3.0.2", "numpy<=2.4.4", "scikit-image<=0.26.0"]
 event = ["numpydantic<=1.10.0"]
-sinks = ["poulet_py[event]", "h5py<=3.16.0", "orjson<=3.11.9", "numpy<=2.4.4"]
+sinks = ["poulet_py[event]", "h5py<=3.16.0", "orjson<=3.12.0", "numpy<=2.4.4"]
 sources = [
   "poulet_py[event]",
   "numpy<=2.4.4",
@@ -117,7 +117,7 @@ converters = ["poulet_py[seq]"]
 hardware = ["poulet_py[camera, daq, arduino, julabo, qst, triggers, soho]"]
 io = ["poulet_py[event, sinks, sources, data]"]
 stimuli = ["poulet_py[qst, nidaq, io, tools, utils]"]
-tools = ["orjson<=3.11.9"]
+tools = ["orjson<=3.12.0"]
 utils = ["poulet_py[exp, osc, analysis]"]
 # Install all modules
 all = ["poulet_py[converters, hardware, io, stimuli, tools, utils]"]
