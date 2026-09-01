@@ -26,11 +26,43 @@ class WidefieldMaskMetaData(BaseModel):
     radius: float = Field(default=0.0)
 
 
+class WidefieldChannelMetadata(BaseModel):
+    """Attributes of one analog channel recorded alongside the imaging."""
+
+    id: str
+    name: str
+    sr: int
+    device: str | None = Field(default=None)
+
+
+class WidefieldAcquisitionMetadata(BaseModel):
+    """Acquisition settings written once per trial by the widefield rig."""
+
+    # TODO discuss richer types for timestamp, time, folder, camera_roi_active
+    mouse_id: str
+    protocol_name: str
+    time: str
+    timestamp: float
+    experimenter: str
+    comment: str
+    folder: str
+    camera_fps: int
+    camera_exposure: float
+    camera_format: str
+    camera_roi_active: int
+    binning: int
+    magnification: float
+    filterset: str
+    led_power: float
+    weight: float
+    anesthesia: str
+    isoflurane: float
+
+
 class WidefieldMetadata(BaseMetadata):
     mask_data: WidefieldMaskMetaData | None = Field(default=None)
-    analog_output: dict[str, Any] = Field(
-        default_factory=dict
-    )  # TODO make explicit metadata classes
+    acquisition: WidefieldAcquisitionMetadata | None = Field(default=None)
+    analog_output: dict[str, WidefieldChannelMetadata] = Field(default_factory=dict)
 
 
 class WidefieldData(BaseData[WidefieldMetadata], ABC):
@@ -123,13 +155,14 @@ class WidefieldData(BaseData[WidefieldMetadata], ABC):
         if self.analog_output:
             lines.append("Analog output data:")
             for name, data in self.analog_output.items():
-                attrs = self.metadata.analog_output.get(name, {})
-                sr = attrs.get("sr", "unknown")
+                channel = self.metadata.analog_output.get(name)
+                sr = channel.sr if channel else "unknown"
                 lines.append(f"  {name}: shape={data.shape}, sr={sr} Hz")
 
-        mouse_id = self.metadata.analog_output.get("global", {}).get("mouse_id", "unknown")
-        protocol = self.metadata.analog_output.get("global", {}).get("protocol_name", "unknown")
-        comment = self.metadata.analog_output.get("global", {}).get("comment", "")
+        acquisition = self.metadata.acquisition
+        mouse_id = acquisition.mouse_id if acquisition else "unknown"
+        protocol = acquisition.protocol_name if acquisition else "unknown"
+        comment = acquisition.comment if acquisition else ""
         lines.extend(["Metadata:", f"  Mouse: {mouse_id}", f"  Protocol: {protocol}"])
         if comment:
             lines.append(f"  Comment: {comment}")
@@ -185,9 +218,9 @@ class WidefieldDataV1(WidefieldData):
 
     def _analog_output_metadata(self):
         def _visit_datasets(name: str, obj: Any) -> None:
-            self.metadata.analog_output["global"] = dict(f.attrs)
             if isinstance(obj, h5py.Dataset):
-                self.metadata.analog_output[name] = dict(obj.attrs)
+                self.metadata.analog_output[name] = WidefieldChannelMetadata(**obj.attrs)
 
         with File(self._analog_output_path, "r") as f:
+            self.metadata.acquisition = WidefieldAcquisitionMetadata(**f.attrs)
             f.visititems(_visit_datasets)
