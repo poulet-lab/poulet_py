@@ -2,7 +2,6 @@ from pathlib import Path
 
 from poulet_py.utils.analisys.widefield import WidefieldAnalysis
 
-
 TRIAL_PATH = Path(
     r"Y:\experiments\corebodytemp_imaging_IC\data\raw"
     r"\20260504_JPCM_09695_widefieldimaging_precno\trials\260504_115040"

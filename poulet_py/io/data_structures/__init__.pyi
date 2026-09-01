@@ -1,5 +1,5 @@
 # ruff: noqa TID252
-from .common import BaseData, DataSignature, DataStructure
+from .common import BaseData, DataSignature, DataStructure, BaseMetadata
 from .widefield import WidefieldData
 from .discovery_strategies import (
     BasePattern,
@@ -23,4 +23,5 @@ __all__ = [
     "ExplicitDiscovery",
     "GlobBasedDiscovery",
     "DATA_SIGNATURES",
+    "BaseMetadata",
 ]

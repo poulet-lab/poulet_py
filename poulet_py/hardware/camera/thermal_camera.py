@@ -61,7 +61,7 @@ try:
     else:
         folder = "x64" if platform.architecture()[0] == "64bit" else "x86"
         path = os.path.sep.join(__file__.split(os.path.sep)[:-4])
-        sys.path.append(os.path.sep.join([path, "bin", "leptonUVC", folder]))
+        sys.path.append(os.path.sep.join([path, "artifacts", "leptonUVC", folder]))
 
         clr.AddReference("LeptonUVC")
         clr.AddReference("ManagedIR16Filters")
@@ -77,13 +77,12 @@ try:
         signal.signal(signal.SIGTERM, handle_exit)
         import pythoncom
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'camera' module. Install options:
 - Dedicated:    pip install poulet_py[camera]
 - Module:       pip install poulet_py[hardware]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class ThermalCamera:
@@ -405,6 +404,9 @@ class ThermalCamera:
             plt.ion()  # Enable interactive mode
 
         fig = plt.figure()
+        if platform.system() == "Windows":
+            fig.canvas.manager.window.wm_attributes("-topmost", 1)
+            fig.canvas.manager.window.wm_attributes("-topmost", 0)
         ax = plt.axes()
         div = make_axes_locatable(ax)
         cax = div.append_axes("right", "5%", "5%")
@@ -417,6 +419,7 @@ class ThermalCamera:
             vmin=self.vminT,
             vmax=self.vmaxT,
             animated=True,
+            cmap="coolwarm",
         )
         ax.set_xticks([])
         ax.set_yticks([])
@@ -428,6 +431,11 @@ class ThermalCamera:
 
         fig.colorbar(img, cax=cax)
 
+        if platform.system() == "Windows":
+            plt.show(block=False)
+            fig.canvas.draw()
+            plt.pause(0.1)
+
         try:
             while True:
                 if platform.system() == "Windows":
@@ -438,12 +446,22 @@ class ThermalCamera:
                     LOGGER.warning("Data is none")
                     data = np.zeros([120, 160])
 
-                data = (data - 27315) / 100
+                data_celsius = (data - 27315) / 100
 
                 if platform.system() == "Windows":
-                    img.set_data(data)  # Update image data
-                    fig.canvas.draw()  # Redraw the figure
-                    fig.canvas.flush_events()  # Flush the GUI events for real-time updates
+                    min_temp = np.min(data_celsius)
+                    max_temp = np.max(data_celsius)
+                    display_vmin = min(min_temp, self.vminT)
+                    display_vmax = max(max_temp, self.vmaxT)
+
+                    if display_vmin == display_vmax:
+                        display_vmin = min_temp - 1
+                        display_vmax = max_temp + 1
+
+                    img.set_data(data_celsius)
+                    img.set_clim(vmin=display_vmin, vmax=display_vmax)
+                    fig.canvas.draw()
+                    fig.canvas.flush_events()
                 else:
                     ax.clear()
                     img = ax.imshow(data, vmin=self.vminT, vmax=self.vmaxT)

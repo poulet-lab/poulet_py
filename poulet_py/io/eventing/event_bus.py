@@ -7,13 +7,12 @@ try:
     from poulet_py import BaseEvent
 
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'event' module. Install options:
 - Dedicated:    pip install poulet_py[event]
 - Module:       pip install poulet_py[io]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class EventHandler(BaseModel, ABC):
@@ -56,8 +55,7 @@ class EventBus(BaseModel):
 
     def _ensure_open(self):
         if not self._is_open:
-            msg = f"{type(self)} need to be opened first"
-            raise RuntimeError(msg)
+            raise RuntimeError(f"{type(self)} need to be opened first")
 
     def __enter__(self):
         self.open()

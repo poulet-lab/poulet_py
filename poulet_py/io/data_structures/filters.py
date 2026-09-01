@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 
-
 try:
     from collections.abc import Iterator
     from typing import Generic, TypeVar

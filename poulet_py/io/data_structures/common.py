@@ -3,7 +3,7 @@ try:
     from collections.abc import Sequence
     from enum import Enum
     from pathlib import Path
-    from typing import Any, ClassVar
+    from typing import ClassVar, Generic, Literal, TypeVar
 
     from pydantic import BaseModel, Field, PrivateAttr
 except ImportError as e:
@@ -58,21 +58,24 @@ class DataSignature(BaseModel):
         return hash((self.data_structure, self.data_type, frozenset(self.files)))
 
 
-class BaseData(BaseModel, ABC):
+class BaseMetadata(BaseModel):
+    level: Literal["raw", "processed", "analyzed"] = Field(default="raw")
+
+
+TMetadata = TypeVar("TMetadata", bound=BaseMetadata)
+
+
+class BaseData(BaseModel, Generic[TMetadata], ABC):
     DATA_SIGNATURE: ClassVar[DataSignature]
 
     path: Path = Field(..., description="Path to trial folder")
+    metadata: TMetadata
 
-    _metadata: dict[str, Any] = PrivateAttr(default_factory=dict)
     _paths: Sequence[Path] = PrivateAttr(default_factory=list)
 
     @property
     def signature(self) -> DataSignature:
         return self.DATA_SIGNATURE
-
-    @property
-    def metadata(self) -> dict[str, Any]:
-        return self._metadata
 
     @abstractmethod
     def summary(self) -> str: ...

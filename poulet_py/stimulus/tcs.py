@@ -7,13 +7,12 @@ try:
     from poulet_py import BaseStimulus, TCSCommand
 
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'stim' module. Install options:
 - Dedicated:       pip install poulet_py[qst]
 - Module:       pip install poulet_py[stim]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class TCSStimulus(BaseStimulus):

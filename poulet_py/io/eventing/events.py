@@ -1,23 +1,22 @@
 try:
-    from time import time_ns
+    from time import monotonic_ns
     from typing import Any
 
     from numpydantic import NDArray
     from pydantic import BaseModel, Field
 
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'event' module. Install options:
 - Dedicated:    pip install poulet_py[event]
 - Module:       pip install poulet_py[io]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class BaseEvent(BaseModel):
     name: str = Field(..., description="Name of the data source")
-    timestamp: int = Field(default_factory=time_ns, description="Timestamp of the event")
+    timestamp: int = Field(default_factory=monotonic_ns, description="Timestamp of the event")
 
 
 class SinkEvent(BaseEvent):

@@ -4,7 +4,7 @@ A modular Python library for neuroscientific hardware control, data analysis, an
 [![Unit Tests](https://github.com/poulet-lab/poulet_py/actions/workflows/test-suite.yml/badge.svg?branch=main)](https://github.com/poulet-lab/poulet_py/actions/workflows/test-suite.yml)
 
 ## Overview
-Poulet provides a collection of tools for neuroscience researchers, including:
+Poulet-py provides a collection of tools for neuroscience researchers, including:
 * Hardware communication (e.g., serial devices, DAQ interfaces)
 * Data analysis utilities
 * Experimental workflow automation
@@ -63,15 +63,26 @@ Check the examples/ folder for usage scripts, such as:
 We welcome contributions! Follow these guidelines:
 
 1. Branching
-  * Work on a dedicated branch (git checkout -b your-feature).
-  * Submit PRs to the dev branch (PRs to main will be rejected).
-  
+  * Work on a dedicated branch. Use **lowercase** names only.
+  * Accepted Pattern:
+    `{initials}/{project}/{type}/{short-description}`
+    Example: `john-cage/hamamatsu/documentation/add-info`
+  * Allowed `{type}` values:
+    * `feature` — new capability
+    * `bugfix` — bug fix
+    * `documentation` — docs only
+    * `refactor` — restructure without behavior change
+    * `test` — tests
+    * `performance` — performance work
+  * Submit PRs to the `dev` branch (PRs to `main` will be rejected).
+
 2. Code Standards
   * Tests: Add unit tests in tests/ (mirroring the module structure).
   * Documentation: Use docstrings and update __init__.py for lazy loading.
-  * Type hints: Recommended for new functions.
+  * Use Type hints in all functions.
 
 3. Commit Messages
   * Use semantic prefixes (e.g., feat:, fix:, docs:).
+
 
 

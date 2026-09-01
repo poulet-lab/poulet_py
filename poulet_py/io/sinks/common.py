@@ -3,29 +3,36 @@ try:
     from collections.abc import Callable
     from queue import Full, Queue
     from threading import Thread
-    from typing import Any
+    from time import monotonic_ns, time_ns
+    from typing import Any, Literal
 
+    from numpy import ndarray
     from pydantic import Field, PrivateAttr
 
-    from poulet_py import LOGGER, BaseEvent, EventBus, EventHandler
+    from poulet_py import LOGGER, BaseEvent, EventBus, EventHandler, SinkEvent
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'sinks' module. Install options:
 - Dedicated:    pip install poulet_py[sinks]
 - Module:       pip install poulet_py[io]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class BaseSink(EventHandler):
-    name: str = Field(..., description="Name of the sink")
+    name: str | None = Field(default=None, description="Name of the sink")
     queue_size: int = Field(default=1000, description="Size of the internal queue")
+    convert_timestamp: Literal["datetime", "index"] | Callable | None = Field(default=None)
     meta: dict[str, Any] = Field(
         default_factory=dict, description="Additional metadata for the data packet"
     )
 
+    _time_ns: int = PrivateAttr(default_factory=time_ns)
+    _mono_ns: int = PrivateAttr(default_factory=monotonic_ns)
+    _last_ts: int = PrivateAttr(default=0)
     _bus: EventBus = PrivateAttr(default_factory=EventBus)
+    _external_bus: bool = PrivateAttr(default=False)
+
     _queue: Queue = PrivateAttr()
     _thread: Thread = PrivateAttr()
     _is_open: bool = PrivateAttr(default=False)
@@ -62,16 +69,18 @@ class BaseSink(EventHandler):
     @bus.setter
     def bus(self, value: EventBus):
         if self._is_open:
-            msg = f"Cannot change bus while {self.name} is open"
-            raise RuntimeError(msg)
+            raise RuntimeError(f"Cannot change bus while {self.name} is open")
 
         self._bus = value
+        self._external_bus = True
 
     def open(self):
         if self._is_open:
             return
 
-        self.bus.open()
+        if not self._external_bus:
+            self.bus.open()
+
         self.bus.subscribe(self)
 
         self._queue = Queue(maxsize=self.queue_size)
@@ -90,17 +99,25 @@ class BaseSink(EventHandler):
         self._queue.put(None)
         self._thread.join()
         self._close()
-        self.bus.close()
+
+        if not self._external_bus:
+            self.bus.close()
+
         self._is_open = False
 
     def _run(self):
         while True:
-            event = self._queue.get()
+            event: SinkEvent | None = self._queue.get()
 
-            if event is None:  # sentinel
+            if event is None:
+                self._queue.task_done()
                 break
 
+            if not isinstance(event, SinkEvent):
+                continue
+
             try:
+                self._timestamp_converter(event)
                 self._on_event(event)
             except Exception as e:
                 LOGGER.exception("Error while writing packet: %s", e)
@@ -109,8 +126,20 @@ class BaseSink(EventHandler):
 
     def _ensure_open(self):
         if not self._is_open:
-            msg = f"{type(self)} need to be opened first"
-            raise RuntimeError(msg)
+            raise RuntimeError(f"{type(self)} need to be opened first")
+
+    def _timestamp_converter(self, event: SinkEvent) -> SinkEvent:
+        if isinstance(event.payload, ndarray):
+            if self.convert_timestamp == "datetime":
+                event.payload["timestamp"][:] = (
+                    event.payload["timestamp"][:] - self._mono_ns + self._time_ns
+                )
+            elif self.convert_timestamp == "index":
+                event.payload["timestamp"][:] = event.payload["timestamp"][:] - self._mono_ns
+            elif isinstance(self.convert_timestamp, Callable):
+                self.convert_timestamp(event.payload["timestamp"])
+
+        return event
 
     def __enter__(self):
         self.open()

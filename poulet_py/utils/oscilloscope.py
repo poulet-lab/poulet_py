@@ -11,13 +11,12 @@ try:
     from numpy import arange, array, column_stack, ndarray
     from pandas import DataFrame
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'osc' module. Install options:
 - Dedicated:    pip install poulet_py[osc]
 - Module:       pip install poulet_py[utils]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 class Oscilloscope:

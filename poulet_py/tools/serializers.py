@@ -4,12 +4,11 @@ try:
 
     from orjson import OPT_INDENT_2, OPT_SERIALIZE_NUMPY, JSONEncodeError, dumps
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'tools' module. Install options:
 - Module:       pip install poulet_py[tools]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
+""") from e
 
 
 _SERIALIZATION_OPTIONS = OPT_SERIALIZE_NUMPY | OPT_INDENT_2
@@ -51,15 +50,13 @@ def json_serializer(
     try:
         serialized = dumps(data, option=_SERIALIZATION_OPTIONS)
     except JSONEncodeError as e:
-        msg = "Failed to serialize data to JSON"
-        raise TypeError(msg) from e
+        raise TypeError("Failed to serialize data to JSON") from e
 
     if file is not None:
         path = Path(file) if isinstance(file, str) else file
 
         if path.suffix.lower() != ".json":
-            msg = "file must end with '.json' extension"
-            raise ValueError(msg)
+            raise ValueError("file must end with '.json' extension")
 
         path.parent.mkdir(parents=True, exist_ok=True)
 
