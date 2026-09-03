@@ -10,7 +10,7 @@ try:
     from numpy.typing import DTypeLike
     from pydantic import BaseModel, Field, PrivateAttr
 
-    from poulet_py import BaseStimulus, EventBus, SinkEvent
+    from poulet_py import LOGGER, BaseStimulus, EventBus, SinkEvent
 except ImportError as e:
     raise ImportError("""
 Missing 'sources' module. Install options:
@@ -32,6 +32,15 @@ class BaseSource(BaseModel, ABC):
         default="all", description="List of stimuli to fire on, or 'all' for all stimuli"
     )
     buffer_size: int = Field(default=100, description="Size of the circular buffer", ge=1)
+    convertion_callback: Callable[[ndarray | tuple | dict], ndarray | tuple | dict] | None = Field(
+        default=None, description="Optional callback to convert the data before publishing"
+    )
+    data_integrity_callback: Callable[[ndarray | tuple | dict], bool] | None = Field(
+        default=None, description="Optional callback to check the health of the data"
+    )
+    data_integrity_raise: bool = Field(
+        default=False, description="Whether to raise an error if data integrity check fails"
+    )
 
     _bus: EventBus = PrivateAttr(default_factory=EventBus)
     _external_bus: bool = PrivateAttr(default=False)
@@ -167,6 +176,19 @@ class BaseSource(BaseModel, ABC):
         self._source_buffer_needle = 0
 
     def _write_sample(self, sample: tuple | dict) -> None:
+        if self.convertion_callback is not None:
+            s = self.convertion_callback(sample)
+            if isinstance(s, ndarray):
+                raise ValueError("convertion_callback must return a tuple or dict, not an ndarray")
+            sample = s
+
+        if self.data_integrity_callback is not None:
+            if not self.data_integrity_callback(sample):
+                if self.data_integrity_raise:
+                    raise ValueError("Data integrity check failed for the written samples.")
+                else:
+                    LOGGER.warning("Data integrity check failed for the written samples.")
+
         with self._lock:
             idx = self._source_buffer_idx % self.buffer_size
 
@@ -180,6 +202,21 @@ class BaseSource(BaseModel, ABC):
 
     def _write_samples(self, samples: ndarray) -> None:
         n = len(samples)
+        if n == 0:
+            return
+
+        if self.convertion_callback is not None:
+            s = self.convertion_callback(samples)
+            if not isinstance(s, ndarray):
+                raise ValueError("convertion_callback must return an ndarray when given an ndarray")
+            samples = s
+
+        if self.data_integrity_callback is not None:
+            if not self.data_integrity_callback(samples):
+                if self.data_integrity_raise:
+                    raise ValueError("Data integrity check failed for the written samples.")
+                else:
+                    LOGGER.warning("Data integrity check failed for the written samples.")
 
         with self._lock:
             start = self._source_buffer_idx % self.buffer_size
