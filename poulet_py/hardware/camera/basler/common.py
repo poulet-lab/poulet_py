@@ -426,8 +426,8 @@ class BaslerCamera(BaseModel):
 
     def _set_buffer(self) -> None:
         width, height = self.resolution or (
-            self._basler_camera.Width.Max,
-            self._basler_camera.Height.Max,
+            self._basler_camera.Width.Value,
+            self._basler_camera.Height.Value,
         )
         self._basler_buffer = zeros(
             self.buffer_size,
@@ -510,10 +510,10 @@ class BaslerCamera(BaseModel):
             try:
                 self._acquire_sample()
             except Exception as e:
+                LOGGER.exception(e)
                 self._basler_stop_acquisition_event.set()
                 with self._basler_acquisition_cond:
                     self._basler_acquisition_cond.notify_all()
-                LOGGER.exception(e)
 
     def __enter__(self):
         self.open()
