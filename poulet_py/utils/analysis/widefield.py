@@ -29,6 +29,7 @@ try:
 
     from poulet_py import LOGGER, Session, WidefieldData
     from poulet_py.io.data_structures.widefield import WidefieldMaskMetaData
+    from poulet_py.utils.analysis.motion import apply_motion_correction
 
 except ImportError as e:
     msg = """
@@ -43,12 +44,16 @@ Also ensure: h5py, numpy, pandas, scikit-image, imageio, matplotlib are installe
 
 
 class WidefieldAnalysis(Session):
+    _downscaled_imaging: dict[int, ndarray] = PrivateAttr(default_factory=dict)
+    _motion_vectors: dict[str, ndarray] = PrivateAttr(default_factory=dict)
+    _motion_reference_images: dict[str, ndarray] = PrivateAttr(default_factory=dict)
+
     def model_post_init(self, __context):
         trials = []
         with ProgressBar("Widefield Analysis Init") as pb:
             for trial in pb(self.trials, label="Trials", total=len(self.trials)):
                 if isinstance(trial.data, WidefieldData):
-                    trials.append(trials)
+                    trials.append(trial)
         self._trials._data = trials
 
     def downscale(self, target: tuple[int, int] | int | float, *, inplace: bool = False) -> Self:
@@ -104,6 +109,42 @@ class WidefieldAnalysis(Session):
                 trial.data.metadata.level = "processed"
 
         return obj
+
+    def motion_correction(
+        self,
+        motion_region: tuple | None = None,
+        shift_method: str = "integer",
+        n_parallel_workers: int | None = 4,
+        reference_image: ndarray | None = None,
+        *,
+        inplace: bool = False,
+    ) -> Self | None:
+        obj = self if inplace else self.model_copy(deep=True)
+
+        for trial in obj.trials:
+            if not isinstance(trial.data, WidefieldData):
+                continue
+
+            imaging_data = trial.data.imaging
+
+            if imaging_data is None:
+                LOGGER.warning("No imaging data loaded. Call load_data() first.")
+                return None
+
+            corrected_movie, motion_vectors, motion_reference_image = apply_motion_correction(
+                imaging_data,
+                motion_region=motion_region,
+                shift_method=shift_method,
+                n_parallel_workers=n_parallel_workers,
+                reference_image=reference_image,
+            )
+            trial.data._imaging = corrected_movie
+            trial_key = str(trial.path)
+            obj._motion_vectors[trial_key] = motion_vectors
+            obj._motion_reference_images[trial_key] = motion_reference_image
+
+        if not inplace:
+            return obj
 
     def calculate_percentile(
         self,
@@ -267,6 +308,21 @@ class WidefieldAnalysis(Session):
                 trial.data.metadata.level = "processed"
 
         return obj
+
+    def to_numpy(self) -> dict[str, ndarray]:
+        data_dict = {}
+
+        for trial in self.trials:
+            if not isinstance(trial.data, WidefieldData):
+                continue
+
+            if trial.data.imaging is None:
+                LOGGER.warning("No imaging data loaded. Call load_data() first.")
+                continue
+
+            data_dict[trial.path.name] = trial.data.imaging
+
+        return data_dict
 
     @overload
     def save(
