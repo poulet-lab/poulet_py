@@ -7,7 +7,7 @@ try:
     from h5py import File
     from numpy import array, ndarray
     from pandas import DataFrame, read_csv
-    from pydantic import BaseModel, Field, PrivateAttr
+    from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
     from skimage.io import imread
 
     from poulet_py import BaseData, BaseMetadata, DataSignature, DataStructure
@@ -27,10 +27,32 @@ class WidefieldMaskMetaData(BaseModel):
 
 
 class WidefieldMetadata(BaseMetadata):
+    """Trial metadata read from the v1 acquisition file, one trial per instance."""
+
+    # TODO discuss richer types for timestamp, time, folder, camera_roi_active
+    # TODO discuss explicit typing for the per-channel analog_output attributes
+    model_config = ConfigDict(validate_assignment=True)
+
     mask_data: WidefieldMaskMetaData | None = Field(default=None)
-    analog_output: dict[str, Any] = Field(
-        default_factory=dict
-    )  # TODO make explicit metadata classes
+    analog_output: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    mouse_id: str | None = Field(default=None)
+    protocol_name: str | None = Field(default=None)
+    time: str | None = Field(default=None)
+    timestamp: float | None = Field(default=None)
+    experimenter: str | None = Field(default=None)
+    comment: str | None = Field(default=None)
+    folder: str | None = Field(default=None)
+    camera_fps: int | None = Field(default=None)
+    camera_exposure: float | None = Field(default=None)
+    camera_format: str | None = Field(default=None)
+    camera_roi_active: int | None = Field(default=None)
+    binning: int | None = Field(default=None)
+    magnification: float | None = Field(default=None)
+    filterset: str | None = Field(default=None)
+    led_power: float | None = Field(default=None)
+    weight: float | None = Field(default=None)
+    anesthesia: str | None = Field(default=None)
+    isoflurane: float | None = Field(default=None)
 
 
 class WidefieldData(BaseData[WidefieldMetadata], ABC):
@@ -127,9 +149,9 @@ class WidefieldData(BaseData[WidefieldMetadata], ABC):
                 sr = attrs.get("sr", "unknown")
                 lines.append(f"  {name}: shape={data.shape}, sr={sr} Hz")
 
-        mouse_id = self.metadata.analog_output.get("global", {}).get("mouse_id", "unknown")
-        protocol = self.metadata.analog_output.get("global", {}).get("protocol_name", "unknown")
-        comment = self.metadata.analog_output.get("global", {}).get("comment", "")
+        mouse_id = self.metadata.mouse_id or "unknown"
+        protocol = self.metadata.protocol_name or "unknown"
+        comment = self.metadata.comment or ""
         lines.extend(["Metadata:", f"  Mouse: {mouse_id}", f"  Protocol: {protocol}"])
         if comment:
             lines.append(f"  Comment: {comment}")
@@ -185,9 +207,10 @@ class WidefieldDataV1(WidefieldData):
 
     def _analog_output_metadata(self):
         def _visit_datasets(name: str, obj: Any) -> None:
-            self.metadata.analog_output["global"] = dict(f.attrs)
             if isinstance(obj, h5py.Dataset):
                 self.metadata.analog_output[name] = dict(obj.attrs)
 
         with File(self._analog_output_path, "r") as f:
+            for key, value in f.attrs.items():
+                setattr(self.metadata, key, value)
             f.visititems(_visit_datasets)
