@@ -159,7 +159,7 @@ class BaseSource(BaseModel, ABC):
             if n > self.buffer_size:
                 new_size = int(n * 1.5)
                 LOGGER.warning(
-                    f"[{self.name}] Incoming batch size ({n}) exceeds buffer_size ({self.buffer_size}). "
+                    f"{type(self).__name__} Incoming batch size ({n}) exceeds buffer_size ({self.buffer_size}). "
                     f"Automatically expanding circular buffer to {new_size} to prevent data loss."
                 )
 
