@@ -155,6 +155,7 @@ class NIBaseTask(BaseModel, ABC):
     _clock: NIClockHandle = PrivateAttr()
     _task: Task = PrivateAttr(default_factory=Task)
     _is_open: bool = PrivateAttr(default=False)
+    _has_started: bool = PrivateAttr(default=False)
 
     @property
     def requires_clock(self) -> bool:
@@ -167,6 +168,10 @@ class NIBaseTask(BaseModel, ABC):
     @property
     def is_open(self) -> bool:
         return self._is_open
+
+    @property
+    def has_started(self) -> bool:
+        return self._has_started
 
     @property
     def task(self) -> Task | None:
@@ -209,10 +214,12 @@ class NIBaseTask(BaseModel, ABC):
         self._ensure_open()
         self._task.control(TaskMode.TASK_VERIFY)
         self._task.start()
+        self._has_started = True
 
     def stop(self) -> None:
         self._ensure_open()
         self._task.stop()
+        self._has_started = False
 
     def _ensure_open(self) -> None:
         if not self._is_open:
@@ -321,7 +328,7 @@ class NIAnalogInputTask(NIBaseTask):
         )
         self._reader = AnalogMultiChannelReader(self._task.in_stream)
 
-    def read(self, samples: int = -1, timeout: float = 0.0) -> ndarray:
+    def read(self, samples: int = -1, timeout: float = 0.0) -> ndarray | None:
         """
         Read analog input samples as a timestamped structured array.
 
@@ -333,6 +340,14 @@ class NIAnalogInputTask(NIBaseTask):
             Timeout in seconds to wait for data. Use -1 to wait indefinitely.
         """
         self._ensure_open()
+
+        if not self.has_started:
+            return None
+
+        n = self._reader._in_stream.avail_samp_per_chan
+
+        if n == 0:
+            return None
 
         n = self._reader.read_many_sample(
             self._ai_buffer,
@@ -352,7 +367,9 @@ class NIAnalogInputTask(NIBaseTask):
             timestamp[:] = t0
             timestamp += dt * arange(n, dtype="uint64")
 
-        return self._buffer[:n]
+            return self._buffer[:n]
+
+        return None
 
 
 class NIAnalogOutputTask(NIBaseTask):
@@ -468,6 +485,14 @@ class NIDigitalInputTask(NIBaseTask):
         """
         self._ensure_open()
 
+        if not self.has_started:
+            return None
+
+        n = self._reader._in_stream.avail_samp_per_chan
+
+        if n == 0:
+            return None
+
         n = self._reader.read_many_sample_port_uint32(self._di_buffer, samples, timeout)
 
         if n > 0:
@@ -482,7 +507,9 @@ class NIDigitalInputTask(NIBaseTask):
             timestamp[:] = t0
             timestamp += dt * arange(n, dtype="uint64")
 
-        return self._buffer[:n]
+            return self._buffer[:n]
+
+        return None
 
 
 class NIDigitalOutputTask(NIBaseTask):
@@ -717,7 +744,9 @@ class NIDaQ(BaseModel):
 
             for future in as_completed(future_map):
                 task = future_map[future]
-                ret[task.name] = future.result()
+                result = future.result()
+                if result is not None:
+                    ret[task.name] = result
         else:
             self._clock_task._task.wait_until_done(-1)
         return ret
