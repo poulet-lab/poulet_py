@@ -310,6 +310,11 @@ class StimulatorRuntime(BaseModel):
                         LOGGER.info("Trial %d: %s", trial_idx, trial_info)
 
                         for s in self.sources:
+                            if s.has_crashed:
+                                # TODO gracefully close the rest
+                                raise RuntimeError(
+                                    f"Source {s.name} has crashed, Stopping Experiment"
+                                )
                             s.fire(trial.stimuli)
 
                         for s in self.sources:

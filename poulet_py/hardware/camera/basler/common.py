@@ -496,7 +496,7 @@ class BaslerCamera(BaseModel):
             self.timeout if self.timeout is not None else waitForever, TimeoutHandling_Return
         )
 
-        if result.GrabSucceeded():
+        if result and result.GrabSucceeded():
             ticks = result.GetTimeStamp()
             timestamp = ticks if self.precise_time_protocol else ticks * 8
             self._basler_frames_to_buffer(result.GetArray(), timestamp)
