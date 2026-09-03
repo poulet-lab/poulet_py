@@ -14,6 +14,20 @@ from .sources import (
     INA228Source,
     DCAMSource,
 )
+from .data_structures import (
+    BaseMetadata,
+    BaseData,
+    WidefieldData,
+    DataSignature,
+    DATA_SIGNATURES,
+    DataStructure,
+    BasePattern,
+    PathPattern,
+    DiscoveryStrategy,
+    PatternBasedDiscovery,
+    ExplicitDiscovery,
+    GlobBasedDiscovery,
+)
 
 __all__ = [
     "AcquisitionType",
@@ -28,10 +42,22 @@ __all__ = [
     "EventBus",
     "EventHandler",
     "HDFSink",
+    "BaseData",
+    "DataSignature",
+    "WidefieldData",
     "HDFSink",
     "NIDaQSource",
     "SinkEvent",
     "TCSSource",
     "OpenEphysSource",
+    "DATA_SIGNATURES",
+    "DataStructure",
+    "BasePattern",
+    "PathPattern",
+    "DiscoveryStrategy",
+    "PatternBasedDiscovery",
+    "ExplicitDiscovery",
+    "GlobBasedDiscovery",
+    "BaseMetadata",
     "DCAMSource",
 ]

@@ -89,6 +89,7 @@ triggers = ["poulet_py[gpio]"]
 gpio = ["gpiozero<=2.0.1.post3", "lgpio<=0.2.2.0; platform_system == 'Linux'"]
 soho = ["pandas<=3.0.2"]
 # IO
+data = ["h5py<=3.16.0", "pandas<=3.0.2", "numpy<=2.4.4", "scikit-image<=0.26.0"]
 event = ["numpydantic<=1.10.0"]
 sinks = ["poulet_py[event]", "h5py<=3.16.0", "orjson<=3.12.0", "numpy<=2.4.4"]
 sources = [
@@ -104,13 +105,20 @@ sources = [
 # Utils
 exp = ["poulet_py[io]"]
 osc = ["pandas<=3.0.2", "matplotlib<=3.10.9", "numpy<=2.4.4"]
+analysis = [
+  "pandas<=3.0.2",
+  "numpy<=2.4.4",
+  "scipy<=1.17.1",
+  "matplotlib<=3.10.9",
+  "scikit-image<=0.26.0",
+]
 ## Main modules ##
 converters = ["poulet_py[seq]"]
 hardware = ["poulet_py[camera, daq, arduino, julabo, qst, triggers, soho]"]
-io = ["poulet_py[event, sinks, sources]"]
+io = ["poulet_py[event, sinks, sources, data]"]
 stimuli = ["poulet_py[qst, nidaq, io, tools, utils]"]
 tools = ["orjson<=3.12.0"]
-utils = ["poulet_py[exp, osc]"]
+utils = ["poulet_py[exp, osc, analysis]"]
 # Install all modules
 all = ["poulet_py[converters, hardware, io, stimuli, tools, utils]"]
 # Docs
