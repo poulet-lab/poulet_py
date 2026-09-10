@@ -1,5 +1,6 @@
 try:
-    from numpy import empty
+    from numpy import ndarray, zeros
+    from pydantic import PrivateAttr
 
     from poulet_py import (
         AcquisitionType,
@@ -22,6 +23,8 @@ Missing 'sources' module. Install options:
 
 
 class NIDaQSource(BaseSource, NIDaQ):
+    _temp_buffer: ndarray = PrivateAttr()
+
     def _set_buffer_dtype(self):
         dtype = [("timestamp", "uint64")]
 
@@ -37,7 +40,9 @@ class NIDaQSource(BaseSource, NIDaQ):
         self._source_buffer_dtype = dtype
 
     def _open(self):
+        self._set_buffer_dtype()
         NIDaQ.open(self)
+        self._temp_buffer = zeros(self._clock_task.samps_per_chan, dtype=self._source_buffer_dtype)
 
         if self.acquisition_type == AcquisitionType.CONTINUOUS:
             self.start()
@@ -73,26 +78,30 @@ class NIDaQSource(BaseSource, NIDaQ):
             self._rw_data()
 
     def _rw_data(self):
-        data = self.read(-1, 0.0)
+        data = self.read(-1, -1)
 
         if data:
-            lengths = [len(v) for v in data.values() if len(v) > 0]
+            lengths = [len(v) for v in data.values() if v is not None and len(v) > 0]
 
             if lengths:
+                # TODO fix to avoid data loss
                 n = min(lengths)
-                samples = empty(n, dtype=self._source_buffer_dtype)
 
                 t_prev = 0
                 task_name = ""
 
                 for task in self._read_tasks:
                     if task.name in data:
+                        # TODO concat instead of just first timestamp
                         if not task_name or t_prev > data[task.name]["timestamp"][0]:
                             task_name = task.name
                             t_prev = data[task.name]["timestamp"][0]
 
                         for ch in task.channels:
-                            samples[f"{task.name}_{ch.name}"] = data[task.name][ch.name][:n]
+                            self._temp_buffer[f"{task.name}_{ch.name}"][:n] = data[task.name][
+                                ch.name
+                            ][:n]
 
-                samples["timestamp"] = data[task_name]["timestamp"][:n]
-                self._write_samples(samples)
+                self._temp_buffer["timestamp"][:n] = data[task_name]["timestamp"][:n]
+
+                self._write_samples(self._temp_buffer[:n])
