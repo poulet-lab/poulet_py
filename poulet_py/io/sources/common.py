@@ -268,7 +268,7 @@ class BaseSource(BaseModel, ABC):
         return True
 
     def _get_new_chunk(self) -> ndarray | None:
-        #TODO write in chunks
+        # TODO write in chunks
         with self._lock:
             current = self._source_buffer_idx
             last = self._source_buffer_needle
