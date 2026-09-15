@@ -26,11 +26,57 @@ class WidefieldMaskMetaData(BaseModel):
     radius: float = Field(default=0.0)
 
 
+class WidefieldCameraMetadata(BaseModel):
+    """Camera and optical settings stored in a v1 acquisition file."""
+
+    format: str = Field(default="")
+    fps: int = Field(default=0)
+    exposure: float = Field(default=0.0)
+    roi_active: bool = Field(default=False)
+    roi: tuple[int, int, int, int] | None = Field(default=None)
+    binning: int = Field(default=0)
+    magnification: float = Field(default=0.0)
+    filterset: str = Field(default="")
+    led_power: float = Field(default=0.0)
+
+
+class WidefieldSubjectMetadata(BaseModel):
+    """Subject and preparation details stored in a v1 acquisition file."""
+
+    mouse_id: str = Field(default="")
+    weight: float = Field(default=0.0)
+    anesthesia: str = Field(default="")
+    isoflurane: float = Field(default=0.0)
+
+
+class WidefieldAcquisitionMetadata(BaseModel):
+    """Trial context stored in a v1 acquisition file."""
+
+    protocol_name: str = Field(default="")
+    time: str = Field(default="")
+    timestamp: float = Field(default=0.0)
+    experimenter: str = Field(default="")
+    comment: str = Field(default="")
+    folder: str = Field(default="")
+
+
+class WidefieldChannelMetadata(BaseModel):
+    """Attributes of one channel recorded alongside the imaging."""
+
+    id: str = Field(default="")
+    name: str = Field(default="")
+    sr: int = Field(default=0)
+    device: str = Field(default="")
+
+
 class WidefieldMetadata(BaseMetadata):
+    """Typed metadata read from a v1 widefield acquisition file."""
+
     mask_data: WidefieldMaskMetaData | None = Field(default=None)
-    analog_output: dict[str, Any] = Field(
-        default_factory=dict
-    )  # TODO make explicit metadata classes
+    camera: WidefieldCameraMetadata = Field(default_factory=WidefieldCameraMetadata)
+    subject: WidefieldSubjectMetadata = Field(default_factory=WidefieldSubjectMetadata)
+    acquisition: WidefieldAcquisitionMetadata = Field(default_factory=WidefieldAcquisitionMetadata)
+    analog_output: dict[str, WidefieldChannelMetadata] = Field(default_factory=dict)
 
 
 class WidefieldData(BaseData[WidefieldMetadata], ABC):
@@ -72,7 +118,7 @@ class WidefieldData(BaseData[WidefieldMetadata], ABC):
 
     @abstractmethod
     def _open_reference_image(self):
-        """Open the green reference image file and store it in self._reference_image."""
+        """Open the green reference image and store it."""
         ...
 
     @abstractmethod
@@ -123,13 +169,13 @@ class WidefieldData(BaseData[WidefieldMetadata], ABC):
         if self.analog_output:
             lines.append("Analog output data:")
             for name, data in self.analog_output.items():
-                attrs = self.metadata.analog_output.get(name, {})
-                sr = attrs.get("sr", "unknown")
+                channel = self.metadata.analog_output.get(name)
+                sr = channel.sr if channel else "unknown"
                 lines.append(f"  {name}: shape={data.shape}, sr={sr} Hz")
 
-        mouse_id = self.metadata.analog_output.get("global", {}).get("mouse_id", "unknown")
-        protocol = self.metadata.analog_output.get("global", {}).get("protocol_name", "unknown")
-        comment = self.metadata.analog_output.get("global", {}).get("comment", "")
+        mouse_id = self.metadata.subject.mouse_id
+        protocol = self.metadata.acquisition.protocol_name
+        comment = self.metadata.acquisition.comment
         lines.extend(["Metadata:", f"  Mouse: {mouse_id}", f"  Protocol: {protocol}"])
         if comment:
             lines.append(f"  Comment: {comment}")
@@ -185,9 +231,43 @@ class WidefieldDataV1(WidefieldData):
 
     def _analog_output_metadata(self):
         def _visit_datasets(name: str, obj: Any) -> None:
-            self.metadata.analog_output["global"] = dict(f.attrs)
             if isinstance(obj, h5py.Dataset):
-                self.metadata.analog_output[name] = dict(obj.attrs)
+                self.metadata.analog_output[name] = WidefieldChannelMetadata(
+                    id=obj.attrs.get("id", ""),
+                    name=obj.attrs.get("name", ""),
+                    sr=obj.attrs["sr"],
+                    device=obj.attrs.get("device", ""),
+                )
 
         with File(self._analog_output_path, "r") as f:
+            attributes = f.attrs
+            self.metadata = WidefieldMetadata(
+                level=self.metadata.level,
+                mask_data=self.metadata.mask_data,
+                camera=WidefieldCameraMetadata(
+                    format=attributes.get("camera_format", ""),
+                    fps=attributes["camera_fps"],
+                    exposure=attributes["camera_exposure"],
+                    roi_active=attributes["camera_roi_active"],
+                    roi=attributes.get("camera_roi"),
+                    binning=attributes["binning"],
+                    magnification=attributes["magnification"],
+                    filterset=attributes.get("filterset", ""),
+                    led_power=attributes["led_power"],
+                ),
+                subject=WidefieldSubjectMetadata(
+                    mouse_id=attributes.get("mouse_id", ""),
+                    weight=attributes["weight"],
+                    anesthesia=attributes.get("anesthesia", ""),
+                    isoflurane=attributes["isoflurane"],
+                ),
+                acquisition=WidefieldAcquisitionMetadata(
+                    protocol_name=attributes.get("protocol_name", ""),
+                    time=attributes.get("time", ""),
+                    timestamp=attributes["timestamp"],
+                    experimenter=attributes.get("experimenter", ""),
+                    comment=attributes.get("comment", ""),
+                    folder=attributes.get("folder", ""),
+                ),
+            )
             f.visititems(_visit_datasets)
