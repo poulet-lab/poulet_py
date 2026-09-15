@@ -30,23 +30,23 @@ class WidefieldCameraMetadata(BaseModel):
     """Camera and optical settings stored in a v1 acquisition file."""
 
     format: str = Field(default="")
-    fps: int | None = Field(default=None)
-    exposure: float | None = Field(default=None)
-    roi_active: bool | None = Field(default=None)
+    fps: int = Field(default=0)
+    exposure: float = Field(default=0.0)
+    roi_active: bool = Field(default=False)
     roi: tuple[int, int, int, int] | None = Field(default=None)
-    binning: int | None = Field(default=None)
-    magnification: float | None = Field(default=None)
+    binning: int = Field(default=0)
+    magnification: float = Field(default=0.0)
     filterset: str = Field(default="")
-    led_power: float | None = Field(default=None)
+    led_power: float = Field(default=0.0)
 
 
 class WidefieldSubjectMetadata(BaseModel):
     """Subject and preparation details stored in a v1 acquisition file."""
 
     mouse_id: str = Field(default="")
-    weight: float | None = Field(default=None)
+    weight: float = Field(default=0.0)
     anesthesia: str = Field(default="")
-    isoflurane: float | None = Field(default=None)
+    isoflurane: float = Field(default=0.0)
 
 
 class WidefieldAcquisitionMetadata(BaseModel):
@@ -54,7 +54,7 @@ class WidefieldAcquisitionMetadata(BaseModel):
 
     protocol_name: str = Field(default="")
     time: str = Field(default="")
-    timestamp: float | None = Field(default=None)
+    timestamp: float = Field(default=0.0)
     experimenter: str = Field(default="")
     comment: str = Field(default="")
     folder: str = Field(default="")
@@ -65,7 +65,7 @@ class WidefieldChannelMetadata(BaseModel):
 
     id: str = Field(default="")
     name: str = Field(default="")
-    sr: int | None = Field(default=None)
+    sr: int = Field(default=0)
     device: str = Field(default="")
 
 
@@ -170,7 +170,7 @@ class WidefieldData(BaseData[WidefieldMetadata], ABC):
             lines.append("Analog output data:")
             for name, data in self.analog_output.items():
                 channel = self.metadata.analog_output.get(name)
-                sr = channel.sr if channel and channel.sr is not None else "unknown"
+                sr = channel.sr if channel else "unknown"
                 lines.append(f"  {name}: shape={data.shape}, sr={sr} Hz")
 
         mouse_id = self.metadata.subject.mouse_id
@@ -235,7 +235,7 @@ class WidefieldDataV1(WidefieldData):
                 self.metadata.analog_output[name] = WidefieldChannelMetadata(
                     id=obj.attrs.get("id", ""),
                     name=obj.attrs.get("name", ""),
-                    sr=obj.attrs.get("sr"),
+                    sr=obj.attrs["sr"],
                     device=obj.attrs.get("device", ""),
                 )
 
@@ -246,25 +246,25 @@ class WidefieldDataV1(WidefieldData):
                 mask_data=self.metadata.mask_data,
                 camera=WidefieldCameraMetadata(
                     format=attributes.get("camera_format", ""),
-                    fps=attributes.get("camera_fps"),
-                    exposure=attributes.get("camera_exposure"),
-                    roi_active=attributes.get("camera_roi_active"),
+                    fps=attributes["camera_fps"],
+                    exposure=attributes["camera_exposure"],
+                    roi_active=attributes["camera_roi_active"],
                     roi=attributes.get("camera_roi"),
-                    binning=attributes.get("binning"),
-                    magnification=attributes.get("magnification"),
+                    binning=attributes["binning"],
+                    magnification=attributes["magnification"],
                     filterset=attributes.get("filterset", ""),
-                    led_power=attributes.get("led_power"),
+                    led_power=attributes["led_power"],
                 ),
                 subject=WidefieldSubjectMetadata(
                     mouse_id=attributes.get("mouse_id", ""),
-                    weight=attributes.get("weight"),
+                    weight=attributes["weight"],
                     anesthesia=attributes.get("anesthesia", ""),
-                    isoflurane=attributes.get("isoflurane"),
+                    isoflurane=attributes["isoflurane"],
                 ),
                 acquisition=WidefieldAcquisitionMetadata(
                     protocol_name=attributes.get("protocol_name", ""),
                     time=attributes.get("time", ""),
-                    timestamp=attributes.get("timestamp"),
+                    timestamp=attributes["timestamp"],
                     experimenter=attributes.get("experimenter", ""),
                     comment=attributes.get("comment", ""),
                     folder=attributes.get("folder", ""),
