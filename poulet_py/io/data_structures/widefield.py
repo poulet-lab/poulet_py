@@ -73,18 +73,10 @@ class WidefieldMetadata(BaseMetadata):
     """Typed metadata read from a v1 widefield acquisition file."""
 
     mask_data: WidefieldMaskMetaData | None = Field(default=None)
-    camera: WidefieldCameraMetadata = Field(
-        default_factory=WidefieldCameraMetadata
-    )
-    subject: WidefieldSubjectMetadata = Field(
-        default_factory=WidefieldSubjectMetadata
-    )
-    acquisition: WidefieldAcquisitionMetadata = Field(
-        default_factory=WidefieldAcquisitionMetadata
-    )
-    analog_output: dict[str, WidefieldChannelMetadata] = Field(
-        default_factory=dict
-    )
+    camera: WidefieldCameraMetadata = Field(default_factory=WidefieldCameraMetadata)
+    subject: WidefieldSubjectMetadata = Field(default_factory=WidefieldSubjectMetadata)
+    acquisition: WidefieldAcquisitionMetadata = Field(default_factory=WidefieldAcquisitionMetadata)
+    analog_output: dict[str, WidefieldChannelMetadata] = Field(default_factory=dict)
 
 
 class WidefieldData(BaseData[WidefieldMetadata], ABC):
@@ -93,9 +85,7 @@ class WidefieldData(BaseData[WidefieldMetadata], ABC):
     _imaging: ndarray[Any, Any] = PrivateAttr()
     _reference_image: ndarray[Any, Any] = PrivateAttr()
     _timestamps: DataFrame = PrivateAttr()
-    _analog_output: dict[str, ndarray[Any, Any]] = PrivateAttr(
-        default_factory=dict
-    )
+    _analog_output: dict[str, ndarray[Any, Any]] = PrivateAttr(default_factory=dict)
 
     @property
     def imaging(self):
@@ -162,10 +152,7 @@ class WidefieldData(BaseData[WidefieldMetadata], ABC):
                 f"  Frames: {n_frames}",
                 f"  Resolution: {width} x {height}",
                 f"  Dtype: {self.imaging.dtype}",
-                (
-                    f"  Value range: "
-                    f"[{self.imaging.min()}, {self.imaging.max()}]"
-                ),
+                (f"  Value range: [{self.imaging.min()}, {self.imaging.max()}]"),
             ]
         )
         size_mb = self.imaging.nbytes / (1024 * 1024)
@@ -183,19 +170,13 @@ class WidefieldData(BaseData[WidefieldMetadata], ABC):
             lines.append("Analog output data:")
             for name, data in self.analog_output.items():
                 channel = self.metadata.analog_output.get(name)
-                sr = (
-                    channel.sr
-                    if channel and channel.sr is not None
-                    else "unknown"
-                )
+                sr = channel.sr if channel and channel.sr is not None else "unknown"
                 lines.append(f"  {name}: shape={data.shape}, sr={sr} Hz")
 
         mouse_id = self.metadata.subject.mouse_id
         protocol = self.metadata.acquisition.protocol_name
         comment = self.metadata.acquisition.comment
-        lines.extend(
-            ["Metadata:", f"  Mouse: {mouse_id}", f"  Protocol: {protocol}"]
-        )
+        lines.extend(["Metadata:", f"  Mouse: {mouse_id}", f"  Protocol: {protocol}"])
         if comment:
             lines.append(f"  Comment: {comment}")
 
