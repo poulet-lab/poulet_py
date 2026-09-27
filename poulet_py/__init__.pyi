@@ -46,6 +46,7 @@ from .io import (
     ThermocoupleType,
     StimuliMetadataSource,
     DCAMSource,
+    TCAMSource,
 )
 from .stimulus import (
     BaseStimulus,
@@ -153,4 +154,5 @@ __all__ = [
     "DCAM",
     "DCAMPROP",
     "DCAMSource",
+    "TCAMSource",
 ]
