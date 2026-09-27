@@ -79,7 +79,7 @@ def _load_uvctypes() -> Any:
     return uvc
 
 
-class ThermalCamera(BaseModel):
+class Lepton3_5(BaseModel):
     """Hardware interface for a PureThermal-attached FLIR Lepton 3.5.
 
     Frames remain raw TLinear Y16 values. With the camera's expected 0.01 K

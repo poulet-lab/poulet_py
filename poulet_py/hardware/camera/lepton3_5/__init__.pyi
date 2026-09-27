@@ -1,4 +1,4 @@
 # ruff: noqa TID252
-from .thermal import ThermalCamera
+from .lepton3_5 import ThermalCamera
 
 __all__ = ["ThermalCamera"]
