@@ -1,6 +1,6 @@
 try:
     from collections.abc import Sequence
-    from random import shuffle
+    from random import shuffle, sample
     from typing import Any, Literal
 except ImportError as e:
     raise ImportError("""
@@ -11,7 +11,7 @@ Missing 'tools' module. Install options:
 
 
 def repeat(
-    l: Sequence[Any], n: int, *, mode: Literal["random", "sequential"] = "random"
+    l: Sequence[Any], n: int, *, mode: Literal["random", "sequential"] = "random", chunk: bool = False, chunk_n: int = 1,
 ) -> Sequence[Any]:
     """
     Generate a list of trials with specified stimuli distribution.
@@ -65,7 +65,13 @@ def repeat(
 
     _l = list(l) * n
     if mode == "random":
-        shuffle(_l)
+        if chunk:
+            for i in list(range(0,len(_l),chunk_n)):
+                j = min(i+chunk_n,len(_l))
+                _l[i:j] = sample(_l[i:j], k=j-i)
+        else:
+            shuffle(_l)
+
         return _l
     elif mode == "sequential":
         return _l

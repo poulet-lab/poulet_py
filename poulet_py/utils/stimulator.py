@@ -88,6 +88,13 @@ class StimulatorBlock(BaseModel):
     trial_order: Literal["random", "sequential"] = Field(
         default="random", description="Order of trials"
     )
+    
+    chunked_shuffle: bool = Field(
+        default=False, description="Specify whether to sub-block"
+    )
+    chunk_size: int = Field(
+        default=1, ge=1, description="Number of trials in sub-blocks if using"
+    )
 
     trigger: BaseTrigger | None = Field(default=None, description="Trigger for the trial")
     trigger_policy: Literal["abort", "skip"] = Field(
@@ -372,7 +379,8 @@ class StimulatorRuntime(BaseModel):
         blocks = repeat(self.blocks, self.block_repetitions, mode=self.block_order)
 
         return [
-            (block, repeat(block.trials, block.trial_repetitions, mode=block.trial_order))
+            (block, repeat(block.trials, block.trial_repetitions, mode=block.trial_order, 
+                           chunk=block.chunked_shuffle, chunk_n = block.chunk_size))
             for block in blocks
         ]
 
