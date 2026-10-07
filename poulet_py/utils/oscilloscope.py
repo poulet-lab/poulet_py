@@ -1,6 +1,5 @@
 import ctypes
 import time
-from dataclasses import dataclass
 from queue import Full, Queue
 from threading import Thread
 from typing import Any, ClassVar, Literal
@@ -13,31 +12,26 @@ from screeninfo import ScreenInfoError, get_monitors
 
 from poulet_py.config.logging import LOGGER
 
-_INVALID = -(1 << 62)  # "no data" marker for the int64 bin ids
 
+class Trace(BaseModel):
+    key: str = Field(...)
+    label: str = Field(...)
+    color: tuple[int, int, int, int] | Literal["random"] = Field(default="random")
 
-@dataclass
-class Trace:
-    key: str
-    label: str
-    visual: Any
-    gid: np.ndarray  # (n_bins,) int64 global bin id stored in each slot
-    mn: np.ndarray  # (n_bins,) float32
-    mx: np.ndarray  # (n_bins,) float32
-    positions: np.ndarray  # (n_pts - 1, 2, 3) LINE_LIST segments
-    g_latest: int = _INVALID
+    _current_bin: int = PrivateAttr(default=0)
+    _gid: np.ndarray  # (n_bins,) int64 global bin id stored in each slot
 
-    color: tuple[int, int, int, int]
+    _positions: np.ndarray  # (n_pts - 1, 2, 3) LINE_LIST segments
+
+    def model_post_init(self, context):
+        self._gid = (np.full(self._n_bins, _INVALID, dtype="int64"),)
 
     def _fill_positions(self):
-        """Build segments from the valid bins in x order; hide the cursor seam."""
-        n = self._n_bins
+        n = self.n_bins
         pos = self.positions
         valid = (
-            (self.gid > self.g_latest - n)  # newer than one sweep
-            & (self.gid > _INVALID)
-            & np.isfinite(self.mn)
-            & np.isfinite(self.mx)
+            (self._gid > self.g_latest - n)  # newer than one sweep
+            & (self._gid > _INVALID)
         )
         idx = np.flatnonzero(valid)
         k = idx.size
@@ -71,103 +65,132 @@ class Panel2D(BaseModel):
     CURSOR_PAD = 20.0
 
     name: str = Field(...)
+    scene: Any = Field(...)
+    figure: Any = Field(...)
+    view: Any = Field(...)
 
-    _x_latest: float = float("-inf")
-    _y_lo: float = -1.0
-    _y_hi: float = 1.0
+    x_lim: tuple[float, float] | None = Field(default=None)
+    y_lim: tuple[float, float] | None = Field(default=None)
+    x_label: str | None = Field(default=None)
+    y_label: str | None = Field(default=None)
+    cursor: bool = Field(default=True)
+    grid: bool = Field(default=True)
+    legend: bool = Field(default=True)
+    static: bool = Field(default=False)
 
-    _panel: Any = PrivateAttr()
+    _x_latest: float = PrivateAttr(DEFAULT=float("-inf"))
+    _x_lim: tuple[float, float] = PrivateAttr(default=(0, 1))
+    _y_lim: tuple[float, float] = PrivateAttr(default=(-1, 1))
+    _position: tuple[float, float, float, float] = PrivateAttr(default=(0.0, 0.0, 1.0, 1.0))
+
+    _panel: Any | None = PrivateAttr(None)
+    _x_axis: Any | None = PrivateAttr(None)
+    _y_axis: Any | None = PrivateAttr(None)
+
     _cursor: Any = PrivateAttr(None)
     _traces: dict[str, Trace] = PrivateAttr(default_factory=dict)
 
+    @property
+    def position(self):
+        return self._position
+
+    @position.setter
+    def position(self, pos: tuple[float, float, float, float]):
+        if not isinstance(pos, tuple[float, float, float, float]):
+            raise RuntimeError("position should be tuple[float, float, float, float]")
+
+        desc = dvz.DvzPanelDesc(x=pos[0], y=pos[1], width=pos[2], height=pos[3])
+        if dvz.dvz_panel_set_desc(self._panel, desc) != 0:
+            raise RuntimeError(f"dvz_panel_set_desc() failed for {self.name!r}")
+
+        self._position = pos
+
     def model_post_init(self):
-        desc = dvz.DvzPanelDesc(0.0, 0.0, 1.0, 1.0)
+        self._set_panel()
+        self._set_theme()
+        self._set_axes()
+        self._set_labels()
+        self._set_grid()
+        self._set_domain()
+        self._bind_panzoom()
 
-        handle = dvz.dvz_panel(self._scene, self._figure, desc)
-        if not handle:
-            raise RuntimeError(f"dvz_panel() failed for {name!r}")
+        self._create_cursor()
 
-        dvz.dvz_panel_set_background_color(handle, self.BG_DARK if self._dark else self.BG_WHITE)
+        self._create_trace()
+        self._create_legend()
 
-        y_lo, y_hi = self.y_range or (-1.0, 1.0)
-        self._set_domain(handle, y_lo, y_hi)
+    def _set_panel(self):
+        desc = dvz.DvzPanelDesc(self._panel_position)
 
-        x_axis = dvz.dvz_panel_axis(handle, dvz.DVZ_DIM_X)
-        y_axis = dvz.dvz_panel_axis(handle, dvz.DVZ_DIM_Y)
+        self._panel = dvz.dvz_panel(self.scene, self.figure, desc)
+        if not self._panel:
+            raise RuntimeError(f"dvz_panel() failed for {self.name!r}")
 
-        if not x_axis or not y_axis:
+    def _set_theme(self):
+        dvz.dvz_panel_set_background_color(
+            self._panel, self.BG_DARK if self._dark else self.BG_WHITE
+        )
+
+    def _set_axes(self):
+        self._x_axis = dvz.dvz_panel_axis(self._panel, dvz.DVZ_DIM_X)
+        self._y_axis = dvz.dvz_panel_axis(self._panel, dvz.DVZ_DIM_X)
+        if not self._x_axis or not self._y_axis:
             raise RuntimeError("dvz_panel_axis() failed")
 
-        dvz.dvz_axis_set_grid(x_axis, True)
-        dvz.dvz_axis_set_grid(y_axis, True)
-        dvz.dvz_axis_set_label(x_axis, b"Time")
-        dvz.dvz_axis_set_label(y_axis, name.encode())
+    def _set_labels(self):
+        if self.x_label:
+            dvz.dvz_axis_set_label(self._x_axis, self.x_label.encode())
+        if self.y_label:
+            dvz.dvz_axis_set_label(self._y_axis, self.y_label.encode())
 
-        panel = Panel2D(name=name, handle=handle, members=members, y_lo=y_lo, y_hi=y_hi)
+    def _set_grid(self):
+        if self.grid:
+            dvz.dvz_axis_set_grid(self._x_axis, True)
+            dvz.dvz_axis_set_grid(self._y_axis, True)
 
-        for key, label in members:
-            color_index = len(self._index)
+    def _set_domain(self):
+        if (
+            dvz.dvz_panel_set_domain(self._panel, dvz.DVZ_DIM_X, self._x_lim[0], self._x_lim[1])
+            != 0
+        ):
+            raise RuntimeError("dvz_panel_set_domain(X) failed")
 
-            trace = panel._create_trace(panel, key, label, color_index)
-            panel.traces.append(trace)
+        if (
+            dvz.dvz_panel_set_domain(self._panel, dvz.DVZ_DIM_Y, self._y_lim[0], self._y_lim[1])
+            != 0
+        ):
+            raise RuntimeError("dvz_panel_set_domain(Y) failed")
 
-        if not self.split_traces:
-            self._create_legend(panel)
+    def _bind_panzoom(self):
+        if self.static:
+            return
 
-        panel._create_cursor()
+        controller = dvz.dvz_panzoom(self.scene, None)
+        if not controller:
+            raise RuntimeError("dvz_panzoom() failed")
 
-        self._panels.append(panel)
+        if (
+            dvz.dvz_view_bind_controller(self.view, self._panel, controller, dvz.DVZ_DIM_MASK_XY)
+            != 0
+        ):
+            raise RuntimeError("dvz_view_bind_controller() failed")
 
-        self._layout_panels()
+    def _create_cursor(self):
+        if not self.cursor:
+            return
 
-        # New panels need their controller if the window is already running.
-        if self._view is not None:
-            self._bind_panzoom(panel)
-
-    def _update_cursor(self):
-        for panel in self._panels:
-            pad = self.CURSOR_PAD * (panel.y_hi - panel.y_lo)
-            cx = panel.x_latest % self.duration
-            points = np.array(
-                [[cx, panel.y_lo - pad, 0.0], [cx, panel.y_hi + pad, 0.0]],
-                dtype=np.float32,
-            )
-            if dvz.dvz_visual_set_data(panel.cursor, "position", points) != 0:
-                raise RuntimeError("cursor update failed")
-
-    def _make_line_visual(self, positions: np.ndarray, color: np.ndarray):
-        colors = np.tile(color, (positions.shape[0], 1))
-        visual = dvz.dvz_primitive(self._scene, dvz.DVZ_PRIMITIVE_TOPOLOGY_LINE_LIST, 0)
-        if not visual:
+        self._cursor = dvz.dvz_primitive(self.scene, dvz.DVZ_PRIMITIVE_TOPOLOGY_LINE_LIST, 0)
+        if not self._cursor:
             raise RuntimeError("dvz_primitive() failed")
-        if dvz.dvz_visual_set_data_many(visual, {"position": positions, "color": colors}) != 0:
-            raise RuntimeError("initial visual upload failed")
-        dvz.dvz_visual_set_depth_test(visual, False)
-        dvz.dvz_panel_add_visual(self.handle, visual, None)
-        return visual
 
-    def _create_trace(self, key: str, label: str, color_index: int):
-        palette = self._PALETTE_DARK if self._dark else self._PALETTE_WHITE
-        n_seg = 2 * self._n_bins - 1
-        positions = np.zeros((n_seg, 2, 3), dtype=np.float32)  # all zero-length = invisible
-        visual = self._make_line_visual(
-            positions.reshape(-1, 3), palette[color_index % len(palette)], self
-        )
-        self.traces.append(
-            Trace(
-                key=key,
-                label=label,
-                visual=visual,
-                gid=np.full(self._n_bins, _INVALID, dtype=np.int64),
-                mn=np.full(self._n_bins, np.nan, dtype=np.float32),
-                mx=np.full(self._n_bins, np.nan, dtype=np.float32),
-                positions=positions,
-            )
-        )
+        dvz.dvz_visual_set_depth_test(self._cursor, False)
+        dvz.dvz_panel_add_visual(self._panel, self._cursor, None)
 
-    def _create_legend(self, panel: _Panel):
-        """Add a color-coded trace-name legend to an overlaid panel."""
-        if self.split_traces or len(panel.traces) == 0:
+    def _create_legend(self):
+        if not self.legend:
+            return
+
+        if self.split_traces or len(self.traces) == 0:
             return
 
         palette = self._PALETTE_DARK if self._dark else self._PALETTE_WHITE
@@ -191,56 +214,35 @@ class Panel2D(BaseModel):
             desc = dvz.dvz_label_desc()
             desc.text = f"{trace.key}[{trace.label}]".encode()
 
-            annotation = dvz.dvz_annotation_label(
-                panel.handle,
-                ctypes.byref(desc),
-            )
+            annotation = dvz.dvz_annotation_label(self.handle, ctypes.byref(desc))
             if not annotation:
                 raise RuntimeError("dvz_annotation_label() failed")
 
-            if (
-                dvz.dvz_annotation_set_style(
-                    annotation,
-                    ctypes.byref(style),
-                )
-                != 0
-            ):
+            if dvz.dvz_annotation_set_style(annotation, ctypes.byref(style)) != 0:
                 raise RuntimeError("dvz_annotation_set_style() failed")
 
-            if (
-                dvz.dvz_annotation_set_placement(
-                    annotation,
-                    ctypes.byref(placement),
-                )
-                != 0
-            ):
+            if dvz.dvz_annotation_set_placement(annotation, ctypes.byref(placement)) != 0:
                 raise RuntimeError("dvz_annotation_set_placement() failed")
 
-    def _create_cursor(self):
-        return self._make_line_visual(np.zeros((2, 3), np.float32), self.CURSOR_COLOR, self)
+    def _create_trace(self, key: str, label: str, color_index: int):
+        palette = self._PALETTE_DARK if self._dark else self._PALETTE_WHITE
+        n_seg = 2 * self._n_bins - 1
+        positions = np.zeros((n_seg, 2, 3), dtype=np.float32)  # all zero-length = invisible
+        visual = self._make_line_visual(
+            positions.reshape(-1, 3), palette[color_index % len(palette)], self
+        )
+        self.traces.append(Trace(key=key, label=label))
 
-    def _set_domain(self, handle, ymin: float, ymax: float):
-        if dvz.dvz_panel_set_domain(handle, dvz.DVZ_DIM_X, 0.0, self.duration) != 0:
-            raise RuntimeError("dvz_panel_set_domain(X) failed")
-        if dvz.dvz_panel_set_domain(handle, dvz.DVZ_DIM_Y, ymin, ymax) != 0:
-            raise RuntimeError("dvz_panel_set_domain(Y) failed")
+    def _update_cursor(self):
+        pad = self.CURSOR_PAD * (self._y_lim[1] - self._y_lim[0])
+        cx = self._x_latest % self.duration
+        points = np.array(
+            [[cx, self._y_lim[0] - pad, 0.0], [cx, self._y_lim[1] + pad, 0.0]], dtype=np.float32
+        )
+        if dvz.dvz_visual_set_data(self._cursor, "position", points) != 0:
+            raise RuntimeError("cursor update failed")
 
-    def _bind_panzooms(self):
-        """Needs the view, so it runs after the window exists. Non-fatal."""
-        for panel in self._panels:
-            try:
-                controller = dvz.dvz_panzoom(self._scene, None)
-                if not controller:
-                    raise RuntimeError("dvz_panzoom() failed")
-                rc = dvz.dvz_view_bind_controller(
-                    self._view, panel.handle, controller, dvz.DVZ_DIM_MASK_XY
-                )
-                if rc != 0:
-                    raise RuntimeError("dvz_view_bind_controller() failed")
-            except Exception:
-                LOGGER.exception("pan/zoom unavailable for panel %r", panel.name)
-
-    def _panel_specs(self, packet: Packet):
+    def _panel_specs(self):
         if self.split_traces:
             for key, (_x, _Y, labels) in packet.items():
                 for label in labels:
@@ -250,7 +252,7 @@ class Panel2D(BaseModel):
             for key, (_x, _Y, labels) in packet.items():
                 yield key, [(key, label) for label in labels]
 
-    def _autoscale(self, panel: _Panel):
+    def _autoscale(self):
         los = [t.lo for t in panel.traces if np.isfinite(t.lo)]
         his = [t.hi for t in panel.traces if np.isfinite(t.hi)]
         if not los:
@@ -264,32 +266,14 @@ class Panel2D(BaseModel):
             panel.y_lo, panel.y_hi = lo, hi
             self._set_domain(panel.handle, lo, hi)
 
-    def resize(self, x, y, width, height):
-        desc = dvz.DvzPanelDesc(x=x, y=y, width=width, height=height)
+    def set_data(self, data: dict[str, np.ndarray]):
+        for name, d in data:
+            if name not in self._traces.key():
+                self._create_trace(name)
+                self._update_legend()
 
-        if dvz.dvz_panel_set_desc(self._panel, desc) != 0:
-            raise RuntimeError(f"dvz_panel_set_desc() failed for {self.name!r}")
-
-    def _upload_dirty(self):
-        for panel in self._panels:
-            if not panel.dirty:
-                continue
-            for trace in panel.traces:
-                if not trace.dirty:
-                    continue
-                self._fill_positions(trace)
-                # Full re-upload. For huge traces use dvz_visual_set_data_range instead.
-                if (
-                    dvz.dvz_visual_set_data(
-                        trace.visual, "position", trace.positions.reshape(-1, 3)
-                    )
-                    != 0
-                ):
-                    raise RuntimeError(f"position upload failed for {panel.name!r}")
-                trace.dirty = False
-            if self.y_range is None:
-                self._autoscale(panel)
-            panel.dirty = False
+            self._traces[name].set_data(d)
+            self._autoscale()
 
 
 class Oscilloscope(BaseModel):
