@@ -12,19 +12,27 @@ from screeninfo import ScreenInfoError, get_monitors
 
 from poulet_py.config.logging import LOGGER
 
+BG_DARK: tuple[int, int, int, int] = (20, 20, 20, 255)
+BG_WHITE: tuple[int, int, int, int] = (240, 240, 240, 255)
+
 
 class Trace(BaseModel):
     key: str = Field(...)
     label: str = Field(...)
     color: tuple[int, int, int, int] | Literal["random"] = Field(default="random")
 
-    _current_bin: int = PrivateAttr(default=0)
-    _gid: np.ndarray  # (n_bins,) int64 global bin id stored in each slot
-
-    _positions: np.ndarray  # (n_pts - 1, 2, 3) LINE_LIST segments
+    _raw: np.ndarray = PrivateAttr()
+    _positions: np.ndarray = PrivateAttr()
 
     def model_post_init(self, context):
-        self._gid = (np.full(self._n_bins, _INVALID, dtype="int64"),)
+        pass
+
+    def set_data(self, data: np.ndarray):
+        if not data.dtype.names or "ts" not in data.dtype.names:
+            raise RuntimeError("Data must be a structured array with a 'ts' field")
+
+        self._raw = data
+        self._fill_positions()
 
     def _fill_positions(self):
         n = self.n_bins
@@ -72,23 +80,22 @@ class Panel2D(BaseModel):
     x_lim: tuple[float, float] | None = Field(default=None)
     y_lim: tuple[float, float] | None = Field(default=None)
     x_label: str | None = Field(default=None)
-    y_label: str | None = Field(default=None)
     cursor: bool = Field(default=True)
     grid: bool = Field(default=True)
     legend: bool = Field(default=True)
     static: bool = Field(default=False)
 
-    _x_latest: float = PrivateAttr(DEFAULT=float("-inf"))
-    _x_lim: tuple[float, float] = PrivateAttr(default=(0, 1))
-    _y_lim: tuple[float, float] = PrivateAttr(default=(-1, 1))
-    _position: tuple[float, float, float, float] = PrivateAttr(default=(0.0, 0.0, 1.0, 1.0))
-
     _panel: Any | None = PrivateAttr(None)
     _x_axis: Any | None = PrivateAttr(None)
     _y_axis: Any | None = PrivateAttr(None)
-
+    _x_lim: tuple[float, float] = PrivateAttr(default=(0, 1))
+    _y_lim: tuple[float, float] = PrivateAttr(default=(-1, 1))
+    _position: tuple[float, float, float, float] = PrivateAttr(default=(0.0, 0.0, 1.0, 1.0))
     _cursor: Any = PrivateAttr(None)
     _traces: dict[str, Trace] = PrivateAttr(default_factory=dict)
+
+    _first_ts: int = PrivateAttr(default_factory=time.monotonic_ns())
+    _last_ts: int = PrivateAttr(default_factory=time.monotonic_ns())
 
     @property
     def position(self):
@@ -96,7 +103,11 @@ class Panel2D(BaseModel):
 
     @position.setter
     def position(self, pos: tuple[float, float, float, float]):
-        if not isinstance(pos, tuple[float, float, float, float]):
+        if (
+            not isinstance(pos, tuple)
+            or len(pos) != 4
+            or not all(isinstance(x, float) for x in pos)
+        ):
             raise RuntimeError("position should be tuple[float, float, float, float]")
 
         desc = dvz.DvzPanelDesc(x=pos[0], y=pos[1], width=pos[2], height=pos[3])
@@ -105,7 +116,10 @@ class Panel2D(BaseModel):
 
         self._position = pos
 
-    def model_post_init(self):
+    def model_post_init(self, context):
+        self._x_lim = self.x_lim if self.x_lim is not None else (0, 1)
+        self._y_lim = self.y_lim if self.y_lim is not None else (-1, 1)
+
         self._set_panel()
         self._set_theme()
         self._set_axes()
@@ -113,23 +127,35 @@ class Panel2D(BaseModel):
         self._set_grid()
         self._set_domain()
         self._bind_panzoom()
-
         self._create_cursor()
-
-        self._create_trace()
         self._create_legend()
 
+    def set_data(self, data: np.ndarray):
+        if not data.dtype.names or "ts" not in data.dtype.names:
+            raise RuntimeError("Data must be a structured array with a 'ts' field")
+
+        labels = data.dtype.names[1:]
+        for label in labels:
+            if label not in self._traces:
+                self._create_trace(label)
+                self._update_legend()
+
+            self._traces[label].set_data(data[["ts", label]])
+            self._autoscale()
+
+    def update(self):
+        if self.cursor:
+            self._update_cursor()
+
     def _set_panel(self):
-        desc = dvz.DvzPanelDesc(self._panel_position)
+        desc = dvz.DvzPanelDesc(self._position)
 
         self._panel = dvz.dvz_panel(self.scene, self.figure, desc)
         if not self._panel:
             raise RuntimeError(f"dvz_panel() failed for {self.name!r}")
 
     def _set_theme(self):
-        dvz.dvz_panel_set_background_color(
-            self._panel, self.BG_DARK if self._dark else self.BG_WHITE
-        )
+        dvz.dvz_panel_set_background_color(self._panel, BG_DARK if self._dark else BG_WHITE)
 
     def _set_axes(self):
         self._x_axis = dvz.dvz_panel_axis(self._panel, dvz.DVZ_DIM_X)
@@ -138,10 +164,9 @@ class Panel2D(BaseModel):
             raise RuntimeError("dvz_panel_axis() failed")
 
     def _set_labels(self):
+        dvz.dvz_axis_set_label(self._y_axis, self.name.encode())
         if self.x_label:
             dvz.dvz_axis_set_label(self._x_axis, self.x_label.encode())
-        if self.y_label:
-            dvz.dvz_axis_set_label(self._y_axis, self.y_label.encode())
 
     def _set_grid(self):
         if self.grid:
@@ -186,11 +211,17 @@ class Panel2D(BaseModel):
         dvz.dvz_visual_set_depth_test(self._cursor, False)
         dvz.dvz_panel_add_visual(self._panel, self._cursor, None)
 
+    def _update_cursor(self):
+        pad = self.CURSOR_PAD * (self._y_lim[1] - self._y_lim[0])
+        cx = (time.monotonic_ns() - self._first_ts) % self._x_lim[1]
+        points = np.array(
+            [[cx, self._y_lim[0] - pad, 0.0], [cx, self._y_lim[1] + pad, 0.0]], dtype=np.float32
+        )
+        if dvz.dvz_visual_set_data(self._cursor, "position", points) != 0:
+            raise RuntimeError("cursor update failed")
+
     def _create_legend(self):
         if not self.legend:
-            return
-
-        if self.split_traces or len(self.traces) == 0:
             return
 
         palette = self._PALETTE_DARK if self._dark else self._PALETTE_WHITE
@@ -233,25 +264,6 @@ class Panel2D(BaseModel):
         )
         self.traces.append(Trace(key=key, label=label))
 
-    def _update_cursor(self):
-        pad = self.CURSOR_PAD * (self._y_lim[1] - self._y_lim[0])
-        cx = self._x_latest % self.duration
-        points = np.array(
-            [[cx, self._y_lim[0] - pad, 0.0], [cx, self._y_lim[1] + pad, 0.0]], dtype=np.float32
-        )
-        if dvz.dvz_visual_set_data(self._cursor, "position", points) != 0:
-            raise RuntimeError("cursor update failed")
-
-    def _panel_specs(self):
-        if self.split_traces:
-            for key, (_x, _Y, labels) in packet.items():
-                for label in labels:
-                    name = key if len(labels) == 1 else f"{key}[{label}]"
-                    yield name, [(key, label)]
-        else:
-            for key, (_x, _Y, labels) in packet.items():
-                yield key, [(key, label) for label in labels]
-
     def _autoscale(self):
         los = [t.lo for t in panel.traces if np.isfinite(t.lo)]
         his = [t.hi for t in panel.traces if np.isfinite(t.hi)]
@@ -266,49 +278,19 @@ class Panel2D(BaseModel):
             panel.y_lo, panel.y_hi = lo, hi
             self._set_domain(panel.handle, lo, hi)
 
-    def set_data(self, data: dict[str, np.ndarray]):
-        for name, d in data:
-            if name not in self._traces.key():
-                self._create_trace(name)
-                self._update_legend()
-
-            self._traces[name].set_data(d)
-            self._autoscale()
-
 
 class Oscilloscope(BaseModel):
-    BG_DARK: ClassVar[Any] = dvz.DvzColor(20, 20, 20, 255)
-    BG_WHITE: ClassVar[Any] = dvz.DvzColor(240, 240, 240, 255)
-
-    _PALETTE_DARK: ClassVar[np.ndarray] = np.array(
-        [
-            [94, 213, 220, 255],
-            [255, 103, 129, 255],
-            [132, 224, 210, 255],
-            [180, 160, 255, 255],
-        ],
-        dtype=np.uint8,
-    )
-    _PALETTE_WHITE: ClassVar[np.ndarray] = np.array(
-        [
-            [20, 90, 160, 255],
-            [190, 40, 80, 255],
-            [20, 130, 110, 255],
-            [110, 70, 190, 255],
-        ],
-        dtype=np.uint8,
-    )
-
     title: str = Field(default="Oscilloscope")
-    duration: float = Field(default=6.0, gt=0, description="Sweep length in x units")
-    fps: int = Field(default=25, gt=0, description="Maximum GPU upload rate")
-    max_points: int = Field(default=2000, ge=16, description="Display points per trace")
+    duration: float = Field(default=20, gt=0, description="Sweep length in seconds")
+    max_points: int = Field(
+        default=2000, ge=16, description="Display points per trace per duration"
+    )
     max_panels: int = Field(default=64, gt=0, description="Safety cap on panel count")
     split_traces: bool = Field(
         default=True,
         description="True: one panel per trace. False: all traces of dataset in one panel.",
     )
-    y_range: tuple[float, float] | None = Field(
+    y_lim: tuple[float, float] | None = Field(
         default=None, description="Fixed (ymin, ymax). None = autoscale per panel."
     )
     size: Literal["auto"] | tuple[int, int] = Field(default="auto")
@@ -316,30 +298,16 @@ class Oscilloscope(BaseModel):
     theme: Literal["auto", "dark", "white"] = Field(default="auto")
     queue_size: int = Field(default=1000, gt=0, description="Size of the internal queue")
 
-    # Datoviz visual consts
     _size: tuple[int, int] = PrivateAttr(default=(1280, 720))
     _dark: bool = PrivateAttr(default=True)
-    # check why:
-    _n_bins: int = PrivateAttr(default=8)
-    _bin_w: float = PrivateAttr(default=1.0)
-    _inv_w: float = PrivateAttr(default=1.0)
-
-    _queue: Queue[dict[str, np.ndarray]] = PrivateAttr()
-
-    # Datoviz handles + layout (render thread only)
-    _app: Any = PrivateAttr(default=None)
-    _view: Any = PrivateAttr(default=None)
-    _scene: Any = PrivateAttr(default=None)
-    _figure: Any = PrivateAttr(default=None)
+    _app: Any | None = PrivateAttr(default=None)
+    _view: Any | None = PrivateAttr(default=None)
+    _scene: Any | None = PrivateAttr(default=None)
+    _figure: Any | None = PrivateAttr(default=None)
     _panels: dict[str, Panel2D] = PrivateAttr(default_factory=dict)
 
-    # lifecycle
+    _queue: Queue[tuple[int, dict[str, np.ndarray]]] = PrivateAttr()
     _thread: Thread | None = PrivateAttr(default=None)
-
-    _last_upload: float = PrivateAttr(default=0.0)
-    _frame_errors: int = PrivateAttr(default=0)
-    _started: bool = PrivateAttr(default=False)
-
     _is_open: bool = PrivateAttr(default=False)
 
     def model_post_init(self, context):
@@ -352,16 +320,11 @@ class Oscilloscope(BaseModel):
                 )
                 self._size = (int(monitor.width * 0.9), int(monitor.height * 0.9))
             except (ScreenInfoError, IndexError):
-                pass  # keep the 1280x720 fallback
+                pass
         else:
             self._size = self.size
 
         self._dark = self.theme == "dark" or (self.theme == "auto" and bool(isDark()))
-
-        # TODO
-        self._n_bins = max(8, self.max_points // 2)
-        self._bin_w = self.duration / self._n_bins
-        self._inv_w = self._n_bins / self.duration
 
     @property
     def is_open(self) -> bool:
@@ -374,18 +337,9 @@ class Oscilloscope(BaseModel):
         self._queue = Queue(maxsize=self.queue_size)
 
         self._set_scene()
-        self._app = dvz.dvz_app(self._scene)
-        if not self._app:
-            raise RuntimeError("dvz_app() failed")
-
-        self._view = dvz.dvz_view_window(
-            self._app, self._figure, self._size[0], self._size[1], self.title.encode()
-        )
-        if not self._view:
-            raise RuntimeError("dvz_view_window() failed")
-
-        if dvz.dvz_view_set_frame_callback(self._view, self._frame_callback, None) != 0:
-            raise RuntimeError("dvz_view_set_frame_callback() failed")
+        self._set_app()
+        self._set_view()
+        self._set_callback()
 
         self._thread = Thread(
             target=self._run_dvz_app, name=f"{type(self).__name__}_thread", daemon=True
@@ -394,10 +348,8 @@ class Oscilloscope(BaseModel):
 
         self._is_open = True
 
-    def close(
-        self,
-    ):
-        if not self._is_open:
+    def close(self):
+        if not self._is_open or not self._thread:
             return
 
         self._thread.join()
@@ -406,23 +358,29 @@ class Oscilloscope(BaseModel):
         else:
             self._thread = None
 
-        self._reset()
-        self._release_scene()
-
-        del self._queue
-
-        self._is_open = False
+        self._close()
 
     def add_data(self, data: dict[str, np.ndarray]):
         self._ensure_open()
         try:
-            self._queue.put_nowait(data)
+            self._queue.put_nowait((time.monotonic_ns(), data))
         except Full:
             LOGGER.warning("Oscilloscope queue full - packet dropped")
 
     def _ensure_open(self):
         if not self._is_open:
             raise RuntimeError(f"{type(self)} need to be opened first")
+
+    def _close(self):
+        self._release_callback()
+        self._release_view()
+        self._release_app()
+        self._release_scene()
+
+        self._panels.clear()
+        del self._queue
+
+        self._is_open = False
 
     def _set_scene(self):
         self._scene = dvz.dvz_scene()
@@ -442,45 +400,58 @@ class Oscilloscope(BaseModel):
             dvz.dvz_scene_destroy(self._scene)
             self._scene = None
 
-    def _reset(self):
-        # TODO move to separated functions
-        if self._view:
-            dvz.dvz_view_set_frame_callback(self._view, None, None)
-            self._view = None
+    def _set_app(self):
+        self._app = dvz.dvz_app(self._scene)
+        if not self._app:
+            raise RuntimeError("dvz_app() failed")
 
+    def _release_app(self):
         if self._app:
             dvz.dvz_app_stop(self._app)
             dvz.dvz_app_destroy(self._app)
             self._app = None
 
-        self._callback = None
+    def _set_view(self):
+        self._view = dvz.dvz_view_window(
+            self._app, self._figure, self._size[0], self._size[1], self.title.encode()
+        )
+        if not self._view:
+            raise RuntimeError("dvz_view_window() failed")
 
-        self._panels.clear()
-        self._index.clear()
+    def _release_view(self):
+        if self._view:
+            dvz.dvz_view_set_frame_callback(self._view, None, None)
+            self._view = None
 
-    def _ensure_panels(self, data: dict[str, tuple[np.ndarray, np.ndarray, list[str]]]):
-        for key, (_x, _Y, labels) in data:
-            if key in self._panels:
-                continue
+    def _set_callback(self):
+        if self._view:
+            if dvz.dvz_view_set_frame_callback(self._view, self._frame_callback, None) != 0:
+                raise RuntimeError("dvz_view_set_frame_callback() failed")
 
-            if self.split_traces:
-                for label in labels:
-                    self._add_panel(name=f"{key}[{label}]")
-            else:
-                self._add_panel(name=key)
-
-        self._layout_panels()
+    def _release_callback(self):
+        if self._view:
+            dvz.dvz_view_set_frame_callback(self._view, None, None)
+            self._view = None
 
     def _add_panel(self, name: str):
         if len(self._panels.keys()) >= self.max_panels:
             LOGGER.warning(
-                "Maximum number of panels (%d) reached; ignoring %r",
-                self.max_panels,
-                name,
+                f"Maximum number of panels ({self.max_panels}) reached; ignoring {name!r}"
             )
             return
 
-        self._panels[name] = Panel2D(name=name)
+        self._panels[name] = Panel2D(
+            name=name,
+            scene=self._scene,
+            figure=self._figure,
+            view=self._view,
+            x_lim=(0, self.duration),
+            y_lim=self.y_lim,
+            x_label="Time (s)",
+            legend=True if not self.split_traces else False,
+            grid=True,  # TODO: make this configurable
+            static=False,  # TODO: make this configurable
+        )
 
     def _layout_panels(self):
         n = len(self._panels.keys())
@@ -500,106 +471,74 @@ class Oscilloscope(BaseModel):
 
         for i, (name, panel) in enumerate(self._panels.items()):
             y = 1.0 - panel_height - i * (panel_height + gutter)
-            panel.resize(x=0.0, y=y, width=1.0, height=panel_height)
+            panel.position = (0.0, y, 1.0, panel_height)
 
-    def _get_data_from_queue(self) -> list[dict[str, np.ndarray]]:
+    def _get_data_from_queue(self) -> list[tuple[int, dict[str, np.ndarray]]]:
         data = []
         while self._queue.not_empty:
             data.append(self._queue.get_nowait())
         return data
 
-    def _parse_data(
-        self, data: list[dict[str, np.ndarray]]
-    ) -> list[dict[str, tuple[np.ndarray, np.ndarray, list[str]] | None]]:
-        parsed: list[dict[str, tuple[np.ndarray, np.ndarray, list[str]] | None]] = {}
+    def _parse_data(self, data: list[tuple[int, dict[str, np.ndarray]]]) -> dict[str, np.ndarray]:
+        out = {}
 
-        for d in data:
+        for timestamp, d in data:
             for name, arr in d.items():
-                parsed.append({name: self._parse(name, arr)})
+                if arr.size == 0:
+                    continue
 
-        return parsed
+                a = np.asarray(arr)
 
-    def _merge_data(
-        self, data: list[dict[str, tuple[np.ndarray, np.ndarray, list[str]] | None]]
-    ) -> dict[str, list[tuple[np.ndarray, np.ndarray, list[str]]]]:
-        merged: dict[
-            str,
-            list[tuple[np.ndarray, np.ndarray, list[str]]],
-        ] = {}
+                if a.ndim == 0:
+                    a = a.reshape(1)
 
-        for d in data:
-            for name, arr in d.items():
-                if arr is not None:
-                    merged.setdefault(name, []).append(arr)
+                labels = a.dtype.names if a.dtype.names else [str(i) for i in range(1, a.shape[1])]
 
-        return merged
+                x = np.zeros((a.shape[0], 1), dtype="f4")
+                x[0] = timestamp
+                a = np.array(np.hstack([x, a]), dtype=[("ts", "f4")] + [(l, "f4") for l in labels])
 
-    def _ingest(self, merged):
+                out[name] = a if name not in out else np.vstack([out[name][0], a])
 
-        for key, items in merged.items():
-            labels = items[0][2]
+        return out
 
-            items = [item for item in items if item[2] == labels]
-
-            if not items:
+    def _ensure_panels(self, data: dict[str, np.ndarray]):
+        for key, arr in data.items():
+            if key in self._panels:
                 continue
 
-            if len(items) == 1:
-                x, Y = items[0][0], items[0][1]
+            if not arr.dtype.names:
+                raise RuntimeError(f"Data for {key!r} has no named fields; cannot create panel")
+
+            labels = arr.dtype.names[1:]
+            if self.split_traces:
+                for label in labels:
+                    self._add_panel(name=f"{key}[{label}]")
             else:
-                x = np.concatenate([item[0] for item in items])
-                Y = np.concatenate([item[1] for item in items])
+                self._add_panel(name=key)
 
-            if x.size > 1 and (np.diff(x) < 0).any():
-                order = np.argsort(x, kind="stable")
-                x, Y = x[order], Y[order]
+        self._layout_panels()
 
-        n_bins = self._n_bins
-        g = np.floor(x * self._inv_w).astype(np.int64)  # global bin id of every sample
-        starts = np.flatnonzero(np.concatenate(([True], g[1:] != g[:-1])))
-        gu = g[starts]
-        mn = np.fmin.reduceat(Y, starts, axis=0)  # NaN-ignoring; (runs, m)
-        mx = np.fmax.reduceat(Y, starts, axis=0)
+    def _ingest(self, merged: dict[str, np.ndarray]):
+        for key, arr in merged.items():
+            if self.split_traces:
+                if not arr.dtype.names:
+                    raise RuntimeError(f"Data for {key!r} has no named fields; cannot ingest")
 
-        first = int(np.searchsorted(gu, gu[-1] - n_bins, side="right"))  # drop > 1 sweep old
-        gu, mn, mx = gu[first:], mn[first:], mx[first:]
-        slots = gu % n_bins  # unique within one sweep
-
-        x_last = float(x[-1])
-        for j, label in enumerate(labels):
-            trace = self._index.get((key, label))
-            if trace is None:
-                continue
-            old = trace.gid[slots]
-            newer = gu > old  # fresh sweep -> overwrite
-            same = gu == old  # same bin continued across chunks -> merge
-            s = slots[newer]
-            trace.gid[s], trace.mn[s], trace.mx[s] = (
-                gu[newer],
-                mn[newer, j],
-                mx[newer, j],
-            )
-            s = slots[same]
-            trace.mn[s] = np.fmin(trace.mn[s], mn[same, j])
-            trace.mx[s] = np.fmax(trace.mx[s], mx[same, j])
-            trace.g_latest = max(trace.g_latest, int(gu[-1]))
-            trace.dirty = True
-            trace.panel.dirty = True
-            trace.panel.x_latest = max(trace.panel.x_latest, x_last)
+                labels = arr.dtype.names[1:]
+                for label in labels:
+                    k = f"{key}[{label}]"
+                    self._panels[k].set_data(arr[["ts", label]])
+            else:
+                self._panels[key].set_data(arr)
 
     def _frame_callback(self, *_args) -> None:
         try:
-            now = time.monotonic_ns()
-            if now - self._last_upload >= 1.0 / self.fps:
-                data = self._get_data_from_queue()
-                self._ensure_panels(data)
+            data = self._get_data_from_queue()
+            data = self._parse_data(data)
+            self._ensure_panels(data)
 
-                data = self._parse_data(data)
-                data = self._merge_data(data)
-
-                self._ingest(data)
-
-                self._last_upload = now
+            self._ingest(data)
         except Exception:
             LOGGER.exception("Oscilloscope frame callback failed")
 
@@ -609,42 +548,7 @@ class Oscilloscope(BaseModel):
         except Exception as exc:
             LOGGER.exception(exc)
         finally:
-            self._reset()
-
-    @staticmethod
-    def _parse(name: str, arr: np.ndarray) -> tuple[np.ndarray, np.ndarray, list[str]] | None:
-        """Validate one dataset -> (x float64 (n,), Y float32 (n, m), labels). Always copies."""
-        a = np.asarray(arr)
-        if a.ndim == 0:
-            a = a.reshape(1)
-        if a.dtype.names:
-            if a.ndim != 1 or len(a.dtype.names) < 2:
-                raise ValueError(f"{name!r}: structured array needs 1-D data and >= 2 fields")
-            fields = a.dtype.names
-            x = a[fields[0]].astype(np.float64)
-            Y = np.column_stack([a[f].astype(np.float32) for f in fields[1:]])
-            labels = list(fields[1:])
-        else:
-            if a.ndim != 2 or a.shape[1] < 2:
-                raise ValueError(f"{name!r}: expected shape (n, 1 + m) with x in column 0")
-            x = a[:, 0].astype(np.float64)
-            Y = a[:, 1:].astype(np.float32)
-            labels = [str(i) for i in range(1, a.shape[1])]
-        if x.size == 0:
-            return None
-
-        finite_x = np.isfinite(x)
-        if not finite_x.all():
-            x, Y = x[finite_x], Y[finite_x]
-            if x.size == 0:
-                return None
-
-        Y[~np.isfinite(Y)] = np.nan  # NaN/inf become gaps, never GPU garbage
-        if x.size > 1 and (np.diff(x) < 0).any():
-            order = np.argsort(x, kind="stable")
-            x, Y = x[order], Y[order]
-
-        return x, Y, labels
+            self._close()
 
     def __enter__(self):
         self.open()
@@ -652,6 +556,7 @@ class Oscilloscope(BaseModel):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
+
 
 
 if __name__ == "__main__":
