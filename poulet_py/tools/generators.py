@@ -11,7 +11,8 @@ Missing 'tools' module. Install options:
 
 
 def repeat(
-    l: Sequence[Any], n: int, *, mode: Literal["random", "sequential"] = "random", chunk: bool = False, chunk_n: int = 1,
+    l: Sequence[Any], n: int, *, mode: Literal["random", "sequential"] = "random",
+      max_consecutive: int = None, max_reshuffles: int = 10,
 ) -> Sequence[Any]:
     """
     Generate a list of trials with specified stimuli distribution.
@@ -65,13 +66,25 @@ def repeat(
 
     _l = list(l) * n
     if mode == "random":
-        if chunk:
-            for i in list(range(0,len(_l),chunk_n)):
-                j = min(i+chunk_n,len(_l))
-                _l[i:j] = sample(_l[i:j], k=j-i)
-        else:
-            shuffle(_l)
+        shuffle(_l)
 
+        if max_consecutive is not None:
+            for i in range(max_reshuffles):
+                streak = 1
+                longest_streak = 1
+                for j,k in zip(_l[:-1],_l[1:]):
+                    if j==k:
+                        streak += 1
+                        if streak>= longest_streak:
+                            longest_streak = streak
+                    else:
+                        streak = 1
+
+                if longest_streak>max_consecutive:
+                    shuffle(_l)
+                else:
+                    break
+        
         return _l
     elif mode == "sequential":
         return _l
