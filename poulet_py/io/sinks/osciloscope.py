@@ -1,7 +1,7 @@
 from poulet_py import BaseEvent, BaseSink, Oscilloscope, SinkEvent
 
 
-#TODO macos need osc to run on main thread and the rest on subthreads
+# TODO macos need osc to run on main thread and the rest on subthreads
 class OscSink(BaseSink, Oscilloscope):
     def _open(self) -> None:
         Oscilloscope.open(self)
