@@ -1,18 +1,85 @@
-
-import threading
-import time
 from collections.abc import Callable
-from logging import getLogger
 from queue import Empty, Full, Queue
-from typing import Any, Literal
+from threading import Event, Thread, current_thread
+from time import monotonic_ns
+from types import TracebackType
+from typing import Any, Literal, Self
 
 import dearpygui.dearpygui as dpg
-import numpy as np
 from darkdetect import isDark
+from dearpygui.dearpygui import (
+    add_inf_line_series,
+    add_line_series,
+    add_plot,
+    add_plot_axis,
+    add_plot_legend,
+    add_subplots,
+    add_text,
+    add_theme_color,
+    add_theme_style,
+    add_window,
+    bind_item_theme,
+    bind_theme,
+    configure_item,
+    create_context,
+    create_viewport,
+    delete_item,
+    destroy_context,
+    get_axis_limits,
+    is_dearpygui_running,
+    is_item_hovered,
+    is_mouse_button_down,
+    move_item,
+    mvAll,
+    mvInfLineSeries,
+    mvLineSeries,
+    mvMouseButton_Left,
+    mvPlot,
+    mvPlotCol_Line,
+    mvPlotStyleVar_LineWeight,
+    mvStyleVar_WindowPadding,
+    mvThemeCat_Core,
+    mvThemeCat_Plots,
+    mvThemeCol_Text,
+    mvThemeCol_WindowBg,
+    mvXAxis,
+    mvYAxis,
+    render_dearpygui_frame,
+    set_axis_limits,
+    set_axis_limits_auto,
+    set_primary_window,
+    set_value,
+    setup_dearpygui,
+    show_viewport,
+    theme,
+    theme_component,
+)
+from numpy import (
+    argsort,
+    asarray,
+    column_stack,
+    concatenate,
+    diff,
+    empty,
+    flatnonzero,
+    floor,
+    fmax,
+    fmin,
+    full,
+    insert,
+    isfinite,
+    nan,
+    nanmax,
+    nanmin,
+    ndarray,
+    searchsorted,
+)
 from pydantic import BaseModel, Field, PrivateAttr
 from screeninfo import ScreenInfoError, get_monitors
+from screeninfo.common import Monitor
 
-LOGGER = getLogger(__name__)
+from poulet_py.config.logging import LOGGER
+
 RGBA = tuple[int, int, int, int]
 
 BG_DARK: RGBA = (20, 20, 20, 255)
@@ -37,19 +104,18 @@ PALETTE_WHITE: list[RGBA] = [
 
 _INVALID = -(1 << 62)  # "no data" marker for int64 bin ids
 _MAX_CONSECUTIVE_FRAME_ERRORS = 5
+_LOCK_FRAMES = 2  # frames an axis stays locked after set_axis_limits before the user gets it back
 _THEMES: dict[tuple[RGBA, int, float], int] = {}  # per-context cache of series themes
 
 
 def _series_theme(color: RGBA, series_type: int, weight: float = 1.5) -> int:
     key = (color, series_type, weight)
     if key not in _THEMES:
-        with dpg.theme() as theme:
-            with dpg.theme_component(series_type):
-                dpg.add_theme_color(dpg.mvPlotCol_Line, color, category=dpg.mvThemeCat_Plots)
-                dpg.add_theme_style(
-                    dpg.mvPlotStyleVar_LineWeight, weight, category=dpg.mvThemeCat_Plots
-                )
-        _THEMES[key] = theme
+        with theme() as th:
+            with theme_component(series_type):
+                add_theme_color(mvPlotCol_Line, color, category=mvThemeCat_Plots)
+                add_theme_style(mvPlotStyleVar_LineWeight, weight, category=mvThemeCat_Plots)
+        _THEMES[key] = th
     return _THEMES[key]
 
 
@@ -62,12 +128,12 @@ def _global_theme(dark: bool) -> int:
     legend_bg = (20, 20, 20, 220) if dark else (255, 255, 255, 230)
     border = (110, 110, 110, 255)
 
-    with dpg.theme() as theme:
-        with dpg.theme_component(dpg.mvAll):
-            dpg.add_theme_style(dpg.mvStyleVar_WindowPadding, 0, 0, category=dpg.mvThemeCat_Core)
-            dpg.add_theme_color(dpg.mvThemeCol_WindowBg, bg, category=dpg.mvThemeCat_Core)
-            dpg.add_theme_color(dpg.mvThemeCol_Text, fg, category=dpg.mvThemeCat_Core)
-        with dpg.theme_component(dpg.mvPlot):
+    with theme() as th:
+        with theme_component(mvAll):
+            add_theme_style(mvStyleVar_WindowPadding, 0, 0, category=mvThemeCat_Core)
+            add_theme_color(mvThemeCol_WindowBg, bg, category=mvThemeCat_Core)
+            add_theme_color(mvThemeCol_Text, fg, category=mvThemeCat_Core)
+        with theme_component(mvPlot):
             for name, value in (
                 ("mvPlotCol_FrameBg", bg),
                 ("mvPlotCol_PlotBg", plot_bg),
@@ -80,8 +146,8 @@ def _global_theme(dark: bool) -> int:
                 ("mvPlotCol_AxisText", fg),
                 ("mvPlotCol_AxisGrid", grid),
             ):
-                dpg.add_theme_color(getattr(dpg, name), value, category=dpg.mvThemeCat_Plots)
-    return theme
+                add_theme_color(getattr(dpg, name), value, category=mvThemeCat_Plots)
+    return th
 
 
 class Trace(BaseModel):
@@ -95,22 +161,24 @@ class Trace(BaseModel):
     n_bins: int = Field(..., ge=8)
 
     _series: Any = PrivateAttr(default=None)
-    _gid: np.ndarray = PrivateAttr(default=None)  # (n_bins,) int64 global bin id per slot
-    _mn: np.ndarray = PrivateAttr(default=None)  # (n_bins,) float32
-    _mx: np.ndarray = PrivateAttr(default=None)
+    _gid: ndarray = PrivateAttr()  # (n_bins,) int64 global bin id per slot
+    _mn: ndarray = PrivateAttr()  # (n_bins,) float32
+    _mx: ndarray = PrivateAttr()
     _bin_w: float = PrivateAttr(default=1.0)
     _g_latest: int = PrivateAttr(default=_INVALID)
     _x_latest: float = PrivateAttr(default=float("-inf"))
     _dirty: bool = PrivateAttr(default=False)
+    _lo: float = PrivateAttr(default=float("inf"))
+    _hi: float = PrivateAttr(default=float("-inf"))
 
-    def model_post_init(self, context):
-        n = self.n_bins
+    def model_post_init(self, context: Any, /) -> None:  # noqa: ARG002
+        n: int = self.n_bins
         self._bin_w = self.duration / n
-        self._gid = np.full(n, _INVALID, dtype=np.int64)
-        self._mn = np.full(n, np.nan, dtype=np.float32)
-        self._mx = np.full(n, np.nan, dtype=np.float32)
-        self._series = dpg.add_line_series([], [], label=self.label, parent=self.parent)
-        dpg.bind_item_theme(self._series, _series_theme(self.color, dpg.mvLineSeries))
+        self._gid = full(n, _INVALID, dtype="int64")
+        self._mn = full(n, nan, dtype="float32")
+        self._mx = full(n, nan, dtype="float32")
+        self._series = add_line_series([], [], label=self.label, parent=self.parent)
+        bind_item_theme(self._series, _series_theme(self.color, mvLineSeries))
 
     @property
     def dirty(self) -> bool:
@@ -120,7 +188,12 @@ class Trace(BaseModel):
     def x_latest(self) -> float:
         return self._x_latest
 
-    def set_data(self, data: np.ndarray):
+    @property
+    def bounds(self) -> tuple[float, float] | None:
+        """(min, max) of the plotted values, or None when empty."""
+        return (self._lo, self._hi) if self._lo <= self._hi else None
+
+    def set_data(self, data: ndarray) -> None:
         """``data``: structured array with a float ``"ts"`` field (sorted) and ``self.label``."""
         names = data.dtype.names
         if not names or "ts" not in names or self.label not in names:
@@ -128,18 +201,18 @@ class Trace(BaseModel):
         if data.size == 0:
             return
 
-        x = np.asarray(data["ts"], dtype=np.float64)
-        y = np.asarray(data[self.label], dtype=np.float32)
+        x = asarray(data["ts"], dtype="float64")
+        y = asarray(data[self.label], dtype="float32")
         n = self.n_bins
 
         # reduce the chunk to one (min, max) per x-bin
-        g = np.floor(x / self._bin_w).astype(np.int64)  # global bin id of every sample
-        starts = np.flatnonzero(np.concatenate(([True], g[1:] != g[:-1])))
+        g = floor(x / self._bin_w).astype("int64")  # global bin id of every sample
+        starts = flatnonzero(concatenate(([True], g[1:] != g[:-1])))
         gu = g[starts]
-        mn = np.fmin.reduceat(y, starts)  # NaN-ignoring
-        mx = np.fmax.reduceat(y, starts)
+        mn = fmin.reduceat(y, starts)  # NaN-ignoring
+        mx = fmax.reduceat(y, starts)
 
-        first = int(np.searchsorted(gu, gu[-1] - n, side="right"))  # drop > 1 sweep old
+        first = int(searchsorted(gu, gu[-1] - n, side="right"))  # drop > 1 sweep old
         gu, mn, mx = gu[first:], mn[first:], mx[first:]
         slots = gu % n  # unique within one sweep
 
@@ -149,57 +222,61 @@ class Trace(BaseModel):
         s = slots[newer]
         self._gid[s], self._mn[s], self._mx[s] = gu[newer], mn[newer], mx[newer]
         s = slots[same]
-        self._mn[s] = np.fmin(self._mn[s], mn[same])
-        self._mx[s] = np.fmax(self._mx[s], mx[same])
+        self._mn[s] = fmin(self._mn[s], mn[same])
+        self._mx[s] = fmax(self._mx[s], mx[same])
 
         self._g_latest = max(self._g_latest, int(gu[-1]))
         self._x_latest = max(self._x_latest, float(x[-1]))
         self._dirty = True
 
-    def update(self):
+    def update(self) -> None:
         """Push the current sweep to the series (render thread only)."""
         px, py = self._build_xy()
-        dpg.set_value(self._series, [px, py])
+        set_value(self._series, [px, py])
         self._dirty = False
+        if py.size and isfinite(py).any():
+            self._lo, self._hi = float(nanmin(py)), float(nanmax(py))
+        else:
+            self._lo, self._hi = float("inf"), float("-inf")
 
-    def _build_xy(self) -> tuple[np.ndarray, np.ndarray]:
+    def _build_xy(self) -> tuple[ndarray, ndarray]:
         """Valid bins in x order as (min, max) point pairs; NaN breaks the line at the cursor."""
         n = self.n_bins
         valid = (
             (self._gid > self._g_latest - n)  # newer than one sweep
             & (self._gid > _INVALID)
-            & np.isfinite(self._mn)
-            & np.isfinite(self._mx)
+            & isfinite(self._mn)
+            & isfinite(self._mx)
         )
-        idx = np.flatnonzero(valid)
+        idx = flatnonzero(valid)
         k = idx.size
         if k == 0:
-            return np.empty(0), np.empty(0)
+            return empty(0), empty(0)
 
         w = self._bin_w
-        px = np.empty(2 * k, np.float64)
-        py = np.empty(2 * k, np.float64)
+        px = empty(2 * k, "float64")
+        py = empty(2 * k, "float64")
         px[0::2], px[1::2] = (idx + 0.25) * w, (idx + 0.75) * w
         py[0::2], py[1::2] = self._mn[idx], self._mx[idx]
 
         # Bins left of the cursor are new, bins right of it belong to the previous sweep:
         # insert a NaN between them so ImPlot draws a gap instead of a connecting line.
-        j = int(np.searchsorted(idx, self._g_latest % n, side="right"))
+        j = int(searchsorted(idx, self._g_latest % n, side="right"))
         if 0 < j < k:
             cut = 2 * j
-            px = np.insert(px, cut, px[cut - 1])
-            py = np.insert(py, cut, np.nan)
+            px = insert(px, cut, px[cut - 1])
+            py = insert(py, cut, nan)
         return px, py
 
 
 class Panel2D(BaseModel):
     name: str = Field(...)
-    parent: Any = Field(..., description="Dear PyGui subplots container")
+    parent: int | str = Field(..., description="Dear PyGui subplots container")
 
     dark: bool = Field(default=True)
     x_lim: tuple[float, float] = Field(default=(0.0, 1.0))
     y_lim: tuple[float, float] | None = Field(
-        default=None, description="Fixed (ymin, ymax). None = auto-fit."
+        default=None, description="Fixed (ymin, ymax). None = follow the data."
     )
     x_label: str | None = Field(default=None)
     max_points: int = Field(default=2000, ge=16, description="Display points per trace")
@@ -208,48 +285,56 @@ class Panel2D(BaseModel):
     legend: bool = Field(default=True)
     static: bool = Field(default=False, description="True disables mouse interaction")
 
-    _plot: Any = PrivateAttr(default=None)
+    _plot: int | str | None = PrivateAttr(default=None)
     _x_axis: Any = PrivateAttr(default=None)
     _y_axis: Any = PrivateAttr(default=None)
     _cursor: Any = PrivateAttr(default=None)
     _traces: dict[str, Trace] = PrivateAttr(default_factory=dict)
+    # view management (see _lock_x/_lock_y): an axis is LOCKED for a few frames to apply limits,
+    # then released so the user can zoom/pan it.
+    _x_release: int = PrivateAttr(default=0)
+    _y_release: int = PrivateAttr(default=0)
+    _follow_y: bool = PrivateAttr(default=True)
+    _y_expected: tuple[float, float] | None = PrivateAttr(default=None)
+    _bounds: tuple[float, float] | None = PrivateAttr(default=None)
 
     @property
     def duration(self) -> float:
         return self.x_lim[1] - self.x_lim[0]
 
     @property
+    def plot(self) -> Any:
+        return self._plot
+
+    @property
     def traces(self) -> dict[str, Trace]:
         return self._traces
 
-    def model_post_init(self, context):
-        self._plot = dpg.add_plot(
+    @property
+    def follows_y(self) -> bool:
+        return self._follow_y
+
+    def model_post_init(self, context: Any, /) -> None:  # noqa: ARG002
+        self._plot = add_plot(
             label=self.name, parent=self.parent, width=-1, height=-1, no_inputs=self.static
         )
-        self._x_axis = dpg.add_plot_axis(
-            dpg.mvXAxis, label=self.x_label or "", parent=self._plot, no_gridlines=not self.grid
+        self._x_axis = add_plot_axis(
+            mvXAxis, label=self.x_label or "", parent=self._plot, no_gridlines=not self.grid
         )
-        self._y_axis = dpg.add_plot_axis(
-            dpg.mvYAxis,
-            parent=self._plot,
-            no_gridlines=not self.grid,
-            auto_fit=self.y_lim is None,
-        )
-        dpg.set_axis_limits(self._x_axis, *self.x_lim)  # the sweep window is fixed
-        if self.y_lim is not None:
-            dpg.set_axis_limits(self._y_axis, *self.y_lim)
+        self._y_axis = add_plot_axis(mvYAxis, parent=self._plot, no_gridlines=not self.grid)
         if self.legend:
-            dpg.add_plot_legend(parent=self._plot)
+            add_plot_legend(parent=self._plot)
         if self.cursor:
             # "##" hides the entry from the legend
-            self._cursor = dpg.add_inf_line_series(
+            self._cursor = add_inf_line_series(
                 [self.x_lim[0]], label="##cursor", parent=self._y_axis
             )
-            dpg.bind_item_theme(
-                self._cursor, _series_theme(CURSOR_COLOR, dpg.mvInfLineSeries, weight=1.0)
-            )
+            bind_item_theme(self._cursor, _series_theme(CURSOR_COLOR, mvInfLineSeries, weight=1.0))
+        self.reset_view()
 
-    def set_data(self, data: np.ndarray, labels: list[str] | None = None):
+    # ---------------------------------------------------------------- public
+
+    def set_data(self, data: ndarray, labels: list[str] | None = None) -> None:
         """Feed a structured array (``"ts"`` + trace fields); creates traces on first sight."""
         if not data.dtype.names or "ts" not in data.dtype.names:
             raise RuntimeError("Data must be a structured array with a 'ts' field")
@@ -258,18 +343,95 @@ class Panel2D(BaseModel):
             trace = self._traces.get(label) or self._create_trace(label)
             trace.set_data(data)
 
-    def update(self):
-        """Redraw dirty traces and move the cursor (render thread only)."""
+    def update(self) -> None:
+        """Redraw dirty traces, follow Y and move the cursor (render thread only)."""
         dirty = [t for t in self._traces.values() if t.dirty]
         if not dirty:
             return
         for trace in dirty:
             trace.update()
+
+        bounds = [b for t in self._traces.values() if (b := t.bounds) is not None]
+        self._bounds = (min(b[0] for b in bounds), max(b[1] for b in bounds)) if bounds else None
+        if self._plot and not (
+            is_item_hovered(self._plot) and is_mouse_button_down(mvMouseButton_Left)
+        ):
+            self._follow_fit()  # not while the user is dragging this panel
+
         if self.cursor:
             x_latest = max(t.x_latest for t in self._traces.values())
-            if np.isfinite(x_latest):
+            if isfinite(x_latest):
                 cx = self.x_lim[0] + (x_latest - self.x_lim[0]) % self.duration
-                dpg.set_value(self._cursor, [[cx]])
+                set_value(self._cursor, [[cx]])
+
+    def tick(self) -> None:
+        """Every frame: release locked axes and notice when the user took over Y."""
+        if self.static:
+            return
+        if self._x_release > 0:
+            self._x_release -= 1
+            if self._x_release == 0:
+                set_axis_limits_auto(self._x_axis)
+        if self._y_release > 0:
+            self._y_release -= 1
+            if self._y_release == 0:
+                set_axis_limits_auto(self._y_axis)
+        elif self._follow_y and self._y_expected is not None:
+            lo, hi = get_axis_limits(self._y_axis)
+            e_lo, e_hi = self._y_expected
+            tol = 1e-3 * max(e_hi - e_lo, 1e-9)
+            if abs(lo - e_lo) > tol or abs(hi - e_hi) > tol:
+                self._follow_y = False  # the user zoomed/panned Y: stop following
+
+    def reset_view(self) -> None:
+        """X back to the full sweep; Y back to following the data (or ``y_lim``)."""
+        self._lock_x()
+        self._y_release = 0
+        self._y_expected = None
+        if self.y_lim is not None:
+            self._follow_y = False
+            self._lock_y(*self.y_lim)
+        else:
+            self._follow_y = True
+            if self._bounds is None:
+                self._lock_y(-1.0, 1.0)
+            else:
+                self._follow_fit(force=True)
+
+    # --------------------------------------------------------------- internals
+
+    def _lock_x(self) -> None:
+        set_axis_limits(self._x_axis, *self.x_lim)
+        self._x_release = 0 if self.static else _LOCK_FRAMES
+
+    def _lock_y(self, lo: float, hi: float) -> None:
+        set_axis_limits(self._y_axis, lo, hi)
+        self._y_expected = (lo, hi)
+        self._y_release = 0 if self.static else _LOCK_FRAMES
+
+    def _follow_fit(self, force: bool = False) -> None:
+        """Set Y limits to the data range (+10%) -- only when it no longer fits or is much smaller."""
+        if self.y_lim is not None or not self._follow_y or self._bounds is None:
+            return
+        if self._y_release > 0 and not force:
+            return
+        lo, hi = self._bounds
+        span = hi - lo
+        cur = self._y_expected
+        # Extra headroom when the data outgrows the view, so a drifting/growing signal
+        # does not re-lock (and block mouse input) every few frames.
+        grow = cur is not None and (lo < cur[0] or hi > cur[1])
+        frac = 0.25 if grow else 0.1
+        pad = frac * span if span > 1e-9 else max(frac * abs(hi), 1.0)
+        lo, hi = lo - pad, hi + pad
+        if (
+            force
+            or cur is None
+            or lo < cur[0]
+            or hi > cur[1]
+            or (hi - lo) < 0.5 * (cur[1] - cur[0])
+        ):
+            self._lock_y(lo, hi)
 
     def _create_trace(self, label: str) -> Trace:
         palette = PALETTE_DARK if self.dark else PALETTE_WHITE
@@ -283,7 +445,7 @@ class Panel2D(BaseModel):
         )
         self._traces[label] = trace
         if self._cursor is not None:
-            dpg.move_item(self._cursor, parent=self._y_axis)  # keep the cursor drawn last
+            move_item(self._cursor, parent=self._y_axis)  # keep the cursor drawn last
         return trace
 
 
@@ -298,12 +460,11 @@ class Oscilloscope(BaseModel):
         default=True,
         description="True: one panel per trace. False: one panel per dataset (key).",
     )
-    legend: bool = Field(
-        default=True, description="Name the traces of each panel (only when split_traces=False)"
-    )
+    legend: bool = Field(default=True, description="Name the traces of each panel")
     y_lim: tuple[float, float] | None = Field(
         default=None, description="Fixed (ymin, ymax). None = auto-fit per panel."
     )
+    interactive: bool = Field(default=True, description="Mouse zoom/pan/reset")
     size: Literal["auto"] | tuple[int, int] = Field(default="auto")
     theme: Literal["auto", "dark", "white"] = Field(default="auto")
     queue_size: int = Field(default=1000, gt=0, description="Size of the internal queue")
@@ -312,187 +473,135 @@ class Oscilloscope(BaseModel):
     _dark: bool = PrivateAttr(default=True)
     _window: Any = PrivateAttr(default=None)
     _placeholder: Any = PrivateAttr(default=None)
-    _subplots: Any = PrivateAttr(default=None)
+    _subplots: int | str | None = PrivateAttr(default=None)
     _panels: dict[str, Panel2D] = PrivateAttr(default_factory=dict)
     _rejected: set[str] = PrivateAttr(default_factory=set)
 
-    _queue: Queue = PrivateAttr()
-    _thread: threading.Thread | None = PrivateAttr(default=None)
-    _ready: threading.Event = PrivateAttr(default_factory=threading.Event)
-    _stop: threading.Event = PrivateAttr(default_factory=threading.Event)
+    _osc_queue: Queue[tuple[int, dict[str, ndarray]]] = PrivateAttr()
+    _thread: Thread | None = PrivateAttr(default=None)
+    _ready: Event = PrivateAttr(default_factory=Event)
+    _stop: Event = PrivateAttr(default_factory=Event)
     _error: BaseException | None = PrivateAttr(default=None)
     _started: bool = PrivateAttr(default=False)
     _active: bool = PrivateAttr(default=False)
+    _title_paused: bool = PrivateAttr(default=False)
+    _reset_requested: Event = PrivateAttr(default_factory=Event)
+    _keys: dict[str, bool] = PrivateAttr(default_factory=dict)
     _frame_errors: int = PrivateAttr(default=0)
     _dropped: int = PrivateAttr(default=0)
     _last_drop_log: float = PrivateAttr(default=0.0)
 
-    def model_post_init(self, context):
+    def model_post_init(self, context: Any, /) -> None:  # noqa: ARG002
         if self.size == "auto":
             try:
-                monitors = get_monitors()
-                monitor = next(
+                monitors: list[Monitor] = get_monitors()
+                monitor: Monitor = next(
                     (m for m in monitors if getattr(m, "is_primary", False)), monitors[0]
                 )
                 self._size = (int(monitor.width * 0.9), int(monitor.height * 0.9))
             except (ScreenInfoError, IndexError):
-                pass
+                pass  # keep the 1280x720 fallback
         else:
             self._size = self.size
 
         self._dark = self.theme == "dark" or (self.theme == "auto" and bool(isDark()))
-        self._queue = Queue(maxsize=self.queue_size)
-
+        self._osc_queue = Queue(maxsize=self.queue_size)
 
     @property
     def is_open(self) -> bool:
         return self._active and not self._stop.is_set()
 
-    def open(self, timeout: float = 15.0):
+    def open(self) -> None:
         if self.is_open:
             return
 
         self._reset()
-        self._thread = threading.Thread(
-            target=self._run, name=f"{type(self).__name__}_thread", daemon=True
-        )
+
+        self._thread = Thread(target=self._run, name=f"{type(self).__name__}_thread", daemon=True)
         self._thread.start()
-       
-        if not self._ready.wait(timeout):
-            raise TimeoutError(f"{type(self).__name__} did not start within {timeout}s")
-       
+
+        if not self._ready.wait(15):
+            raise TimeoutError(f"{type(self).__name__} did not start within 15s")
+
         if self._error is not None:
             raise RuntimeError(f"{type(self).__name__} failed to start") from self._error
 
-    def run(self, producer: Callable[["Oscilloscope"], None] | None = None):
-        """Blocking alternative to :meth:`open`: renders on the CALLING (main) thread.
-
-        ``producer(scope)`` optionally runs in a background thread; loop on
-        ``scope.is_open`` inside it and feed ``scope.add_data``.
-        """
+    def run(self, producer: Callable[["Oscilloscope"], None] | None = None) -> None:
         self._reset()
+
         worker = None
         if producer is not None:
-            worker = threading.Thread(
-                target=producer, args=(self,), name="OscilloscopeProducer", daemon=True
-            )
+            worker = Thread(target=producer, args=(self,), name="OscilloscopeProducer", daemon=True)
             worker.start()
+
         try:
             self._run()
         finally:
             self._stop.set()
+
             if worker is not None:
                 worker.join(timeout=2.0)
+
         if self._error is not None:
             raise RuntimeError(f"{type(self).__name__} failed") from self._error
 
-    def close(self, timeout: float = 5.0):
+    def close(self) -> None:
         """Ask the render loop to exit (it ends within one frame) and wait for it."""
         self._stop.set()
         thread = self._thread
-        if thread is None or thread is threading.current_thread():
+        if thread is None or thread is current_thread():
             return
-        thread.join(timeout)
+        thread.join(5)
         if thread.is_alive():
-            LOGGER.warning("Render thread still running after %.1fs", timeout)
+            LOGGER.warning("Render thread still running after 5s")
         else:
             self._thread = None
 
-    def add_data(self, data: dict[str, np.ndarray]) -> bool:
-        """Queue new samples (thread-safe, non-blocking). See the module docstring.
+    def reset_view(self) -> None:
+        """Reset zoom/pan of every panel on the next frame. Thread-safe."""
+        self._reset_requested.set()
 
-        Returns False (without raising) once the window has been closed, so a producer
-        loop can simply stop; raises only for bad input or if never started.
-        """
+    def add_data(self, data: dict[str, ndarray]) -> bool:
         if not self._started:
             raise RuntimeError(f"{type(self).__name__} needs to be opened first")
 
-        packet: dict[str, np.ndarray] = {}
-        for name, arr in data.items():
-            normalized = self._normalize(name, arr)
-            if normalized is not None:
-                packet[name] = normalized
-
         if self._stop.is_set():
             return False
-        if not packet:
-            return True
+
         try:
-            self._queue.put_nowait(packet)
+            # TODO use internal ts?
+            self._osc_queue.put_nowait((monotonic_ns(), data))
         except Full:
             self._dropped += 1
-            now = time.monotonic()
+            now = monotonic_ns()
             if now - self._last_drop_log > 1.0:
                 LOGGER.warning("Oscilloscope queue full - dropped %d packet(s)", self._dropped)
                 self._last_drop_log = now
         return True
 
-    # ------------------------------------------------------------ input parsing
-
-    @staticmethod
-    def _normalize(name: str, arr: Any) -> np.ndarray | None:
-        """-> structured array [("ts", f8), (label, f4), ...], sorted, finite x. Always copies."""
-        a = np.asarray(arr)
-        if a.ndim == 0:
-            a = a.reshape(1)
-
-        if a.dtype.names:  # structured: first field is x
-            if a.ndim != 1 or len(a.dtype.names) < 2:
-                raise ValueError(f"{name!r}: structured array needs 1-D data and >= 2 fields")
-            fields = a.dtype.names
-            x = a[fields[0]].astype(np.float64)
-            labels = list(fields[1:])
-            Y = np.column_stack([a[f].astype(np.float32) for f in labels])
-        else:  # plain: column 0 is x
-            if a.ndim != 2 or a.shape[1] < 2:
-                raise ValueError(f"{name!r}: expected shape (n, 1 + m) with x in column 0")
-            x = a[:, 0].astype(np.float64)
-            Y = a[:, 1:].astype(np.float32)
-            labels = [str(i) for i in range(1, a.shape[1])]
-
-        if "ts" in labels:
-            raise ValueError(f"{name!r}: 'ts' is reserved for the x field")
-        if x.size == 0:
-            return None
-
-        ok = np.isfinite(x)
-        if not ok.all():
-            x, Y = x[ok], Y[ok]
-            if x.size == 0:
-                return None
-        Y[~np.isfinite(Y)] = np.nan  # NaN/inf become gaps
-        if x.size > 1 and (np.diff(x) < 0).any():
-            order = np.argsort(x, kind="stable")
-            x, Y = x[order], Y[order]
-
-        out = np.empty(x.size, dtype=[("ts", "f8")] + [(l, "f4") for l in labels])
-        out["ts"] = x
-        for j, label in enumerate(labels):
-            out[label] = Y[:, j]
-        return out
-
-    # ---------------------------------------------------------------- UI building
-
-    def _reset(self):
+    def _reset(self) -> None:
         self._stop.clear()
         self._ready.clear()
         self._started = True
         self._active = True
         self._error = None
         self._frame_errors = 0
+        self._title_paused = False
+        self._reset_requested.clear()
+        self._keys = {}
         self._rejected.clear()
         while True:  # discard stale packets from a previous session
             try:
-                self._queue.get_nowait()
+                self._osc_queue.get_nowait()
             except Empty:
                 break
 
-    def _build_ui(self):
-        dpg.bind_theme(_global_theme(self._dark))
-        self._window = dpg.add_window(
+    def _build_ui(self) -> None:
+        bind_theme(_global_theme(self._dark))
+        self._window = add_window(
             no_title_bar=True, no_scrollbar=True, no_move=True, no_resize=True, no_collapse=True
         )
-        self._placeholder = dpg.add_text("Waiting for data...", parent=self._window, indent=12)
+        self._placeholder = add_text("Waiting for data...", parent=self._window, indent=12)
 
     def _add_panel(self, name: str) -> bool:
         if len(self._panels) >= self.max_panels:
@@ -503,16 +612,16 @@ class Oscilloscope(BaseModel):
                 )
             return False
 
-        rows = len(self._panels) + 1
+        rows: int = len(self._panels) + 1
         if self._subplots is None:
             if self._placeholder is not None:
-                dpg.delete_item(self._placeholder)
+                delete_item(self._placeholder)
                 self._placeholder = None
-            self._subplots = dpg.add_subplots(
+            self._subplots = add_subplots(
                 rows, 1, parent=self._window, width=-1, height=-1, link_all_x=True
             )
         else:
-            dpg.configure_item(self._subplots, rows=rows)  # one more row, equal heights
+            configure_item(self._subplots, rows=rows)  # one more row, equal heights
 
         self._panels[name] = Panel2D(
             name=name,
@@ -520,64 +629,117 @@ class Oscilloscope(BaseModel):
             dark=self._dark,
             x_lim=(0.0, self.duration),
             y_lim=self.y_lim,
-            x_label="Time (s)",
+            x_label="Time[s]",
             max_points=self.max_points,
-            legend=self.legend and not self.split_traces,
+            legend=self.legend,
             grid=True,  # TODO: make this configurable
-            static=False,  # TODO: make this configurable
+            static=not self.interactive,
         )
         return True
 
-    # -------------------------------------------------------------- frame logic
-
     def _panel_names(self, key: str, labels: tuple[str, ...]) -> list[tuple[str, list[str]]]:
-        """-> [(panel_name, [labels shown in it]), ...] for one dataset."""
         if not self.split_traces or len(labels) == 1:
             return [(key, list(labels))]
         return [(f"{key}[{label}]", [label]) for label in labels]
 
-    def _drain_queue(self) -> dict[str, np.ndarray]:
-        chunks: dict[str, list[np.ndarray]] = {}
-        for _ in range(self._queue.qsize()):  # bounded: ignore packets arriving meanwhile
+    def _drain_queue(self) -> dict[str, ndarray]:
+        chunks: dict[str, list[ndarray]] = {}
+        for _ in range(self._osc_queue.qsize()):  # bounded: ignore packets arriving meanwhile
             try:
-                packet = self._queue.get_nowait()
+                ts, p = self._osc_queue.get_nowait()
             except Empty:
                 break
-            for key, arr in packet.items():
-                chunks.setdefault(key, []).append(arr)
 
-        merged: dict[str, np.ndarray] = {}
+            for key, arr in p.items():
+                normalized = self._normalize(key, arr)
+                if normalized is not None:
+                    chunks.setdefault(key, []).append(normalized)
+
+        merged: dict[str, ndarray] = {}
         for key, items in chunks.items():
             dtype = items[0].dtype
-            items = [a for a in items if a.dtype == dtype]  # skip packets whose columns changed
-            arr = items[0] if len(items) == 1 else np.concatenate(items)
-            if arr.size > 1 and (np.diff(arr["ts"]) < 0).any():
-                arr = arr[np.argsort(arr["ts"], kind="stable")]
+            items = [a for a in items if a.dtype == dtype]
+            arr = items[0] if len(items) == 1 else concatenate(items)
+
+            if arr.size > 1 and (diff(arr["ts"]) < 0).any():
+                arr = arr[argsort(arr["ts"], kind="stable")]
+
             merged[key] = arr
+
         return merged
 
-    def _ensure_panels(self, data: dict[str, np.ndarray]):
+    @staticmethod
+    def _normalize(name: str, arr: Any) -> ndarray | None:
+        a = asarray(arr)
+        if a.ndim == 0:
+            a = a.reshape(1)
+
+        if a.dtype.names:  # structured: first field is x
+            if a.ndim != 1 or len(a.dtype.names) < 2:
+                raise ValueError(f"{name!r}: structured array needs 1-D data and >= 2 fields")
+            fields = a.dtype.names
+            x = a[fields[0]].astype("float64")
+            labels = list(fields[1:])
+            Y = column_stack([a[f].astype("float32") for f in labels])
+        else:  # plain: column 0 is x
+            if a.ndim != 2 or (len(a.shape) > 1 and a.shape[1] < 2):
+                raise ValueError(f"{name!r}: expected shape (n, 1 + m) with x in column 0")
+
+            x = a[:, 0].astype("float64")
+            Y = a[:, 1:].astype("float32")
+            labels = [str(i) for i in range(1, (len(a.shape) > 1 and a.shape[1]))]
+
+        if "ts" in labels:
+            raise ValueError(f"{name!r}: 'ts' is reserved for the x field")
+        if x.size == 0:
+            return None
+
+        ok = isfinite(x)
+        if not ok.all():
+            x, Y = x[ok], Y[ok]
+            if x.size == 0:
+                return None
+        Y[~isfinite(Y)] = nan  # NaN/inf become gaps
+        if x.size > 1 and (diff(x) < 0).any():
+            order = argsort(x, kind="stable")
+            x, Y = x[order], Y[order]
+
+        out = empty(x.size, dtype=[("ts", "f8")] + [(l, "f4") for l in labels])
+        out["ts"] = x
+        for j, label in enumerate(labels):
+            out[label] = Y[:, j]
+        return out
+
+    def _ensure_panels(self, data: dict[str, ndarray]) -> None:
         for key, arr in data.items():
+            if not arr.dtype.names:
+                raise RuntimeError("Not structured array in data packet")
+
             for name, _labels in self._panel_names(key, arr.dtype.names[1:]):
                 if name not in self._panels and name not in self._rejected:
                     self._add_panel(name)
 
-    def _ingest(self, data: dict[str, np.ndarray]):
+    def _ingest(self, data: dict[str, ndarray]) -> None:
         for key, arr in data.items():
+            if not arr.dtype.names:
+                raise RuntimeError("Not structured array in data packet")
+
             for name, labels in self._panel_names(key, arr.dtype.names[1:]):
                 panel = self._panels.get(name)
                 if panel is not None:
                     panel.set_data(arr, labels=labels)
 
-    def _frame(self):
-        """One iteration of the render loop (render thread only)."""
+    def _frame(self) -> None:
         try:
             data = self._drain_queue()
             if data:
                 self._ensure_panels(data)
                 self._ingest(data)
+
             for panel in self._panels.values():
+                panel.tick()
                 panel.update()
+
             self._frame_errors = 0
         except Exception:
             LOGGER.exception("Oscilloscope frame failed")
@@ -586,30 +748,28 @@ class Oscilloscope(BaseModel):
                 LOGGER.error("Too many consecutive frame errors; stopping")
                 self._stop.set()
 
-    # ---------------------------------------------------------------- lifecycle
-
-    def _run(self):
+    def _run(self) -> None:
         context_created = False
         try:
-            dpg.create_context()
+            create_context()
             context_created = True
             _THEMES.clear()  # theme ids belong to one context; never reuse across sessions
             self._build_ui()
-            dpg.create_viewport(
+            create_viewport(
                 title=self.title,
                 width=self._size[0],
                 height=self._size[1],
                 clear_color=BG_DARK if self._dark else BG_WHITE,
             )
-            dpg.setup_dearpygui()
-            dpg.show_viewport()
-            dpg.set_primary_window(self._window, True)
+            setup_dearpygui()
+            show_viewport()
+            set_primary_window(self._window, value=True)
             self._ready.set()
 
             # Ends when the window is closed or close() is called.
-            while dpg.is_dearpygui_running() and not self._stop.is_set():
+            while is_dearpygui_running() and not self._stop.is_set():
                 self._frame()
-                dpg.render_dearpygui_frame()
+                render_dearpygui_frame()
         except Exception as exc:
             self._error = exc
             LOGGER.exception(exc)
@@ -621,14 +781,19 @@ class Oscilloscope(BaseModel):
             _THEMES.clear()
             if context_created:
                 try:
-                    dpg.destroy_context()
+                    destroy_context()
                 except Exception:
-                    LOGGER.exception("dpg.destroy_context() failed")
+                    LOGGER.exception("destroy_context() failed")
             self._ready.set()  # never leave open() waiting
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         self.open()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         self.close()
