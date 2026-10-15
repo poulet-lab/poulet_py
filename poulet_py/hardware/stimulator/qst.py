@@ -151,8 +151,8 @@ class TCSStimulus(BaseModel):
     )
     baseline: float = Field(
         30,
-        description="Baseline temperature in °C (20-45)",
-        ge=20,
+        description="Baseline temperature in °C (16-45)",
+        ge=16,
         le=45,
     )
     target: float = Field(
