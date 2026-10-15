@@ -1,7 +1,7 @@
 try:
-    from collections.abc import Callable
-    from queue import Empty, Full, Queue
-    from threading import Event, Thread, current_thread
+    from multiprocessing import Event, Process, get_context
+    from multiprocessing.queues import Queue
+    from multiprocessing.synchronize import Event as TypeEvent
     from time import monotonic_ns
     from types import TracebackType
     from typing import Any, Literal, Self
@@ -356,12 +356,12 @@ class SeriesPanel(BaseModel):
                 asarray(data["ts"], dtype="float64"),
                 asarray(data[label], dtype="float32"),
             )
-
+    # TODO update cursor even without data
     def update(self) -> None:
         """Redraw dirty curves, follow Y and move the cursor."""
         dirty = [label for label, buf in self._buffers.items() if buf.dirty]
-        if not dirty:
-            return
+        # if not dirty:
+        #     return
 
         for label in dirty:
             px, py = self._buffers[label].xy()
@@ -521,16 +521,16 @@ class Oscilloscope(BaseModel):
     _panels: dict[str, SeriesPanel] = PrivateAttr(default_factory=dict)
     _rejected: set[str] = PrivateAttr(default_factory=set)
 
-    _osc_queue: Queue[tuple[int, dict[str, ndarray]]] = PrivateAttr()
-    _osc_thread: Thread | None = PrivateAttr(default=None)
-    _ready: Event = PrivateAttr(default_factory=Event)
-    _stop: Event = PrivateAttr(default_factory=Event)
+    _osc_queue: Queue[tuple[int, dict[str, ndarray]]] | None = PrivateAttr(default=None)
+    _osc_process: Process | None = PrivateAttr(default=None)
+    _ready: TypeEvent = PrivateAttr(default_factory=Event)
+    _stop: TypeEvent = PrivateAttr(default_factory=Event)
     _error: BaseException | None = PrivateAttr(default=None)
     _started: bool = PrivateAttr(default=False)
     _active: bool = PrivateAttr(default=False)
     _paused: bool = PrivateAttr(default=False)
     _title_paused: bool = PrivateAttr(default=False)
-    _reset_requested: Event = PrivateAttr(default_factory=Event)
+    _reset_requested: TypeEvent = PrivateAttr(default_factory=Event)
     _keys: dict[str, bool] = PrivateAttr(default_factory=dict)
     _frame_errors: int = PrivateAttr(default=0)
     _dropped: int = PrivateAttr(default=0)
@@ -550,7 +550,6 @@ class Oscilloscope(BaseModel):
             self._size = self.size
 
         self._dark = self.theme == "dark" or (self.theme == "auto" and bool(isDark()))
-        self._osc_queue = Queue(maxsize=self.queue_size)
 
     @property
     def is_open(self) -> bool:
@@ -562,62 +561,28 @@ class Oscilloscope(BaseModel):
 
         self._reset()
 
-        self._osc_thread = Thread(
-            target=self._run, name=f"{type(self).__name__}_thread", daemon=True
+        ctx = get_context("spawn")
+        self._osc_queue = ctx.Queue(maxsize=self.queue_size)
+
+        self._process = ctx.Process(
+            target=_oscilloscope_process,
+            args=(self.model_dump(), self._osc_queue, self._stop),
+            daemon=False,
         )
-        self._osc_thread.start()
 
-        if not self._ready.wait(15):
-            raise TimeoutError(f"{type(self).__name__} did not start within 15s")
-
-        if self._error is not None:
-            raise RuntimeError(f"{type(self).__name__} failed to start") from self._error
-
-    def run(self, producer: Callable[["Oscilloscope"], None] | None = None) -> None:
-        self._reset()
-
-        worker = None
-        if producer is not None:
-            worker = Thread(target=producer, args=(self,), name="OscilloscopeProducer", daemon=True)
-            worker.start()
-
-        try:
-            self._run()
-        finally:
-            self._stop.set()
-
-            if worker is not None:
-                worker.join(timeout=2.0)
-
-        if self._error is not None:
-            raise RuntimeError(f"{type(self).__name__} failed") from self._error
+        self._process.start()
 
     def close(self) -> None:
         """Ask the render loop to exit (it ends within one frame) and wait for it."""
         self._stop.set()
-        thread = self._osc_thread
-        if thread is None or thread is current_thread():
-            return
-        thread.join(5)
-        if thread.is_alive():
-            LOGGER.warning("Render thread still running after 5s")
-        else:
-            self._osc_thread = None
-
-    @property
-    def paused(self) -> bool:
-        return self._paused
-
-    def pause(self) -> None:
-        """Freeze the display (data keeps being collected). Thread-safe."""
-        self._paused = True
-
-    def resume(self) -> None:
-        """Unfreeze the display; it catches up to the latest data. Thread-safe."""
-        self._paused = False
+        if self._osc_process:
+            self._osc_process.join(5)
+            if self._osc_process.is_alive():
+                LOGGER.warning("Render thread still running after 5s")
+            else:
+                self._osc_process = None
 
     def reset_view(self) -> None:
-        """Reset zoom/pan of every panel on the next frame. Thread-safe."""
         self._reset_requested.set()
 
     def add_data(self, data: dict[str, ndarray]) -> bool:
@@ -627,15 +592,19 @@ class Oscilloscope(BaseModel):
         if self._stop.is_set():
             return False
 
-        try:
-            # TODO use internal ts?
-            self._osc_queue.put_nowait((monotonic_ns(), data))
-        except Full:
+        if not self._osc_queue:
+            return False
+
+        # TODO use internal ts?
+        if self._osc_queue.full():
             self._dropped += 1
             now = monotonic_ns()
             if now - self._last_drop_log > 1.0:
                 LOGGER.warning("Oscilloscope queue full - dropped %d packet(s)", self._dropped)
                 self._last_drop_log = now
+        else:
+            self._osc_queue.put_nowait((monotonic_ns(), data))
+
         return True
 
     def _reset(self) -> None:
@@ -650,11 +619,16 @@ class Oscilloscope(BaseModel):
         self._reset_requested.clear()
         self._keys = {}
         self._rejected.clear()
-        while True:  # discard stale packets from a previous session
-            try:
-                self._osc_queue.get_nowait()
-            except Empty:
+
+        if not self._osc_queue:
+            return
+
+        while True:
+            if self._osc_queue.empty():
                 break
+            self._osc_queue.get_nowait()
+
+        self._osc_queue = None
 
     def _build_ui(self) -> None:
         bind_theme(_global_theme(self._dark))
@@ -707,12 +681,15 @@ class Oscilloscope(BaseModel):
         return [(f"{key}[{label}]", [label]) for label in labels]
 
     def _drain_queue(self) -> dict[str, ndarray]:
+        if not self._osc_queue:
+            raise RuntimeError("No queue has been assinged")
+
         chunks: dict[str, list[ndarray]] = {}
-        for _ in range(self._osc_queue.qsize()):  # bounded: ignore packets arriving meanwhile
-            try:
-                ts, p = self._osc_queue.get_nowait()
-            except Empty:
+        while True:
+            if self._osc_queue.empty():
                 break
+
+            ts, p = self._osc_queue.get_nowait()
 
             for key, arr in p.items():
                 normalized = self._normalize(key, arr)
@@ -889,3 +866,18 @@ class Oscilloscope(BaseModel):
         exc_tb: TracebackType | None,
     ) -> None:
         self.close()
+
+
+def _oscilloscope_process(
+    config: dict[str, Any], queue: Queue[tuple[int, dict[str, ndarray]]], stop_event: TypeEvent
+) -> None:
+    osc = Oscilloscope(**config)
+    osc._osc_queue = queue
+    osc._stop = stop_event
+
+    try:
+        osc._run()
+    except Exception as e:
+        LOGGER.exception(e)
+    finally:
+        pass
