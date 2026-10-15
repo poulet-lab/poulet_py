@@ -356,6 +356,7 @@ class SeriesPanel(BaseModel):
                 asarray(data["ts"], dtype="float64"),
                 asarray(data[label], dtype="float32"),
             )
+
     # TODO update cursor even without data
     def update(self) -> None:
         """Redraw dirty curves, follow Y and move the cursor."""
