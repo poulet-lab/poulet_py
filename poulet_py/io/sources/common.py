@@ -1,6 +1,6 @@
 try:
     from abc import ABC, abstractmethod
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
     from enum import Enum
     from threading import Barrier, Event, Lock, Thread
     from time import sleep
@@ -36,7 +36,7 @@ class BaseSource(BaseModel, ABC):
     _bus: EventBus = PrivateAttr(default_factory=EventBus)
     _external_bus: bool = PrivateAttr(default=False)
 
-    _stimuli: tuple[BaseStimulus, ...] = PrivateAttr(default_factory=tuple)
+    _stimuli: Sequence[BaseStimulus] = PrivateAttr(default_factory=tuple)
     _max_stimulus_duration_ms: int = PrivateAttr(0)
     _is_open: bool = PrivateAttr(default=False)
 
@@ -130,7 +130,7 @@ class BaseSource(BaseModel, ABC):
 
         self._is_open = False
 
-    def fire(self, stimuli: tuple[BaseStimulus, ...]) -> bool:
+    def fire(self, stimuli: Sequence[BaseStimulus]) -> bool:
         self._ensure_open()
         self._stimuli = stimuli
 

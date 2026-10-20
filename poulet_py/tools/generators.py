@@ -1,4 +1,5 @@
 try:
+    from abc import _T
     from collections.abc import Sequence
     from random import shuffle
     from typing import Any, Literal
@@ -11,8 +12,8 @@ Missing 'tools' module. Install options:
 
 
 def repeat(
-    l: Sequence[Any], n: int, *, mode: Literal["random", "sequential"] = "random"
-) -> Sequence[Any]:
+    l: Sequence[_T], n: int, *, mode: Literal["random", "sequential"] = "random"
+) -> Sequence[_T]:
     """
     Generate a list of trials with specified stimuli distribution.
 
