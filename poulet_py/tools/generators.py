@@ -1,8 +1,7 @@
 try:
-    from typing import TypeVar
     from collections.abc import Sequence
     from random import shuffle
-    from typing import Literal
+    from typing import Literal, TypeVar
 except ImportError as e:
     raise ImportError("""
 Missing 'tools' module. Install options:
