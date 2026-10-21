@@ -108,8 +108,10 @@ class StimulatorBlock(BaseModel):
 
 
 class ResponceMonitor(EventHandler):
-    event_callable: Callable[[BaseEvent], bool] = Field(...)
-    trial_callable: Callable[[StimulatorTrial], StimulatorTrial] | None = Field(default=None)
+    on_event_callable: Callable[[BaseEvent], bool] | None = Field(default=None)
+    before_trial_callable: Callable[[StimulatorTrial], StimulatorTrial | None] | None = Field(
+        default=None
+    )
 
     _bus: EventBus = PrivateAttr(default_factory=EventBus)
     _external_bus: bool = PrivateAttr(default=False)
@@ -156,9 +158,13 @@ class ResponceMonitor(EventHandler):
     def on_event(self, event: BaseEvent) -> None:
         self._ensure_open()
 
-        stop = self.event_callable(event)
-        if not self._should_stop and stop:
-            self._should_stop = stop
+        if self.on_event_callable:
+            stop = self.on_event_callable(event)
+            if not self._should_stop and stop:
+                self._should_stop = stop
+
+    def check_trial(self, trial: StimulatorTrial) -> StimulatorTrial | None:
+        return self.before_trial_callable(trial) if self.before_trial_callable else trial
 
     def _ensure_open(self) -> None:
         if not self._is_open:
@@ -372,8 +378,8 @@ class StimulatorRuntime(BaseModel):
                         ):
                             break
 
-                        if self.responce_monitor and self.responce_monitor.trial_callable:
-                            current_trial = self.responce_monitor.trial_callable(trial)
+                        if self.responce_monitor:
+                            current_trial = self.responce_monitor.check_trial(current_trial)
 
                         if not current_trial:
                             continue

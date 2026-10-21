@@ -71,7 +71,13 @@ from .stimulus import (
     TCSStimulus,
 )
 from .tools import go_to, json_serializer, repeat, sanitize_path, precise_sleep
-from .utils import StimulatorBlock, StimulatorRuntime, StimulatorTrial, Oscilloscope
+from .utils import (
+    StimulatorBlock,
+    StimulatorRuntime,
+    StimulatorTrial,
+    Oscilloscope,
+    ResponceMonitor,
+)
 
 __all__ = [
     "LOGGER",
@@ -90,6 +96,7 @@ __all__ = [
     "INA228Source",
     "CounterSource",
     "OpenEphysSource",
+    "ResponceMonitor",
     "EmptyStimulus",
     "EventBus",
     "ThermocoupleType",
