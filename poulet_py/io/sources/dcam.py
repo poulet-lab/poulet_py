@@ -29,7 +29,7 @@ class DCAMSource(BaseSource, DCAM):
 
     def _fire(self) -> bool:
         if self.acquisition_type == AcquisitionType.FINITE:
-            deadline = monotonic_ns() + self._max_stimulus_duration_ms * 1000000
+            deadline = monotonic_ns() + self._max_stimulus_duration_ms * 1_000_000
 
             while monotonic_ns() < deadline:
                 sample = self.read_sample()
