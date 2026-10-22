@@ -1,6 +1,7 @@
 try:
+    from collections.abc import Sequence
     from time import monotonic_ns
-    from typing import Any
+    from typing import Any, Literal
 
     from numpydantic import NDArray
     from pydantic import BaseModel, Field
@@ -17,6 +18,8 @@ Missing 'event' module. Install options:
 class BaseEvent(BaseModel):
     name: str = Field(..., description="Name of the data source")
     timestamp: int = Field(default_factory=monotonic_ns, description="Timestamp of the event")
+    tags: Sequence[str] = Field(default_factory=list)
+    write_on: Literal["all", "disk", "memory"] = Field(default="all")
 
 
 class SinkEvent(BaseEvent):

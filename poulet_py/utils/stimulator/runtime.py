@@ -1,18 +1,5 @@
-"""
-Stimulator management classes for defining and running experimental protocols.
-
-Classes
--------
-StimulatorTrial
-    Container for a single trial.
-StimulatorBlock
-    Container for a block of trials with repetition and ordering controls.
-StimulatorRuntime
-    Main experiment orchestrator managing blocks, sources, sinks, and execution.
-"""
-
 try:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Sequence
     from secrets import choice
     from threading import Barrier, Event
     from time import time_ns
@@ -26,18 +13,8 @@ try:
     from prompt_toolkit.shortcuts.progress_bar import ProgressBar
     from pydantic import BaseModel, Field, PrivateAttr, model_validator
 
-    from poulet_py import (
-        LOGGER,
-        BaseEvent,
-        BaseSink,
-        BaseSource,
-        BaseStimulus,
-        BaseTrigger,
-        EventBus,
-        EventHandler,
-        precise_sleep,
-        repeat,
-    )
+    from poulet_py import LOGGER, BaseSink, BaseSource, EventBus, precise_sleep, repeat
+    from poulet_py.utils.stimulator import BaseMonitor, Block, Trial, MonitorCommands
 
 except ImportError as e:
     raise ImportError("""
@@ -48,142 +25,7 @@ Missing 'stimulator' module. Install options:
 """) from e
 
 
-class StimulatorTrial(BaseModel):
-    """
-    Represents a single trial within an experiment block.
-
-    A trial consists of one or more stimuli that are presented simultaneously
-    during the trial execution.
-    """
-
-    name: str | None = Field(default=None, description="Name of the trial")
-    stimuli: BaseStimulus | Sequence[BaseStimulus] = Field(..., description="Stimuli for the trial")
-    isi: int | Sequence[int] = Field(default=0, description="Inter-stimulus interval")
-
-    @model_validator(mode="after")
-    def validate_stimuli(self) -> Self:
-        if not isinstance(self.stimuli, Sequence):
-            self.stimuli = [self.stimuli]
-
-        if isinstance(self.isi, range):
-            self.isi = list(self.isi)
-        return self
-
-
-class StimulatorBlock(BaseModel):
-    """
-    Represents a block of trials within an experiment.
-
-    A block contains one or more trials that are repeated and ordered according
-    to specified parameters. ISI and trigger behavior can be configured per block.
-
-    Notes
-    -----
-    ISI values provided as a range will be converted to a list for random selection.
-    """
-
-    name: str | None = Field(default=None, description="Name of the block")
-    trials: Sequence[StimulatorTrial] = Field(..., description="Trials in the block")
-
-    trial_repetitions: int = Field(
-        default=1, ge=1, description="Number of times to repeat each trial"
-    )
-    trial_order: Literal["random", "sequential"] = Field(
-        default="random", description="Order of trials"
-    )
-
-    trigger: BaseTrigger | None = Field(default=None, description="Trigger for the trial")
-    trigger_policy: Literal["abort", "skip"] = Field(
-        default="abort",
-        description="Policy for handling triggers, abort the current trial or skip it",
-    )
-
-    isi: int | Sequence[int] = Field(default=0, description="Inter-stimulus interval")
-
-    @model_validator(mode="after")
-    def validate_isi(self) -> Self:
-        if isinstance(self.isi, range):
-            self.isi = list(self.isi)
-        return self
-
-
-class ResponceMonitor(EventHandler):
-    on_event_callable: Callable[[BaseEvent], bool] | None = Field(default=None)
-    before_trial_callable: Callable[[StimulatorTrial], StimulatorTrial | None] | None = Field(
-        default=None
-    )
-
-    _bus: EventBus = PrivateAttr(default_factory=EventBus)
-    _external_bus: bool = PrivateAttr(default=False)
-
-    _is_open: bool = PrivateAttr(default=False)
-    _should_stop: bool = PrivateAttr(default=False)
-
-    @property
-    def should_stop(self) -> bool:
-        return self._should_stop
-
-    @property
-    def bus(self) -> EventBus:
-        return self._bus
-
-    @bus.setter
-    def bus(self, value: EventBus) -> None:
-        if self._is_open:
-            raise RuntimeError(f"Cannot change bus while {type(self).__name__} is open")
-
-        self._bus = value
-        self._external_bus = True
-
-    def open(self) -> None:
-        if self._is_open:
-            return
-
-        if not self._external_bus:
-            self.bus.open()
-
-        self.bus.subscribe(self)
-
-        self._is_open = True
-
-    def close(self) -> None:
-        if not self._is_open:
-            return
-
-        if not self._external_bus:
-            self.bus.close()
-
-        self._is_open = False
-
-    def on_event(self, event: BaseEvent) -> None:
-        self._ensure_open()
-
-        if self.on_event_callable:
-            stop = self.on_event_callable(event)
-            if not self._should_stop and stop:
-                self._should_stop = stop
-
-    def check_trial(self, trial: StimulatorTrial) -> StimulatorTrial | None:
-        return self.before_trial_callable(trial) if self.before_trial_callable else trial
-
-    def _ensure_open(self) -> None:
-        if not self._is_open:
-            raise RuntimeError(f"{type(self)} need to be opened first")
-
-    def __enter__(self) -> Self:
-        self.open()
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        self.close()
-
-
-class StimulatorRuntime(BaseModel):
+class Runtime(BaseModel):
     """
     Main experiment orchestrator managing execution, data sources, and sinks.
 
@@ -193,15 +35,13 @@ class StimulatorRuntime(BaseModel):
 
     Examples
     --------
-    >>> stm = StimulatorRuntime(
-    ...     name="My Stimulator", blocks=[my_block], sources=[my_source], sinks=[my_sink]
-    ... )
+    >>> stm = Runtime(name="My Stimulator", blocks=[my_block], sources=[my_source], sinks=[my_sink])
     >>> with stm:
     ...     stm.run()
     """
 
     name: str = Field(..., description="Name of the stimulator")
-    blocks: Sequence[StimulatorBlock] = Field(..., description="Blocks in the stimulator")
+    blocks: Sequence[Block] = Field(..., description="Blocks in the stimulator")
     block_repetitions: int = Field(
         default=1, ge=1, description="Number of times to repeat each block"
     )
@@ -212,7 +52,7 @@ class StimulatorRuntime(BaseModel):
 
     sources: Sequence[BaseSource] = Field(..., description="Sources for the stimulator")
     sinks: Sequence[BaseSink] = Field(..., description="Sinks for the stimulator")
-    responce_monitor: ResponceMonitor | None = Field(default=None)
+    monitor: BaseMonitor | None = Field(default=None)
 
     _bus: EventBus = PrivateAttr(default_factory=EventBus)
     _external_bus: bool = PrivateAttr(default=False)
@@ -297,9 +137,9 @@ class StimulatorRuntime(BaseModel):
             sink.bus = self.bus
             sink.open()
 
-        if self.responce_monitor:
-            self.responce_monitor.bus = self.bus
-            self.responce_monitor.open()
+        if self.monitor:
+            self.monitor.bus = self.bus
+            self.monitor.open()
 
         self._key_bindings = self._create_key_bindings()
 
@@ -324,8 +164,8 @@ class StimulatorRuntime(BaseModel):
         self._aborted.clear()
         self._stopped.clear()
 
-        if self.responce_monitor:
-            self.responce_monitor.close()
+        if self.monitor:
+            self.monitor.close()
 
         for sink in self.sinks:
             sink.close()
@@ -373,13 +213,11 @@ class StimulatorRuntime(BaseModel):
                     ):
                         current_trial = trial
 
-                        if self._aborted.is_set() or (
-                            self.responce_monitor and self.responce_monitor.should_stop
-                        ):
+                        if self._aborted.is_set():
                             break
 
-                        if self.responce_monitor:
-                            current_trial = self.responce_monitor.check_trial(current_trial)
+                        if self.monitor:
+                            current_trial = self.monitor.check_trial(current_trial)
 
                         if not current_trial:
                             continue
@@ -407,6 +245,7 @@ class StimulatorRuntime(BaseModel):
                             s.wait()
 
                         precise_sleep(current_trial.isi / 1000.0)
+                        self._monitor_control()
                         self._wait_paused()
 
     def _ensure_open(self) -> None:
@@ -460,13 +299,26 @@ class StimulatorRuntime(BaseModel):
         while self._paused.is_set() and not self._aborted.is_set():
             self._paused.wait(0.1)
 
-    def _expand_trials(self) -> Sequence[tuple[StimulatorBlock, Sequence[StimulatorTrial]]]:
+    def _expand_trials(self) -> Sequence[tuple[Block, Sequence[Trial]]]:
         blocks = repeat(self.blocks, self.block_repetitions, mode=self.block_order)
 
         return [
             (block, repeat(block.trials, block.trial_repetitions, mode=block.trial_order))
             for block in blocks
         ]
+
+    def _monitor_control(self) -> None:
+        if not self.monitor:
+            return
+
+        if self.monitor.command == MonitorCommands.START:
+            self._started.set()
+        if self.monitor.command == MonitorCommands.STOP:
+            self._aborted.set()
+        if self.monitor.command == MonitorCommands.PAUSE:
+            self._paused.set()
+        if self.monitor.command == MonitorCommands.RESUME:
+            self._paused.clear()
 
     def __enter__(self) -> Self:
         self.open()
