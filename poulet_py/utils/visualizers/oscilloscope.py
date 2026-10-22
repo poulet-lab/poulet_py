@@ -1,5 +1,6 @@
 try:
-    from multiprocessing import Event, Process, get_context
+    from multiprocessing import Event, get_context
+    from multiprocessing.context import SpawnProcess
     from multiprocessing.queues import Queue
     from multiprocessing.synchronize import Event as TypeEvent
     from time import monotonic_ns
@@ -15,8 +16,6 @@ try:
         add_plot_legend,
         add_subplots,
         add_text,
-        add_theme_color,
-        add_theme_style,
         add_window,
         bind_item_theme,
         bind_theme,
@@ -35,31 +34,12 @@ try:
         is_mouse_button_double_clicked,
         is_mouse_button_down,
         move_item,
-        mvAll,
         mvInfLineSeries,
         mvKey_R,
         mvKey_Spacebar,
         mvLineSeries,
         mvMouseButton_Left,
-        mvPlot,
         mvPlot_Location_NorthEast,
-        mvPlotCol_AxisGrid,
-        mvPlotCol_AxisText,
-        mvPlotCol_FrameBg,
-        mvPlotCol_InlayText,
-        mvPlotCol_LegendBg,
-        mvPlotCol_LegendBorder,
-        mvPlotCol_LegendText,
-        mvPlotCol_Line,
-        mvPlotCol_PlotBg,
-        mvPlotCol_PlotBorder,
-        mvPlotCol_TitleText,
-        mvPlotStyleVar_LineWeight,
-        mvStyleVar_WindowPadding,
-        mvThemeCat_Core,
-        mvThemeCat_Plots,
-        mvThemeCol_Text,
-        mvThemeCol_WindowBg,
         mvXAxis,
         mvYAxis,
         render_dearpygui_frame,
@@ -71,8 +51,6 @@ try:
         set_viewport_title,
         setup_dearpygui,
         show_viewport,
-        theme,
-        theme_component,
         tooltip,
     )
     from numpy import (
@@ -97,83 +75,27 @@ try:
     from screeninfo import ScreenInfoError, get_monitors
     from screeninfo.common import Monitor
 
-    from poulet_py.config.logging import LOGGER
+    from poulet_py import LOGGER
+    from poulet_py.utils.visualizers.common import (
+        _INVALID,
+        _LOCK_FRAMES,
+        _MAX_CONSECUTIVE_FRAME_ERRORS,
+        _THEMES,
+        BG_DARK,
+        BG_WHITE,
+        CURSOR_COLOR,
+        PALETTE_DARK,
+        PALETTE_WHITE,
+        _global_theme,
+        _series_theme,
+    )
 except ImportError as e:
     raise ImportError("""
-Missing 'osc' module. Install options:
-- Dedicated:    pip install poulet_py[osc]
+Missing 'vis' module. Install options:
+- Dedicated:    pip install poulet_py[vis]
 - Module:       pip install poulet_py[utils]
 - Full:         pip install poulet_py[all]
 """) from e
-
-RGBA = tuple[int, int, int, int]
-
-BG_DARK: RGBA = (20, 20, 20, 255)
-BG_WHITE: RGBA = (240, 240, 240, 255)
-CURSOR_COLOR: RGBA = (250, 183, 3, 255)
-PALETTE_DARK: list[RGBA] = [
-    (94, 213, 220, 255),
-    (255, 103, 129, 255),
-    (132, 224, 210, 255),
-    (180, 160, 255, 255),
-    (255, 179, 71, 255),
-    (160, 220, 100, 255),
-]
-PALETTE_WHITE: list[RGBA] = [
-    (20, 90, 160, 255),
-    (190, 40, 80, 255),
-    (20, 130, 110, 255),
-    (110, 70, 190, 255),
-    (200, 100, 20, 255),
-    (80, 140, 20, 255),
-]
-
-_INVALID = -(1 << 62)  # "no data" marker for int64 bin ids
-_MAX_CONSECUTIVE_FRAME_ERRORS = 5
-_LOCK_FRAMES = 2  # frames an axis stays locked after set_axis_limits before the user gets it back
-_THEMES: dict[tuple[RGBA, int, float], int] = {}  # per-context cache of series themes
-
-
-def _series_theme(color: RGBA, series_type: int, weight: float = 1.5) -> int:
-    key = (color, series_type, weight)
-    if key not in _THEMES:
-        with theme() as th:
-            with theme_component(series_type):
-                add_theme_color(mvPlotCol_Line, color, category=mvThemeCat_Plots)
-                add_theme_style(mvPlotStyleVar_LineWeight, weight, category=mvThemeCat_Plots)
-        _THEMES[key] = th
-    return _THEMES[key]
-
-
-def _global_theme(dark: bool) -> int:
-    """Window padding 0 + dark/white colors for window, text and plots."""
-    bg = BG_DARK if dark else BG_WHITE
-    fg = (225, 225, 225, 255) if dark else (20, 20, 20, 255)
-    plot_bg = (28, 28, 28, 255) if dark else (255, 255, 255, 255)
-    grid = (255, 255, 255, 40) if dark else (0, 0, 0, 40)
-    legend_bg = (20, 20, 20, 220) if dark else (255, 255, 255, 230)
-    border = (110, 110, 110, 255)
-
-    with theme() as th:
-        with theme_component(mvAll):
-            add_theme_style(mvStyleVar_WindowPadding, 0, 0, category=mvThemeCat_Core)
-            add_theme_color(mvThemeCol_WindowBg, bg, category=mvThemeCat_Core)
-            add_theme_color(mvThemeCol_Text, fg, category=mvThemeCat_Core)
-        with theme_component(mvPlot):
-            for func, value in (
-                (mvPlotCol_FrameBg, bg),
-                (mvPlotCol_PlotBg, plot_bg),
-                (mvPlotCol_PlotBorder, border),
-                (mvPlotCol_LegendBg, legend_bg),
-                (mvPlotCol_LegendBorder, border),
-                (mvPlotCol_LegendText, fg),
-                (mvPlotCol_TitleText, fg),
-                (mvPlotCol_InlayText, fg),
-                (mvPlotCol_AxisText, fg),
-                (mvPlotCol_AxisGrid, grid),
-            ):
-                add_theme_color(func, value, category=mvThemeCat_Plots)
-    return th
 
 
 class Trace(BaseModel):
@@ -181,9 +103,9 @@ class Trace(BaseModel):
     duration: float = Field(..., gt=0, description="Sweep length in x units")
     n_bins: int = Field(..., ge=8)
 
-    _gid: ndarray = PrivateAttr()
-    _mn: ndarray = PrivateAttr()
-    _mx: ndarray = PrivateAttr()
+    _gid: ndarray[Any, Any] = PrivateAttr()
+    _mn: ndarray[Any, Any] = PrivateAttr()
+    _mx: ndarray[Any, Any] = PrivateAttr()
     _bin_w: float = PrivateAttr(default=1.0)
     _g_latest: int = PrivateAttr(default=_INVALID)
     _x_latest: float = PrivateAttr(default=float("-inf"))
@@ -211,7 +133,7 @@ class Trace(BaseModel):
         """(min, max) of the plotted values, or None when empty."""
         return self._bounds
 
-    def add(self, x: ndarray, y: ndarray) -> None:
+    def add(self, x: ndarray[Any, Any], y: ndarray[Any, Any]) -> None:
         """``x``: sorted float64 samples, ``y``: matching float32 values (NaN = gap)."""
         if x.size == 0:
             return
@@ -239,7 +161,7 @@ class Trace(BaseModel):
         self._x_latest = max(self.x_latest, float(x[-1]))
         self._dirty = True
 
-    def xy(self) -> tuple[ndarray, ndarray]:
+    def xy(self) -> tuple[ndarray[Any, Any], ndarray[Any, Any]]:
         """Points to draw: (min, max) pair per valid bin, in x order. Clears ``dirty``.
 
         Bins left of the newest one are this sweep, bins right of it are the previous sweep;
@@ -347,7 +269,7 @@ class SeriesPanel(BaseModel):
         self._make_title()
         self.reset_view()
 
-    def feed(self, data: ndarray, labels: list[str]) -> None:
+    def feed(self, data: ndarray[Any, Any], labels: list[str]) -> None:
         """``data``: structured array ("ts" + trace fields). Creates curves on first sight."""
         for label in labels:
             if label not in self._buffers:
@@ -522,8 +444,8 @@ class Oscilloscope(BaseModel):
     _panels: dict[str, SeriesPanel] = PrivateAttr(default_factory=dict)
     _rejected: set[str] = PrivateAttr(default_factory=set)
 
-    _osc_queue: Queue[tuple[int, dict[str, ndarray]]] | None = PrivateAttr(default=None)
-    _osc_process: Process | None = PrivateAttr(default=None)
+    _osc_queue: Queue[tuple[int, dict[str, ndarray[Any, Any]]]] | None = PrivateAttr(default=None)
+    _osc_process: SpawnProcess | None = PrivateAttr(default=None)
     _ready: TypeEvent = PrivateAttr(default_factory=Event)
     _stop: TypeEvent = PrivateAttr(default_factory=Event)
     _error: BaseException | None = PrivateAttr(default=None)
@@ -565,13 +487,13 @@ class Oscilloscope(BaseModel):
         ctx = get_context("spawn")
         self._osc_queue = ctx.Queue(maxsize=self.queue_size)
 
-        self._process = ctx.Process(
+        self._osc_process = ctx.Process(
             target=_oscilloscope_process,
             args=(self.model_dump(), self._osc_queue, self._stop),
             daemon=False,
         )
 
-        self._process.start()
+        self._osc_process.start()
 
     def close(self) -> None:
         """Ask the render loop to exit (it ends within one frame) and wait for it."""
@@ -586,7 +508,7 @@ class Oscilloscope(BaseModel):
     def reset_view(self) -> None:
         self._reset_requested.set()
 
-    def add_data(self, data: dict[str, ndarray]) -> bool:
+    def add_data(self, data: dict[str, ndarray[Any, Any]]) -> bool:
         if not self._started:
             raise RuntimeError(f"{type(self).__name__} needs to be opened first")
 
@@ -656,10 +578,13 @@ class Oscilloscope(BaseModel):
                 rows, 1, parent=self._window, width=-1, height=-1, link_all_x=True
             )
         else:
-            configure_item(self._subplots, rows=rows)  # one more row, equal heights
+            configure_item(self._subplots, rows=rows)
 
         for previous in self._panels.values():
             previous.set_show_x_axis(False)
+
+        if not self._subplots:
+            raise RuntimeError("No subplots found")
 
         self._panels[name] = SeriesPanel(
             name=name,
@@ -681,11 +606,11 @@ class Oscilloscope(BaseModel):
             return [(key, list(labels))]
         return [(f"{key}[{label}]", [label]) for label in labels]
 
-    def _drain_queue(self) -> dict[str, ndarray]:
+    def _drain_queue(self) -> dict[str, ndarray[Any, Any]]:
         if not self._osc_queue:
             raise RuntimeError("No queue has been assinged")
 
-        chunks: dict[str, list[ndarray]] = {}
+        chunks: dict[str, list[ndarray[Any, Any]]] = {}
         while True:
             if self._osc_queue.empty():
                 break
@@ -697,7 +622,7 @@ class Oscilloscope(BaseModel):
                 if normalized is not None:
                     chunks.setdefault(key, []).append(normalized)
 
-        merged: dict[str, ndarray] = {}
+        merged: dict[str, ndarray[Any, Any]] = {}
         for key, items in chunks.items():
             dtype = items[0].dtype
             items = [a for a in items if a.dtype == dtype]
@@ -711,7 +636,7 @@ class Oscilloscope(BaseModel):
         return merged
 
     @staticmethod
-    def _normalize(name: str, arr: Any) -> ndarray | None:
+    def _normalize(name: str, arr: Any) -> ndarray[Any, Any] | None:
         a = asarray(arr)
         if a.ndim == 0:
             a = a.reshape(1)
@@ -752,7 +677,7 @@ class Oscilloscope(BaseModel):
             out[label] = Y[:, j]
         return out
 
-    def _ensure_panels(self, data: dict[str, ndarray]) -> None:
+    def _ensure_panels(self, data: dict[str, ndarray[Any, Any]]) -> None:
         for key, arr in data.items():
             if not arr.dtype.names:
                 raise RuntimeError("Not structured array in data packet")
@@ -761,7 +686,7 @@ class Oscilloscope(BaseModel):
                 if name not in self._panels and name not in self._rejected:
                     self._add_panel(name)
 
-    def _ingest(self, data: dict[str, ndarray]) -> None:
+    def _ingest(self, data: dict[str, ndarray[Any, Any]]) -> None:
         for key, arr in data.items():
             if not arr.dtype.names:
                 raise RuntimeError("Not structured array in data packet")
@@ -790,6 +715,7 @@ class Oscilloscope(BaseModel):
             self._reset_requested.clear()
             for panel in self._panels.values():
                 panel.reset_view()
+
         if self._paused != self._title_paused:
             self._title_paused = self._paused
             set_viewport_title(f"{self.title} [paused]" if self._paused else self.title)
@@ -870,7 +796,9 @@ class Oscilloscope(BaseModel):
 
 
 def _oscilloscope_process(
-    config: dict[str, Any], queue: Queue[tuple[int, dict[str, ndarray]]], stop_event: TypeEvent
+    config: dict[str, Any],
+    queue: Queue[tuple[int, dict[str, ndarray[Any, Any]]]],
+    stop_event: TypeEvent,
 ) -> None:
     osc = Oscilloscope(**config)
     osc._osc_queue = queue

@@ -75,7 +75,6 @@ from .stimulus import (
     DRV2605Stimulus,
 )
 from .tools import go_to, json_serializer, repeat, sanitize_path, precise_sleep, dumps
-from .utils import Oscilloscope
 
 __all__ = [
     "LOGGER",
@@ -140,7 +139,6 @@ __all__ = [
     "NISteppedAnalogStimulus",
     "NITriangleAnalogStimulus",
     "NIWhiteNoiseAnalogStimulus",
-    "Oscilloscope",
     "Seq",
     "Settings",
     "SinkEvent",
