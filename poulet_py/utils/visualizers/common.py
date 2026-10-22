@@ -1,6 +1,5 @@
 from abc import abstractmethod
 
-
 try:
     from multiprocessing import Event, get_context
     from multiprocessing.context import SpawnProcess
