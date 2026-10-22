@@ -14,7 +14,7 @@ try:
     from pydantic import BaseModel, Field, PrivateAttr, model_validator
 
     from poulet_py import LOGGER, BaseSink, BaseSource, EventBus, precise_sleep, repeat
-    from poulet_py.utils.stimulator import BaseMonitor, Block, Trial, MonitorCommands
+    from poulet_py.utils.stimulator import BaseMonitor, Block, MonitorCommands, Trial
 
 except ImportError as e:
     raise ImportError("""
