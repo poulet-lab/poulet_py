@@ -76,7 +76,7 @@ class WidefieldMetadata(BaseMetadata):
     camera: WidefieldCameraMetadata = Field(default_factory=WidefieldCameraMetadata)
     subject: WidefieldSubjectMetadata = Field(default_factory=WidefieldSubjectMetadata)
     acquisition: WidefieldAcquisitionMetadata = Field(default_factory=WidefieldAcquisitionMetadata)
-    #TODO change name to something better. it is the attrs of the datasets in the h5 file.
+    # TODO change name to something better. it is the attrs of the datasets in the h5 file.
     analog_output: dict[str, WidefieldChannelMetadata] = Field(default_factory=dict)
 
 
