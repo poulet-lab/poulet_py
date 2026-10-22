@@ -38,6 +38,7 @@ class NIDaQSource(BaseSource, NIDaQ):
 
     def _open(self):
         NIDaQ.open(self)
+
         if self.acquisition_type == AcquisitionType.CONTINUOUS:
             self.start()
 
@@ -62,8 +63,17 @@ class NIDaQSource(BaseSource, NIDaQ):
 
         if self.acquisition_type == AcquisitionType.FINITE:
             self.start()
+            self._rw_data()
+            self.stop()
 
-        data = self.read(-1, -1)
+        return True
+
+    def _acquire(self) -> None:
+        if self.acquisition_type == AcquisitionType.CONTINUOUS:
+            self._rw_data()
+
+    def _rw_data(self):
+        data = self.read(-1, 0.0)
 
         if data:
             lengths = [len(v) for v in data.values() if len(v) > 0]
@@ -86,8 +96,3 @@ class NIDaQSource(BaseSource, NIDaQ):
 
                 samples["timestamp"] = data[task_name]["timestamp"][:n]
                 self._write_samples(samples)
-
-        if self.acquisition_type == AcquisitionType.FINITE:
-            self.stop()
-
-        return True

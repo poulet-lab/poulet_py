@@ -57,15 +57,16 @@ class BaseSource(BaseModel, ABC):
 
     @abstractmethod
     def _open(self): ...
-
+    @abstractmethod
+    def _close(self): ...
     @abstractmethod
     def _set_buffer_dtype(self): ...
 
-    @abstractmethod
-    def _close(self): ...
+    def _fire(self) -> bool:
+        return False
 
-    @abstractmethod
-    def _fire(self) -> bool: ...
+    def _acquire(self) -> None:
+        return
 
     def _keyboard_controls(self) -> dict[str, tuple[str, Callable]]:
         return {}
@@ -212,6 +213,7 @@ class BaseSource(BaseModel, ABC):
         self._max_stimulus_duration_ms = pre_delay + duration + post_delay
 
     def _publish(self) -> bool:
+        self._acquire()
         chunk = self._get_new_chunk()
 
         if chunk is None or chunk.size == 0:
@@ -261,14 +263,14 @@ class BaseSource(BaseModel, ABC):
                 break
 
             self._supports()
-
-            if not self._stimuli:
-                self._done_fire.set()
-                continue
             self._calculate_stimulus_duration()
+
             if self._barrier:
                 self._barrier.wait()
-            self._fire()
+
+            if self._stimuli:
+                self._fire()
+
             self._done_fire.set()
 
     def _publish_loop(self):
