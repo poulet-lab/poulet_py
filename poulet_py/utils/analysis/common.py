@@ -84,7 +84,7 @@ class Session(BaseModel):
     _paths: DataFrame = PrivateAttr()
     _trials: Index[Trial] = PrivateAttr()
 
-    def model_post_init(self, __context):
+    def model_post_init(self, __context)->None:
         self._paths = (
             self.discovery_strategy.to_df(self.path)
             if self.discovery_strategy
