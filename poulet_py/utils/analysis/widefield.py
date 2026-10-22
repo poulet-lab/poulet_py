@@ -25,7 +25,6 @@ try:
         percentile as percentile_fn,
     )
     from prompt_toolkit.shortcuts import ProgressBar
-    from pydantic import PrivateAttr
 
     from poulet_py import LOGGER, Session, WidefieldData
     from poulet_py.io.data_structures.widefield import WidefieldMaskMetaData
@@ -43,7 +42,7 @@ Also ensure: h5py, numpy, pandas, scikit-image, imageio, matplotlib are installe
 
 
 class WidefieldAnalysis(Session):
-    def model_post_init(self, __context):
+    def model_post_init(self, __context) -> None:
         # TODO: this is dirty, make it better
         super().model_post_init(__context)
         trials = []
@@ -72,7 +71,7 @@ class WidefieldAnalysis(Session):
         # TODO Vik filtering
         with ProgressBar("Downscaling movies") as pb:
             for trial in pb(obj.trials, label="Trials", total=len(obj.trials)):
-                if not isinstance(trial.data, WidefieldData):
+                if not trial.data or not isinstance(trial.data, WidefieldData):
                     continue
 
                 imaging = trial.data.imaging
@@ -119,20 +118,20 @@ class WidefieldAnalysis(Session):
 
         with ProgressBar("Calculating percentile projection") as pb:
             for trial in pb(obj.trials, label="Trials", total=len(obj.trials)):
-                if not isinstance(trial.data, WidefieldData):
+                if not trial.data or not isinstance(trial.data, WidefieldData):
                     continue
 
                 imaging = trial.data.imaging  # (frames, height, width)
                 data_window = imaging
 
                 if stimulus_start_frame is not None and baseline_ms is not None:
-                    fps = trial.data.metadata.fps  # TODO: confirm attribute path
+                    fps = trial.data.metadata.camera.fps
                     if fps is None:
                         LOGGER.warning(
                             f"FPS not available for trial {trial.path.name}; using full movie"
                         )
                     else:
-                        baseline_frames = int(round((baseline_ms / 1000.0) * fps))
+                        baseline_frames = round((baseline_ms / 1000.0) * fps)
                         start = max(0, stimulus_start_frame - baseline_frames)
                         end = stimulus_start_frame
 
@@ -164,10 +163,10 @@ class WidefieldAnalysis(Session):
 
         with ProgressBar("Calculating baseline") as pb:
             for trial in pb(obj.trials, label="Trials", total=len(obj.trials)):
-                if not isinstance(trial.data, WidefieldData):
+                if not trial.data or not isinstance(trial.data, WidefieldData):
                     continue
 
-                fps = trial.data.metadata.fps  # TODO: confirm attribute path
+                fps = trial.data.metadata.camera.fps
                 if fps is None:
                     LOGGER.error(
                         f"Skipping baseline for trial {trial.path.name}: no FPS in metadata"
@@ -200,7 +199,7 @@ class WidefieldAnalysis(Session):
 
         with ProgressBar("Calculating delta F/F") as pb:
             for trial in pb(obj.trials, label="Trials", total=len(obj.trials)):
-                if not isinstance(trial.data, WidefieldData):
+                if not trial.data or not isinstance(trial.data, WidefieldData):
                     continue
 
                 baseline = getattr(trial.data, "baseline", None)  # TODO: confirm attribute name
@@ -224,7 +223,7 @@ class WidefieldAnalysis(Session):
         obj = self if inplace else self.model_copy(deep=True)
 
         for trial in obj.trials:
-            if not isinstance(trial.data, WidefieldData):
+            if not trial.data or not isinstance(trial.data, WidefieldData):
                 continue
 
             imaging_data = trial.data.imaging
@@ -339,7 +338,7 @@ class WidefieldAnalysis(Session):
         data_dict: dict[str, ndarray] = {}
         with ProgressBar("Converting trials to dict") as pb:
             for trial in pb(self.trials, label="Trials", total=len(self.trials)):
-                if not isinstance(trial.data, WidefieldData):
+                if not trial.data or not isinstance(trial.data, WidefieldData):
                     continue
                 # TODO not only imaging
                 data_dict[trial.path.name] = trial.data.imaging
