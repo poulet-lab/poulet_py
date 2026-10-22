@@ -111,6 +111,7 @@ analysis = [
   "scipy<=1.17.1",
   "matplotlib<=3.10.9",
   "scikit-image<=0.26.0",
+  "opencv-python<=5.0.0.93"
 ]
 ## Main modules ##
 converters = ["poulet_py[seq]"]

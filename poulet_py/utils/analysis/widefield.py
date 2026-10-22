@@ -44,6 +44,8 @@ Also ensure: h5py, numpy, pandas, scikit-image, imageio, matplotlib are installe
 
 class WidefieldAnalysis(Session):
     def model_post_init(self, __context):
+        # TODO: this is dirty, make it better
+        super().model_post_init(__context)
         trials = []
         with ProgressBar("Widefield Analysis Init") as pb:
             for trial in pb(self.trials, label="Trials", total=len(self.trials)):
