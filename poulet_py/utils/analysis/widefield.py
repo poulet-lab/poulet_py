@@ -82,7 +82,7 @@ class WidefieldAnalysis(Session):
 
                 if (current_target >= dim).any():
                     raise ValueError("Target dimensions must be smaller than original.")
-                
+
                 if (current_target <= 0).any():
                     raise ValueError("Current target dimensions must be positive.")
 
@@ -96,7 +96,7 @@ class WidefieldAnalysis(Session):
                     mode="constant",
                     constant_values=0,
                 )
-    
+
                 imaging = ascontiguousarray(imaging)
                 imaging = imaging.reshape(
                     t, current_target[0], factor[0], current_target[1], factor[1]
@@ -152,6 +152,7 @@ class WidefieldAnalysis(Session):
                 trial.data.metadata.level = "processed"
 
         return obj
+
     # TODO: make it as a property
     def calculate_baseline(
         self,
