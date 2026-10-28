@@ -10,7 +10,6 @@ try:
     from matplotlib import cm
     from numpy import (
         array,
-        ascontiguousarray,
         clip,
         floor,
         load,
@@ -41,6 +40,7 @@ Also ensure: h5py, numpy, pandas, scikit-image, imageio, matplotlib are installe
     raise ImportError(msg) from e
 
 
+# TODO Vik filtering
 class WidefieldAnalysis(Session):
     def model_post_init(self, __context) -> None:
         # TODO: this is dirty, make it better
@@ -55,7 +55,7 @@ class WidefieldAnalysis(Session):
     def downscale(self, target: tuple[int, int] | int | float, *, inplace: bool = False) -> Self:
         obj = self if inplace else self.model_copy()
 
-        target_dim = zeros(2, dtype="int32")
+        target_dim = zeros(2, dtype="uint32")
 
         if isinstance(target, (tuple, int)):
             target_dim[:] = target
@@ -65,7 +65,6 @@ class WidefieldAnalysis(Session):
         else:
             raise ValueError("target must be a tuple, int, or float.")
 
-        # TODO Vik filtering
         with ProgressBar("Downscaling movies") as pb:
             for trial in pb(obj.trials, label="Trials", total=len(obj.trials)):
                 if not trial.data or not isinstance(trial.data, WidefieldData):
@@ -75,20 +74,18 @@ class WidefieldAnalysis(Session):
                 t = imaging.shape[0]
                 dim = array(imaging.shape[1:])
 
-                if isinstance(target, float):
-                    current_target = maximum(1, floor(dim * target))
-                else:
-                    current_target = target_dim
-
-                if (current_target >= dim).any():
-                    raise ValueError("Target dimensions must be smaller than original.")
+                current_target = (
+                    maximum(1, floor(dim * target)) if isinstance(target, float) else target_dim
+                ).astype("uint32")
 
                 if (current_target <= 0).any():
                     raise ValueError("Current target dimensions must be positive.")
 
-                current_target = current_target.astype(int)
-                factor = ((dim + current_target - 1) // current_target).astype(int)
-                padding = (current_target * factor - dim).astype(int)
+                if (current_target > dim).any():
+                    raise ValueError("Target dimensions must be smaller than original.")
+
+                factor = ((dim + current_target - 1) // current_target).astype("uint32")
+                padding = (current_target * factor - dim).astype("uint32")
 
                 imaging = pad(
                     imaging,
@@ -97,7 +94,6 @@ class WidefieldAnalysis(Session):
                     constant_values=0,
                 )
 
-                imaging = ascontiguousarray(imaging)
                 imaging = imaging.reshape(
                     t, current_target[0], factor[0], current_target[1], factor[1]
                 ).mean(axis=(2, 4), dtype="float32")
@@ -107,7 +103,7 @@ class WidefieldAnalysis(Session):
 
         return obj
 
-    def calculate_percentile(
+    def percentile(
         self,
         percentile: float = 15.0,
         stimulus_start_frame: int | None = None,
@@ -122,60 +118,51 @@ class WidefieldAnalysis(Session):
                 if not trial.data or not isinstance(trial.data, WidefieldData):
                     continue
 
-                imaging = trial.data.imaging  # (frames, height, width)
+                imaging = trial.data.imaging
                 data_window = imaging
 
                 if stimulus_start_frame is not None and baseline_ms is not None:
                     fps = trial.data.metadata.camera.fps
-                    if fps is None:
+                    if not fps:
                         LOGGER.warning(
                             f"FPS not available for trial {trial.path.name}; using full movie"
                         )
-                    else:
-                        baseline_frames = round((baseline_ms / 1000.0) * fps)
-                        start = max(0, stimulus_start_frame - baseline_frames)
-                        end = stimulus_start_frame
+                        continue
 
-                        if end <= start:
-                            LOGGER.warning(
-                                f"Invalid baseline window for trial {trial.path.name}; using full movie"
-                            )
-                        else:
-                            data_window = imaging[start:end]
+                    baseline_frames = round((baseline_ms / 1000.0) * fps)
+                    start = max(0, stimulus_start_frame - baseline_frames)
+                    end = stimulus_start_frame
+
+                    if end <= start:
+                        LOGGER.warning(
+                            f"Invalid baseline window for trial {trial.path.name}; using full movie"
+                        )
+                    else:
+                        data_window = imaging[start:end]
 
                 if data_window.shape[0] == 0:
                     LOGGER.warning(f"Empty data window for trial {trial.path.name}; skipping")
                     continue
 
-                # TODO: confirm attribute name on WidefieldData
                 trial.data._imaging = percentile_fn(data_window, percentile, axis=0)
                 trial.data.metadata.level = "processed"
 
         return obj
 
-    # TODO: make it as a property
-    def calculate_baseline(
-        self,
-        stimulus_start_frame: int = 0,
-        baseline_ms: float = 500.0,
-        *,
-        inplace: bool = False,
-    ) -> Self:
-        obj = self if inplace else self.model_copy()
-
+    def baseline(self, stimulus_start_frame: int = 0, baseline_ms: float = 500.0) -> None:
         with ProgressBar("Calculating baseline") as pb:
-            for trial in pb(obj.trials, label="Trials", total=len(obj.trials)):
+            for trial in pb(self.trials, label="Trials", total=len(self.trials)):
                 if not trial.data or not isinstance(trial.data, WidefieldData):
                     continue
 
                 fps = trial.data.metadata.camera.fps
-                if fps is None:
+                if not fps:
                     LOGGER.error(
                         f"Skipping baseline for trial {trial.path.name}: no FPS in metadata"
                     )
                     continue
 
-                imaging = trial.data.imaging  # (frames, height, width)
+                imaging = trial.data.imaging
 
                 baseline_frames = round((baseline_ms / 1000.0) * fps)
                 start = max(0, stimulus_start_frame - baseline_frames)
@@ -190,13 +177,9 @@ class WidefieldAnalysis(Session):
                     LOGGER.warning(f"Empty baseline window for trial {trial.path.name}; skipping")
                     continue
 
-                # TODO: confirm attribute name on WidefieldData
-                trial.data._imaging = data_window.mean(axis=0, dtype="float32")
-                trial.data.metadata.level = "processed"
+                trial.data._baseline = data_window.mean(axis=0, dtype="float32")
 
-        return obj
-
-    def calculate_deltaff(self, *, inplace: bool = False) -> Self:
+    def deltaff(self, *, inplace: bool = False) -> Self:
         obj = self if inplace else self.model_copy()
 
         with ProgressBar("Calculating delta F/F") as pb:
@@ -204,18 +187,15 @@ class WidefieldAnalysis(Session):
                 if not trial.data or not isinstance(trial.data, WidefieldData):
                     continue
 
-                baseline = getattr(trial.data, "baseline", None)  # TODO: confirm attribute name
+                baseline = trial.data.baseline
                 if baseline is None:
-                    LOGGER.warning(
-                        f"No baseline for trial {trial.path.name}; run calculate_baseline() first"
-                    )
+                    LOGGER.warning(f"No baseline for trial {trial.path.name}; run baseline() first")
                     continue
 
                 imaging = trial.data.imaging.astype("float32")
                 safe_baseline = baseline.astype("float32")
-                safe_baseline[safe_baseline == 0] = 1e-6  # avoid divide-by-zero
+                safe_baseline[safe_baseline == 0] = 1e-6
 
-                # TODO: confirm attribute name on WidefieldData
                 trial.data._imaging = (imaging - safe_baseline) / safe_baseline
                 trial.data.metadata.level = "processed"
 

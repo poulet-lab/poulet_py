@@ -84,6 +84,7 @@ class WidefieldData(BaseData[WidefieldMetadata], ABC):
     metadata: WidefieldMetadata = Field(default_factory=WidefieldMetadata)
 
     _imaging: ndarray[Any, Any] = PrivateAttr()
+    _baseline: ndarray[Any, Any] = PrivateAttr()
     _reference_image: ndarray[Any, Any] = PrivateAttr()
     _timestamps: DataFrame = PrivateAttr()
     _analog_output: dict[str, ndarray[Any, Any]] = PrivateAttr(default_factory=dict)
@@ -93,6 +94,12 @@ class WidefieldData(BaseData[WidefieldMetadata], ABC):
         if not hasattr(self, "_imaging"):
             self._open_imaging()
         return self._imaging
+
+    @property
+    def baseline(self) -> ndarray[Any, Any] | None:
+        if not hasattr(self, "_baseline"):
+            return None
+        return self._baseline
 
     @property
     def reference_image(self) -> ndarray[Any, Any]:
