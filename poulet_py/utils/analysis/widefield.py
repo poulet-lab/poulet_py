@@ -49,11 +49,11 @@ class WidefieldAnalysis(Session):
         with ProgressBar("Widefield Analysis Init") as pb:
             for trial in pb(self.trials, label="Trials", total=len(self.trials)):
                 if isinstance(trial.data, WidefieldData):
-                    trials.append(trials)
+                    trials.append(trial)
         self._trials._data = trials
 
     def downscale(self, target: tuple[int, int] | int | float, *, inplace: bool = False) -> Self:
-        obj = self if inplace else self.model_copy(deep=True)
+        obj = self if inplace else self.model_copy()
 
         target_dim = zeros(2, dtype="int32")
 
@@ -64,9 +64,6 @@ class WidefieldAnalysis(Session):
                 raise ValueError("Float target must be between 0 and 1.")
         else:
             raise ValueError("target must be a tuple, int, or float.")
-
-        if (target_dim <= 0).any():
-            raise ValueError("Target dimensions must be positive.")
 
         # TODO Vik filtering
         with ProgressBar("Downscaling movies") as pb:
@@ -85,9 +82,13 @@ class WidefieldAnalysis(Session):
 
                 if (current_target >= dim).any():
                     raise ValueError("Target dimensions must be smaller than original.")
+                
+                if (current_target <= 0).any():
+                    raise ValueError("Current target dimensions must be positive.")
 
-                factor = (dim + current_target - 1) // current_target
-                padding = current_target * factor - dim
+                current_target = current_target.astype(int)
+                factor = ((dim + current_target - 1) // current_target).astype(int)
+                padding = (current_target * factor - dim).astype(int)
 
                 imaging = pad(
                     imaging,
@@ -95,7 +96,7 @@ class WidefieldAnalysis(Session):
                     mode="constant",
                     constant_values=0,
                 )
-
+    
                 imaging = ascontiguousarray(imaging)
                 imaging = imaging.reshape(
                     t, current_target[0], factor[0], current_target[1], factor[1]
@@ -114,7 +115,7 @@ class WidefieldAnalysis(Session):
         *,
         inplace: bool = False,
     ) -> Self:
-        obj = self if inplace else self.model_copy(deep=True)
+        obj = self if inplace else self.model_copy()
 
         with ProgressBar("Calculating percentile projection") as pb:
             for trial in pb(obj.trials, label="Trials", total=len(obj.trials)):
@@ -151,7 +152,7 @@ class WidefieldAnalysis(Session):
                 trial.data.metadata.level = "processed"
 
         return obj
-
+    # TODO: make it as a property
     def calculate_baseline(
         self,
         stimulus_start_frame: int = 0,
@@ -159,7 +160,7 @@ class WidefieldAnalysis(Session):
         *,
         inplace: bool = False,
     ) -> Self:
-        obj = self if inplace else self.model_copy(deep=True)
+        obj = self if inplace else self.model_copy()
 
         with ProgressBar("Calculating baseline") as pb:
             for trial in pb(obj.trials, label="Trials", total=len(obj.trials)):
@@ -195,7 +196,7 @@ class WidefieldAnalysis(Session):
         return obj
 
     def calculate_deltaff(self, *, inplace: bool = False) -> Self:
-        obj = self if inplace else self.model_copy(deep=True)
+        obj = self if inplace else self.model_copy()
 
         with ProgressBar("Calculating delta F/F") as pb:
             for trial in pb(obj.trials, label="Trials", total=len(obj.trials)):
@@ -219,8 +220,9 @@ class WidefieldAnalysis(Session):
 
         return obj
 
+    # TODO: add automatic mask detection
     def window_mask(self, *, inplace: bool = False) -> Self | None:
-        obj = self if inplace else self.model_copy(deep=True)
+        obj = self if inplace else self.model_copy()
 
         for trial in obj.trials:
             if not trial.data or not isinstance(trial.data, WidefieldData):
