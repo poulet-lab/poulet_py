@@ -51,6 +51,20 @@ class TestTCSStimulus:
         with pytest.raises(ValueError):
             TCSStimulus(target=70)  # Too hot
 
+    def test_temperature_bounds(self):
+        TCSStimulus(baseline=14, target=12)
+        TCSStimulus(baseline=38, target=45)
+        TCSStimulus()
+
+        with pytest.raises(ValueError):
+            TCSStimulus(baseline=13, target=30)
+        with pytest.raises(ValueError):
+            TCSStimulus(baseline=39, target=30)
+        with pytest.raises(ValueError):
+            TCSStimulus(baseline=30, target=11)
+        with pytest.raises(ValueError):
+            TCSStimulus(baseline=30, target=46)
+
     def test_commands_generation(self, stimulus):
         commands = stimulus.commands()
         assert len(commands) == 6

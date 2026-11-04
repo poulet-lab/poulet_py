@@ -86,12 +86,12 @@ class TCSCommand(bytes, Enum):
     # Force a halt to the current stimulation A
     HALT_STIMULATION = b"A"
 
-    # xxx=200-450, unit=0.1°C, default: 300
+    # xxx=140-380, unit=0.1°C, default: 300
     BASELINE_TEMPERATURE = b"N%03d"
     # xxxxx=0 or 1 per surface , default: 00000
     SURFACE_SELECTION = b"S%05d"
 
-    # s=0-5 (surface number), xxx=000-600, unit=0.1°C, default: 100
+    # s=0-5 (surface number), xxx=120-450, unit=0.1°C, default: 300
     TARGET_TEMPERATURE = b"C%d%03d"
     # s=0-5 (surface number), xxxx=0001-9999, unit=0.1°C/s,
     # default: Depends on the type of sensor
@@ -151,15 +151,15 @@ class TCSStimulus(BaseModel):
     )
     baseline: float = Field(
         30,
-        description="Baseline temperature in °C (16-45)",
-        ge=16,
-        le=45,
+        description="Baseline temperature in °C (14-38)",
+        ge=14,
+        le=38,
     )
     target: float = Field(
-        10,
-        description="Target temperature in °C (0-60)",
-        ge=0,
-        le=60,
+        30,
+        description="Target temperature in °C (12-45)",
+        ge=12,
+        le=45,
     )
     rise_rate: float = Field(
         1,
@@ -193,7 +193,7 @@ class TCSStimulus(BaseModel):
         --------
         >>> stimulus = TCSStimulus(surface=1)
         >>> stimulus.commands()
-        [b'S10000', b'N300', b'C1000', b'V10010', b'D100100', b'R10010']
+        [b'S10000', b'N300', b'C1300', b'V10010', b'D100100', b'R10010']
         """
         surface_map = {0: 11111, 1: 10000, 2: 1000, 3: 100, 4: 10, 5: 1}
         return [
@@ -215,7 +215,7 @@ class TCS:
         self,
         port: str,
         *,
-        maximum_temperature: float = 40,
+        maximum_temperature: float = 45,
         beep: bool = False,
         trigger_out_channel: int = 255,
         read_timeout: float = 2,

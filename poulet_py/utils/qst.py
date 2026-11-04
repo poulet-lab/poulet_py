@@ -32,7 +32,7 @@ class TCSInterface(TCS):
     port : str
         Serial port to which the device is connected.
     maximum_temperature : float, optional
-        Maximum allowed temperature in °C (default: 40).
+        Maximum allowed temperature in °C (default: 45).
     beep : bool, optional
         Whether to enable audible beeps (default: False).
     trigger_out_channel : int, optional
@@ -75,7 +75,7 @@ class TCSInterface(TCS):
         self,
         port: str,
         *,
-        maximum_temperature: float = 40,
+        maximum_temperature: float = 45,
         beep: bool = False,
         trigger_out_channel: int = 255,
         read_timeout: float = 2,
