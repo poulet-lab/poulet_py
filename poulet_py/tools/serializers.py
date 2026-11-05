@@ -1,11 +1,7 @@
 try:
-    from json import dump
-    from os import makedirs
-    from os.path import join
     from pathlib import Path
     from typing import Any
 
-    from deprecated import deprecated
     from orjson import OPT_INDENT_2, OPT_SERIALIZE_NUMPY, JSONEncodeError, dumps
 except ImportError as e:
     msg = """
@@ -72,17 +68,3 @@ def json_serializer(
         return None
 
     return serialized
-
-
-@deprecated(
-    "This function is deprecated and will be removed in the next release."
-    "Use json_serializer() instead.",
-    version="0.0.2",
-)
-def save_metadata_exp(metadata, path, name):
-    makedirs(path, exist_ok=True)
-    metadata_file_name = f"{name}.json"
-    metadata_path = join(path, metadata_file_name)
-
-    with open(metadata_path, "w") as f:
-        dump(metadata, f, indent=4)

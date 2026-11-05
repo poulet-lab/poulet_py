@@ -1,5 +1,5 @@
 # ruff: noqa TID252
+from .stimulator import StimulatorBlock, StimulatorRuntime, StimulatorTrial
 from .oscilloscope import Oscilloscope
-from .qst import TCSInterface
 
-__all__ = ["Oscilloscope", "TCSInterface"]
+__all__ = ["StimulatorBlock", "StimulatorRuntime", "StimulatorTrial", "Oscilloscope"]

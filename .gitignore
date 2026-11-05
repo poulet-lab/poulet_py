@@ -34,3 +34,6 @@ example.sqlite
 .env
 .cursor*
 docs/source/_static/switcher.json
+
+*.h5
+*.ipynb

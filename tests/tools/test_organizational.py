@@ -5,45 +5,7 @@ from tempfile import TemporaryDirectory
 
 from pytest import fixture, mark
 
-from poulet_py import check_or_create, define_folder_name, go_to, sanitize_path
-
-
-class TestCheckOrCreate:
-    def test_existing_dir(self, tmp_path):
-        """Should not raise when directory exists"""
-        existing_dir = tmp_path / "existing"
-        existing_dir.mkdir()
-        check_or_create(existing_dir)  # Should not raise
-        assert existing_dir.exists()
-
-    def test_new_dir_creation(self, tmp_path):
-        """Should create new directory when it doesn't exist"""
-        new_dir = tmp_path / "new_directory"
-        check_or_create(new_dir)
-        assert new_dir.exists()
-
-    def test_nested_dir_creation(self, tmp_path):
-        """Should create nested directory structure"""
-        nested_dir = tmp_path / "level1" / "level2" / "level3"
-        check_or_create(nested_dir)
-        assert nested_dir.exists()
-
-
-class TestDefineFolderName:
-    def test_sanitize_special_chars(self):
-        """Should replace special characters with underscores"""
-        result = define_folder_name("test@name#123!", add_date=False)
-        assert result == "test_name_123_"
-
-    def test_with_date(self):
-        """Should prepend date when add_date=True"""
-        result = define_folder_name("project", add_date=True)
-        assert result == f"{datetime.now(timezone.utc).strftime('%Y%m%d')}_project"
-
-    def test_without_date(self):
-        """Should not prepend date when add_date=False"""
-        result = define_folder_name("project", add_date=False)
-        assert result == "project"
+from poulet_py import go_to, sanitize_path
 
 
 class TestSanitizePath:

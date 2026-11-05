@@ -1,0 +1,29 @@
+try:
+    from time import sleep, time_ns
+except ImportError as e:
+    msg = """
+Missing 'tools' module. Install options:
+- Module:       pip install poulet_py[tools]
+- Full:         pip install poulet_py[all]
+"""
+    raise ImportError(msg) from e
+
+
+def precise_sleep(t: float, precision: float = 0.0001):
+    duration_ns = int(t * 1e9)
+    end = time_ns() + duration_ns
+    precision_ns = int(precision * 1e9)
+
+    while True:
+        now = time_ns()
+        remaining = end - now
+
+        if remaining <= 0:
+            break
+
+        if remaining > precision_ns:
+            sleep(precision)
+        else:
+            while time_ns() < end:
+                pass
+            break

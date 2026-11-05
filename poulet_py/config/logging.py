@@ -1,15 +1,37 @@
-from logging import FileHandler, Formatter, Logger, getLogger
+from io import StringIO
+from logging import FileHandler, Formatter, Logger, LogRecord, getLogger
+from re import sub
 
+from prompt_toolkit import ANSI, print_formatted_text
 from rich.console import Console
 from rich.logging import RichHandler
 
 from poulet_py import SETTINGS
 
 
+class Handler(RichHandler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.string_buffer = StringIO()
+        self.console = Console(file=self.string_buffer, force_terminal=True)
+
+    def emit(self, record: LogRecord) -> None:
+        """Emit the record using prompt_toolkit to preserve colors."""
+        try:
+            super().emit(record)
+
+            colored_output = sub(r";id=\d+|;file://[^;]*", "", self.string_buffer.getvalue())
+            self.string_buffer.truncate(0)
+            self.string_buffer.seek(0)
+
+            print_formatted_text(ANSI(colored_output))
+        except Exception:
+            super().emit(record)
+
+
 def setup_logging(
     logger: Logger,
     *,
-    terminal_width: int | None = None,
     show_time: bool = False,
     show_path: bool = True,
     markup: bool = True,
@@ -28,9 +50,6 @@ def setup_logging(
     ----------
     logger : Logger
         The logger instance to configure.
-    terminal_width : int, optional
-        The width of the terminal for rich console output.
-        If None, the default width is used.
     show_time : bool, optional
         Whether to show the time in the log output. Default is False.
     show_path : bool, optional
@@ -49,32 +68,31 @@ def setup_logging(
         The logging level to set for the logger. Default is warning.
     file : str, optional
         The file to log to. If None, logs are output to the console.
-
     Returns
     -------
     None
     """
+    logger.handlers.clear()
+
     if file is not None:
         file_handler = FileHandler(file)
         file_handler.setFormatter(Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
         logger.addHandler(file_handler)
-    else:
-        console = Console(width=terminal_width) if terminal_width else Console()
-        rich_handler = RichHandler(
-            show_time=show_time,
-            show_level=True,
-            rich_tracebacks=rich_tracebacks,
-            tracebacks_show_locals=tracebacks_show_locals,
-            tracebacks_word_wrap=tracebacks_word_wrap,
-            tracebacks_extra_lines=tracebacks_extra_lines,
-            markup=markup,
-            show_path=show_path,
-            console=console,
-        )
-        rich_handler.setFormatter(Formatter("%(message)s"))
-        logger.addHandler(rich_handler)
 
-    logger.setLevel(level.upper())
+    rich_handler = Handler(
+        show_time=show_time,
+        show_level=True,
+        rich_tracebacks=rich_tracebacks,
+        tracebacks_show_locals=tracebacks_show_locals,
+        tracebacks_word_wrap=tracebacks_word_wrap,
+        tracebacks_extra_lines=tracebacks_extra_lines,
+        markup=markup,
+        show_path=show_path,
+    )
+    rich_handler.setFormatter(Formatter("%(message)s"))
+    logger.addHandler(rich_handler)
+
+    logger.setLevel(level.upper() if isinstance(level, str) else level)
     logger.propagate = False
 
 

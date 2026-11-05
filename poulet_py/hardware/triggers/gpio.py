@@ -1,11 +1,11 @@
 try:
-    from time import sleep, time
+    from time import time
     from typing import Literal
 
     from gpiozero import Button
     from pydantic import Field, PrivateAttr
 
-    from poulet_py import LOGGER, BaseTrigger
+    from poulet_py import LOGGER, BaseTrigger, precise_sleep
 except ImportError as e:
     msg = """
 Missing 'gpio' module. Install options:
@@ -21,10 +21,10 @@ class GPIOTrigger(BaseTrigger):
     """GPIO-based trigger using gpiozero."""
 
     pin: int = Field(..., description="GPIO pin number")
-    pull_up: bool = Field(False, description="Use pull-up resistor")
+    pull_up: bool = Field(default=False, description="Use pull-up resistor")
     edge: Literal["rising", "falling", "both"] = Field("rising", description="Edge to detect")
 
-    _triggered: bool = PrivateAttr(False)
+    _triggered: bool = PrivateAttr(default=False)
     _device: Button | None = PrivateAttr(None)
 
     def __init__(self, **data):
@@ -58,7 +58,7 @@ class GPIOTrigger(BaseTrigger):
             while not self._triggered:
                 if self.timeout and time() - start > self.timeout:
                     return False
-                sleep(0.001)
+                precise_sleep(0.001)
 
             return True
         except Exception as e:
