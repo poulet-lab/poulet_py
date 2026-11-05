@@ -46,6 +46,7 @@ from .io import (
     ThermocoupleType,
     StimuliMetadataSource,
     DCAMSource,
+    HardwareSource,
 )
 from .stimulus import (
     BaseStimulus,
@@ -97,6 +98,7 @@ __all__ = [
     "StimulatorBlock",
     "StimulatorRuntime",
     "StimulatorTrial",
+    "HardwareSource",
     "GPIOTrigger",
     "precise_sleep",
     "NIAnalogCompositeStimulus",

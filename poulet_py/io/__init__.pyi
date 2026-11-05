@@ -13,9 +13,11 @@ from .sources import (
     StimuliMetadataSource,
     INA228Source,
     DCAMSource,
+    HardwareSource,
 )
 
 __all__ = [
+    "HardwareSource",
     "AcquisitionType",
     "BaseEvent",
     "StimuliMetadataSource",
