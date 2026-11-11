@@ -88,6 +88,13 @@ class StimulatorBlock(BaseModel):
     trial_order: Literal["random", "sequential"] = Field(
         default="random", description="Order of trials"
     )
+    
+    max_consecutive: int = Field(
+        default=None, description="Maximum number of consecutive repetitions"
+    )
+    max_reshuffles: int = Field(
+            default=10, ge=1, description="Maximum number of consecutive repetitions"
+        )
 
     trigger: BaseTrigger | None = Field(default=None, description="Trigger for the trial")
     trigger_policy: Literal["abort", "skip"] = Field(
@@ -372,7 +379,8 @@ class StimulatorRuntime(BaseModel):
         blocks = repeat(self.blocks, self.block_repetitions, mode=self.block_order)
 
         return [
-            (block, repeat(block.trials, block.trial_repetitions, mode=block.trial_order))
+            (block, repeat(block.trials, block.trial_repetitions, mode=block.trial_order, 
+                           max_consecutive = block.max_consecutive, max_reshuffles = block.max_reshuffles))
             for block in blocks
         ]
 
