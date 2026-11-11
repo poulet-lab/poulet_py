@@ -15,5 +15,7 @@ Subpackages
    poulet_py.config
    poulet_py.converters
    poulet_py.hardware
+   poulet_py.io
+   poulet_py.stimulus
    poulet_py.tools
    poulet_py.utils

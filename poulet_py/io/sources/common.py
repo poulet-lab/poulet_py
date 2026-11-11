@@ -81,6 +81,12 @@ class BaseSource(BaseModel, ABC):
         return {}
 
     @property
+    def has_crashed(self):
+        if self._is_open and self._stop_thread.is_set():
+            return True
+        return False
+
+    @property
     def bus(self) -> EventBus:
         return self._bus
 
@@ -157,6 +163,39 @@ class BaseSource(BaseModel, ABC):
         if not self._is_open:
             raise RuntimeError(f"{type(self).__name__} needs to be opened first")
 
+    def _ensure_buffer_size(self, n: int):
+        with self._lock:
+            if n > self.buffer_size:
+                new_size = int(n * 1.5)
+                LOGGER.warning(
+                    f"{type(self).__name__} Incoming batch size ({n}) exceeds buffer_size ({self.buffer_size}). "
+                    f"Automatically expanding circular buffer to {new_size} to prevent data loss."
+                )
+
+                dt = dtype(self._source_buffer_dtype)
+                new_buffer = zeros(new_size, dtype=dt)
+
+                current = self._source_buffer_idx
+                needle = self._source_buffer_needle
+                unread_count = current - needle
+
+                if unread_count > 0:
+                    unread_count = min(unread_count, self.buffer_size)
+                    start_read = (current - unread_count) % self.buffer_size
+                    end_read = current % self.buffer_size
+
+                    if start_read < end_read:
+                        new_buffer[:unread_count] = self._source_buffer[start_read:end_read]
+                    else:
+                        split_read = self.buffer_size - start_read
+                        new_buffer[:split_read] = self._source_buffer[start_read:]
+                        new_buffer[split_read:unread_count] = self._source_buffer[:end_read]
+
+                self._source_buffer = new_buffer
+                self.buffer_size = new_size
+                self._source_buffer_needle = 0
+                self._source_buffer_idx = unread_count
+
     def _set_source_buffer(self) -> None:
         self._set_buffer_dtype()
         dt = dtype(self._source_buffer_dtype)
@@ -218,6 +257,8 @@ class BaseSource(BaseModel, ABC):
                 else:
                     LOGGER.warning("Data integrity check failed for the written samples.")
 
+        self._ensure_buffer_size(n)
+
         with self._lock:
             start = self._source_buffer_idx % self.buffer_size
             end = start + n
@@ -226,9 +267,11 @@ class BaseSource(BaseModel, ABC):
                 self._source_buffer[start:end] = samples
             else:
                 split = self.buffer_size - start
+                remainder = (end % self.buffer_size) or self.buffer_size
 
                 self._source_buffer[start:] = samples[:split]
-                self._source_buffer[: end % self.buffer_size] = samples[split:]
+                if remainder > 0:
+                    self._source_buffer[:remainder] = samples[split:]
 
             self._source_buffer_idx += n
 
@@ -250,7 +293,6 @@ class BaseSource(BaseModel, ABC):
         self._max_stimulus_duration_ms = pre_delay + duration + post_delay
 
     def _publish(self) -> bool:
-        self._acquire()
         chunk = self._get_new_chunk()
 
         if chunk is None or chunk.size == 0:
@@ -261,6 +303,7 @@ class BaseSource(BaseModel, ABC):
         return True
 
     def _get_new_chunk(self) -> ndarray | None:
+        # TODO write in chunks
         with self._lock:
             current = self._source_buffer_idx
             last = self._source_buffer_needle
@@ -293,27 +336,36 @@ class BaseSource(BaseModel, ABC):
 
     def _fire_loop(self):
         while not self._stop_thread.is_set():
-            self._start_fire.wait()
-            self._start_fire.clear()
+            try:
+                self._start_fire.wait()
+                self._start_fire.clear()
 
-            if self._stop_thread.is_set():
-                break
+                if self._stop_thread.is_set():
+                    break
 
-            self._supports()
-            self._calculate_stimulus_duration()
+                self._supports()
+                self._calculate_stimulus_duration()
 
-            if self._barrier:
-                self._barrier.wait()
+                if self._barrier:
+                    self._barrier.wait()
 
-            if self._stimuli:
-                self._fire()
+                if self._stimuli:
+                    self._fire()
 
-            self._done_fire.set()
+                self._done_fire.set()
+            except Exception as e:
+                LOGGER.exception(e)
+                self._stop_thread.set()
 
     def _publish_loop(self):
         while not self._stop_thread.is_set():
-            self._publish()
-            sleep(0.01)
+            try:
+                self._acquire()
+                self._publish()
+                sleep(0.01)
+            except Exception as e:
+                LOGGER.exception(e)
+                self._stop_thread.set()
 
     def __enter__(self):
         self.open()

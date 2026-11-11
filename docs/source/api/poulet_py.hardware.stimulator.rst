@@ -6,6 +6,14 @@ poulet\_py.hardware.stimulator package
    :show-inheritance:
    :undoc-members:
 
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 4
+
+   poulet_py.hardware.stimulator.qst
+
 Submodules
 ----------
 
@@ -14,4 +22,3 @@ Submodules
 
    poulet_py.hardware.stimulator.arduino
    poulet_py.hardware.stimulator.julabo
-   poulet_py.hardware.stimulator.qst
