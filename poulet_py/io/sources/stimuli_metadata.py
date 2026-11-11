@@ -1,10 +1,9 @@
 try:
     from time import monotonic_ns
 
-    from orjson import OPT_SERIALIZE_DATACLASS, OPT_SERIALIZE_NUMPY, OPT_SERIALIZE_UUID, dumps
     from pydantic import Field
 
-    from poulet_py import LOGGER, BaseSource
+    from poulet_py import LOGGER, BaseSource, dumps
 except ImportError as e:
     raise ImportError("""
 Missing 'sources' module. Install options:
@@ -40,10 +39,7 @@ class StimuliMetadataSource(BaseSource):
         ]
         timestamp = monotonic_ns()
 
-        json_data = dumps(
-            meta,
-            option=OPT_SERIALIZE_DATACLASS | OPT_SERIALIZE_NUMPY | OPT_SERIALIZE_UUID,
-        )
+        json_data = dumps(meta)
 
         if len(json_data) >= self.max_string_length:
             LOGGER.warning(

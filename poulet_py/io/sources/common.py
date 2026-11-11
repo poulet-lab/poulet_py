@@ -10,7 +10,7 @@ try:
     from numpy.typing import DTypeLike
     from pydantic import BaseModel, Field, PrivateAttr
 
-    from poulet_py import BaseStimulus, EventBus, SinkEvent
+    from poulet_py import LOGGER, BaseStimulus, EventBus, SinkEvent
 except ImportError as e:
     raise ImportError("""
 Missing 'sources' module. Install options:
@@ -32,6 +32,15 @@ class BaseSource(BaseModel, ABC):
         default="all", description="List of stimuli to fire on, or 'all' for all stimuli"
     )
     buffer_size: int = Field(default=100, description="Size of the circular buffer", ge=1)
+    convertion_callback: Callable[[ndarray | tuple | dict], ndarray | tuple | dict] | None = Field(
+        default=None, description="Optional callback to convert the data before publishing"
+    )
+    data_integrity_callback: Callable[[ndarray | tuple | dict], bool] | None = Field(
+        default=None, description="Optional callback to check the health of the data"
+    )
+    data_integrity_raise: bool = Field(
+        default=False, description="Whether to raise an error if data integrity check fails"
+    )
 
     _bus: EventBus = PrivateAttr(default_factory=EventBus)
     _external_bus: bool = PrivateAttr(default=False)
@@ -57,18 +66,25 @@ class BaseSource(BaseModel, ABC):
 
     @abstractmethod
     def _open(self): ...
-
+    @abstractmethod
+    def _close(self): ...
     @abstractmethod
     def _set_buffer_dtype(self): ...
 
-    @abstractmethod
-    def _close(self): ...
+    def _fire(self) -> bool:
+        return False
 
-    @abstractmethod
-    def _fire(self) -> bool: ...
+    def _acquire(self) -> None:
+        return
 
     def _keyboard_controls(self) -> dict[str, tuple[str, Callable]]:
         return {}
+
+    @property
+    def has_crashed(self):
+        if self._is_open and self._stop_thread.is_set():
+            return True
+        return False
 
     @property
     def bus(self) -> EventBus:
@@ -97,8 +113,8 @@ class BaseSource(BaseModel, ABC):
         if not self._external_bus:
             self.bus.open()
 
-        self._open()
         self._set_source_buffer()
+        self._open()
 
         self._fire_thread = Thread(
             target=self._fire_loop, daemon=True, name=f"{self.name}-fire-loop"
@@ -122,8 +138,8 @@ class BaseSource(BaseModel, ABC):
         if self._publish_thread.is_alive():
             self._publish_thread.join()
 
-        self._del_source_buffer()
         self._close()
+        self._del_source_buffer()
 
         if not self._external_bus:
             self.bus.close()
@@ -147,6 +163,39 @@ class BaseSource(BaseModel, ABC):
         if not self._is_open:
             raise RuntimeError(f"{type(self).__name__} needs to be opened first")
 
+    def _ensure_buffer_size(self, n: int):
+        with self._lock:
+            if n > self.buffer_size:
+                new_size = int(n * 1.5)
+                LOGGER.warning(
+                    f"{type(self).__name__} Incoming batch size ({n}) exceeds buffer_size ({self.buffer_size}). "
+                    f"Automatically expanding circular buffer to {new_size} to prevent data loss."
+                )
+
+                dt = dtype(self._source_buffer_dtype)
+                new_buffer = zeros(new_size, dtype=dt)
+
+                current = self._source_buffer_idx
+                needle = self._source_buffer_needle
+                unread_count = current - needle
+
+                if unread_count > 0:
+                    unread_count = min(unread_count, self.buffer_size)
+                    start_read = (current - unread_count) % self.buffer_size
+                    end_read = current % self.buffer_size
+
+                    if start_read < end_read:
+                        new_buffer[:unread_count] = self._source_buffer[start_read:end_read]
+                    else:
+                        split_read = self.buffer_size - start_read
+                        new_buffer[:split_read] = self._source_buffer[start_read:]
+                        new_buffer[split_read:unread_count] = self._source_buffer[:end_read]
+
+                self._source_buffer = new_buffer
+                self.buffer_size = new_size
+                self._source_buffer_needle = 0
+                self._source_buffer_idx = unread_count
+
     def _set_source_buffer(self) -> None:
         self._set_buffer_dtype()
         dt = dtype(self._source_buffer_dtype)
@@ -166,6 +215,19 @@ class BaseSource(BaseModel, ABC):
         self._source_buffer_needle = 0
 
     def _write_sample(self, sample: tuple | dict) -> None:
+        if self.convertion_callback is not None:
+            s = self.convertion_callback(sample)
+            if isinstance(s, ndarray):
+                raise ValueError("convertion_callback must return a tuple or dict, not an ndarray")
+            sample = s
+
+        if self.data_integrity_callback is not None:
+            if not self.data_integrity_callback(sample):
+                if self.data_integrity_raise:
+                    raise ValueError("Data integrity check failed for the written samples.")
+                else:
+                    LOGGER.warning("Data integrity check failed for the written samples.")
+
         with self._lock:
             idx = self._source_buffer_idx % self.buffer_size
 
@@ -179,6 +241,23 @@ class BaseSource(BaseModel, ABC):
 
     def _write_samples(self, samples: ndarray) -> None:
         n = len(samples)
+        if n == 0:
+            return
+
+        if self.convertion_callback is not None:
+            s = self.convertion_callback(samples)
+            if not isinstance(s, ndarray):
+                raise ValueError("convertion_callback must return an ndarray when given an ndarray")
+            samples = s
+
+        if self.data_integrity_callback is not None:
+            if not self.data_integrity_callback(samples):
+                if self.data_integrity_raise:
+                    raise ValueError("Data integrity check failed for the written samples.")
+                else:
+                    LOGGER.warning("Data integrity check failed for the written samples.")
+
+        self._ensure_buffer_size(n)
 
         with self._lock:
             start = self._source_buffer_idx % self.buffer_size
@@ -188,9 +267,11 @@ class BaseSource(BaseModel, ABC):
                 self._source_buffer[start:end] = samples
             else:
                 split = self.buffer_size - start
+                remainder = (end % self.buffer_size) or self.buffer_size
 
                 self._source_buffer[start:] = samples[:split]
-                self._source_buffer[: end % self.buffer_size] = samples[split:]
+                if remainder > 0:
+                    self._source_buffer[:remainder] = samples[split:]
 
             self._source_buffer_idx += n
 
@@ -222,6 +303,7 @@ class BaseSource(BaseModel, ABC):
         return True
 
     def _get_new_chunk(self) -> ndarray | None:
+        # TODO write in chunks
         with self._lock:
             current = self._source_buffer_idx
             last = self._source_buffer_needle
@@ -254,27 +336,36 @@ class BaseSource(BaseModel, ABC):
 
     def _fire_loop(self):
         while not self._stop_thread.is_set():
-            self._start_fire.wait()
-            self._start_fire.clear()
+            try:
+                self._start_fire.wait()
+                self._start_fire.clear()
 
-            if self._stop_thread.is_set():
-                break
+                if self._stop_thread.is_set():
+                    break
 
-            self._supports()
+                self._supports()
+                self._calculate_stimulus_duration()
 
-            if not self._stimuli:
+                if self._barrier:
+                    self._barrier.wait()
+
+                if self._stimuli:
+                    self._fire()
+
                 self._done_fire.set()
-                continue
-            self._calculate_stimulus_duration()
-            if self._barrier:
-                self._barrier.wait()
-            self._fire()
-            self._done_fire.set()
+            except Exception as e:
+                LOGGER.exception(e)
+                self._stop_thread.set()
 
     def _publish_loop(self):
         while not self._stop_thread.is_set():
-            self._publish()
-            sleep(0.01)
+            try:
+                self._acquire()
+                self._publish()
+                sleep(0.01)
+            except Exception as e:
+                LOGGER.exception(e)
+                self._stop_thread.set()
 
     def __enter__(self):
         self.open()

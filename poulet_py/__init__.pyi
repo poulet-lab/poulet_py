@@ -46,6 +46,7 @@ from .io import (
     ThermocoupleType,
     StimuliMetadataSource,
     DCAMSource,
+    BaslerSource,
 )
 from .stimulus import (
     BaseStimulus,
@@ -70,7 +71,7 @@ from .stimulus import (
     NIWhiteNoiseAnalogStimulus,
     TCSStimulus,
 )
-from .tools import go_to, json_serializer, repeat, sanitize_path, precise_sleep
+from .tools import go_to, json_serializer, repeat, sanitize_path, precise_sleep, dumps
 from .utils import StimulatorBlock, StimulatorRuntime, StimulatorTrial, Oscilloscope
 
 __all__ = [
@@ -86,11 +87,13 @@ __all__ = [
     "BaseStimulus",
     "BaseTrigger",
     "BaslerCamera",
+    "dumps",
     "Max31856Source",
     "INA228Source",
     "CounterSource",
     "OpenEphysSource",
     "EmptyStimulus",
+    "BaslerSource",
     "EventBus",
     "ThermocoupleType",
     "EventHandler",
