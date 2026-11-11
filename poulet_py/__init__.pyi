@@ -46,6 +46,7 @@ from .io import (
     ThermocoupleType,
     StimuliMetadataSource,
     DCAMSource,
+    BaslerSource,
 )
 from .stimulus import (
     BaseStimulus,
@@ -92,6 +93,7 @@ __all__ = [
     "CounterSource",
     "OpenEphysSource",
     "EmptyStimulus",
+    "BaslerSource",
     "EventBus",
     "ThermocoupleType",
     "EventHandler",
