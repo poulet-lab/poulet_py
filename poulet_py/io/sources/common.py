@@ -31,7 +31,16 @@ class BaseSource(BaseModel, ABC):
     fire_on: Literal["all"] | tuple[type[BaseStimulus]] = Field(
         default="all", description="List of stimuli to fire on, or 'all' for all stimuli"
     )
-    buffer_size: int = Field(default=1000, description="Size of the circular buffer", ge=1)
+    buffer_size: int = Field(default=100, description="Size of the circular buffer", ge=1)
+    convertion_callback: Callable[[ndarray | tuple | dict], ndarray | tuple | dict] | None = Field(
+        default=None, description="Optional callback to convert the data before publishing"
+    )
+    data_integrity_callback: Callable[[ndarray | tuple | dict], bool] | None = Field(
+        default=None, description="Optional callback to check the health of the data"
+    )
+    data_integrity_raise: bool = Field(
+        default=False, description="Whether to raise an error if data integrity check fails"
+    )
 
     _bus: EventBus = PrivateAttr(default_factory=EventBus)
     _external_bus: bool = PrivateAttr(default=False)
@@ -104,8 +113,8 @@ class BaseSource(BaseModel, ABC):
         if not self._external_bus:
             self.bus.open()
 
-        self._open()
         self._set_source_buffer()
+        self._open()
 
         self._fire_thread = Thread(
             target=self._fire_loop, daemon=True, name=f"{self.name}-fire-loop"
@@ -129,8 +138,8 @@ class BaseSource(BaseModel, ABC):
         if self._publish_thread.is_alive():
             self._publish_thread.join()
 
-        self._del_source_buffer()
         self._close()
+        self._del_source_buffer()
 
         if not self._external_bus:
             self.bus.close()
@@ -206,6 +215,19 @@ class BaseSource(BaseModel, ABC):
         self._source_buffer_needle = 0
 
     def _write_sample(self, sample: tuple | dict) -> None:
+        if self.convertion_callback is not None:
+            s = self.convertion_callback(sample)
+            if isinstance(s, ndarray):
+                raise ValueError("convertion_callback must return a tuple or dict, not an ndarray")
+            sample = s
+
+        if self.data_integrity_callback is not None:
+            if not self.data_integrity_callback(sample):
+                if self.data_integrity_raise:
+                    raise ValueError("Data integrity check failed for the written samples.")
+                else:
+                    LOGGER.warning("Data integrity check failed for the written samples.")
+
         with self._lock:
             idx = self._source_buffer_idx % self.buffer_size
 
@@ -221,6 +243,19 @@ class BaseSource(BaseModel, ABC):
         n = len(samples)
         if n == 0:
             return
+
+        if self.convertion_callback is not None:
+            s = self.convertion_callback(samples)
+            if not isinstance(s, ndarray):
+                raise ValueError("convertion_callback must return an ndarray when given an ndarray")
+            samples = s
+
+        if self.data_integrity_callback is not None:
+            if not self.data_integrity_callback(samples):
+                if self.data_integrity_raise:
+                    raise ValueError("Data integrity check failed for the written samples.")
+                else:
+                    LOGGER.warning("Data integrity check failed for the written samples.")
 
         self._ensure_buffer_size(n)
 
