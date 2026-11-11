@@ -44,6 +44,26 @@ pip install -U git+https://github.com/LJMUAstroecology/flirpy.git
 pip install -U -e .[all]            # For contributors
 ```
 
+## Experiment CLI
+Bootstrap a new experiment repository from the terminal using the bundled CLI:
+
+```sh
+build-exp init my-experiment
+```
+
+The command downloads the [`poulet-lab/experiment-template`](https://github.com/poulet-lab/experiment-template)
+archive (main branch), copies it into `my-experiment`, removes the template's `.git` history, and replaces
+`experiment-template` references in the README with your new project name.
+
+Afterwards, initialize your own repository and make the first commit:
+
+```sh
+cd my-experiment
+git init
+git add .
+git commit -m "Initial commit (from poulet-py experiment init)"
+```
+
 ## Configuration
 The config/ folder includes:
 * settings.py – Environment variables for dynamic configuration (avoid hardcoded values).
