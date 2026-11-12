@@ -536,7 +536,7 @@ class GenieCamera(BaseHardware):
                 item = receiver.get_frame_with_info(timeout=_SLICE_S)
                 if item is not None:
                     self._store(*item)
-        
+
         except Exception as e:
             LOGGER.exception(e)
         finally:
