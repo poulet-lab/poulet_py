@@ -3,6 +3,7 @@ from .config import LOGGER, SETTINGS, Settings, setup_logging
 from .converters import Seq
 from .hardware import (
     TCS,
+    GenieCamera,
     Arduino,
     BaseTrigger,
     BaslerCamera,
@@ -85,6 +86,7 @@ __all__ = [
     "BaseSink",
     "BaseSource",
     "BaseStimulus",
+    "GenieCamera",
     "BaseTrigger",
     "BaslerCamera",
     "Max31856Source",

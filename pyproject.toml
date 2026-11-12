@@ -80,6 +80,7 @@ camera = [
   "keyboard<=0.13.5",
   "pywin32<=312; platform_system == 'Windows'",
   "pythonnet<=3.1.0; platform_system == 'Windows'",
+  "pyGigEVision<=0.2.3",
 ]
 daq = ["poulet_py[nidaq]"]
 nidaq = ["nidaqmx<=1.6.0"]

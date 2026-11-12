@@ -72,6 +72,9 @@ class BaseHardware(BaseModel, ABC):
         self._is_open = True
 
     def close(self) -> None:
+        if not self._is_open:
+            return
+
         self._is_open = False
 
         if self.acquisition_type == AcquisitionType.CONTINUOUS:
@@ -201,6 +204,7 @@ class BaseHardware(BaseModel, ABC):
 
     def _start_acquisition_thread(self) -> None:
         try:
+            self._stop_acquisition_event.clear()
             self._acquisition_thread = Thread(
                 target=self._acquisition_thread_func,
                 name=f"{type(self).__name__} Acquisition Thread",
