@@ -1,6 +1,7 @@
 try:
     import os
     import platform
+    import threading
     import time
     from datetime import datetime
 
@@ -436,38 +437,51 @@ class ThermalCamera:
             fig.canvas.draw()
             plt.pause(0.1)
 
+        data = None
+        last_frame_count = 0
+
         try:
             while True:
                 if platform.system() == "Windows":
-                    data = self.windows_camera.get_frame()
+                    # NewBytesFrameEvent runs on this thread only while COM messages are pumped.
+                    pythoncom.PumpWaitingMessages()
+                    frame, frame_count = self.windows_camera.get_frame_and_count()
+                    if frame_count == last_frame_count:
+                        plt.pause(0.05)
+                    else:
+                        last_frame_count = frame_count
+                        data = frame
+                        if data is None:
+                            LOGGER.warning("Data is none")
+                            data = np.zeros([120, 160])
+
+                        data_celsius = (data - 27315) / 100
+
+                        min_temp = np.min(data_celsius)
+                        max_temp = np.max(data_celsius)
+                        display_vmin = min(min_temp, self.vminT)
+                        display_vmax = max(max_temp, self.vmaxT)
+
+                        if display_vmin == display_vmax:
+                            display_vmin = min_temp - 1
+                            display_vmax = max_temp + 1
+
+                        img.set_data(data_celsius)
+                        img.set_clim(vmin=display_vmin, vmax=display_vmax)
+                        fig.canvas.draw()
+                        fig.canvas.flush_events()
+                        plt.pause(0.05)
                 else:
                     data = q.get(True, 500)
-                if data is None:
-                    LOGGER.warning("Data is none")
-                    data = np.zeros([120, 160])
+                    if data is None:
+                        LOGGER.warning("Data is none")
+                        data = np.zeros([120, 160])
 
-                data_celsius = (data - 27315) / 100
-
-                if platform.system() == "Windows":
-                    min_temp = np.min(data_celsius)
-                    max_temp = np.max(data_celsius)
-                    display_vmin = min(min_temp, self.vminT)
-                    display_vmax = max(max_temp, self.vmaxT)
-
-                    if display_vmin == display_vmax:
-                        display_vmin = min_temp - 1
-                        display_vmax = max_temp + 1
-
-                    img.set_data(data_celsius)
-                    img.set_clim(vmin=display_vmin, vmax=display_vmax)
-                    fig.canvas.draw()
-                    fig.canvas.flush_events()
-                else:
                     ax.clear()
                     img = ax.imshow(data, vmin=self.vminT, vmax=self.vmaxT)
                     fig.colorbar(img, cax=cax)
 
-                plt.pause(0.0005)
+                    plt.pause(0.0005)
 
                 if keyboard.is_pressed("r"):
                     if not pressed:
@@ -556,6 +570,8 @@ class ThermalCamera:
 class CameraWindows:
     def __init__(self):
         self.latest_frame = None
+        self.frame_lock = threading.Lock()
+        self.frame_count = 0
         self.CCI = CCI
         self.IR16Capture = IR16Capture
         self.NewBytesFrameEvent = NewBytesFrameEvent
@@ -568,7 +584,21 @@ class CameraWindows:
         """
         img = np.fromiter(array, dtype="uint16").reshape(height, width)  # parse
         img = ndimage.rotate(img, angle=0, reshape=True)  # rotation
-        self.latest_frame = img.astype(np.float16)  # update the last reading
+        frame = img.astype(np.float16)
+        with self.frame_lock:
+            self.latest_frame = frame
+            self.frame_count += 1
+
+    def get_frame_and_count(self):
+        """
+        Return a copy of the latest frame and how many frames have been stored.
+        """
+        with self.frame_lock:
+            if self.latest_frame is None:
+                frame = None
+            else:
+                frame = self.latest_frame.copy()
+            return frame, self.frame_count
 
     def initialise_camera(self):
         """
