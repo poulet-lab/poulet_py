@@ -52,6 +52,7 @@ The config/ folder includes:
 Example:
 ```python
 from poulet_py import LOGGER
+
 LOGGER.info("Starting trial...")
 ```
 
