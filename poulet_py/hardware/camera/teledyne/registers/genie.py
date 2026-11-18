@@ -1,26 +1,7 @@
-"""Register map for the Teledyne DALSA Genie HM / HC series.
-
-Every address and encoding below was taken from the camera's GenICam XML
-(ModelName="GenieHM", version 2.1.202, VendorName="DALSA").  All registers are
-32-bit big-endian unless noted; ``pyGigEVision.GVCPClient.read_reg`` and
-``write_reg`` already handle that.
-
-GenICam bit numbering note: for big-endian registers the XML numbers bits from
-the MSB, so ``<Bit>31</Bit>`` is the least significant bit (value 0x1) and
-``<LSB>31</LSB><MSB>16</MSB>`` is the low 16 bits (mask 0xFFFF).
-
-Anything that depends on the sensor (width, height, frame-rate limits, ...) is
-*not* hard-coded here: read it from the camera at runtime.
-"""
-
-from __future__ import annotations
-
-from enum import IntEnum
+from enum import IntEnum, StrEnum
 
 
 class Reg:
-    """Register addresses."""
-
     # ------------------------------------------------------------------
     # GigE Vision bootstrap (standard)
     # ------------------------------------------------------------------
@@ -164,13 +145,13 @@ class PixelFormat(IntEnum):
     BAYER_GR_10 = 0x0110000C  # colour (HC) models only
 
 
-class TriggerSource(IntEnum):
+class TriggerSourceReg(IntEnum):
     LINE_1 = 0
     LINE_2 = 1
     SOFTWARE = 2
 
 
-class TriggerActivation(IntEnum):
+class TriggerActivationReg(IntEnum):
     RISING_EDGE = 0
     FALLING_EDGE = 1
 
@@ -226,6 +207,109 @@ PACKET_SIZE_MIN = 512
 PACKET_SIZE_MAX = 9216
 PACKET_SIZE_STEP = 4
 PACKET_SIZE_MASK = 0xFFFF  # bits 15:0 of SC_PACKET_SIZE
+
+
+# ----------------------------------------------------------------------
+# Enumerations (helpers)
+# ----------------------------------------------------------------------
+class PixelType(StrEnum):
+    MONO_8 = "Mono8"
+    MONO_10 = "Mono10"  # 10 bit in a 16 bit container, not all firmware has it
+
+    # Colour (HC) models only
+    BAYER_GR_8 = "BayerGR8"
+    BAYER_GR_10 = "BayerGR10"
+
+    def to_numpy(self) -> str:
+        return "uint8" if self in (self.MONO_8, self.BAYER_GR_8) else "uint16"
+
+    def to_register(self) -> int:
+        return {
+            self.MONO_8: PixelFormat.MONO_8,
+            self.MONO_10: PixelFormat.MONO_10,
+            self.BAYER_GR_8: PixelFormat.BAYER_GR_8,
+            self.BAYER_GR_10: PixelFormat.BAYER_GR_10,
+        }[self].value
+
+    @property
+    def is_bayer(self) -> bool:
+        return self in (self.BAYER_GR_8, self.BAYER_GR_10)
+
+
+class TriggerSource(StrEnum):
+    INTERNAL = "Internal"  # free-run at `fps`
+    SOFTWARE = "Software"
+    LINE_1 = "Line1"
+    LINE_2 = "Line2"
+
+    def to_register(self) -> int:
+        return {
+            self.LINE_1: TriggerSourceReg.LINE_1,
+            self.LINE_2: TriggerSourceReg.LINE_2,
+            self.SOFTWARE: TriggerSourceReg.SOFTWARE,
+            self.INTERNAL: -1,
+        }[self]
+
+
+class TriggerActivation(StrEnum):
+    RISING_EDGE = "RisingEdge"
+    FALLING_EDGE = "FallingEdge"
+
+    def to_register(self) -> int:
+        return {
+            self.RISING_EDGE: TriggerActivationReg.RISING_EDGE,
+            self.FALLING_EDGE: TriggerActivationReg.FALLING_EDGE,
+        }[self]
+
+
+class ExposureModeType(StrEnum):
+    TIMED = "Timed"
+    TRIGGER_WIDTH = "TriggerWidth"  # exposure = trigger pulse width, needs Line1/Line2
+
+
+class ExposureAlignmentType(StrEnum):
+    SYNCHRONOUS = "Synchronous"  # readout overlaps exposure, fastest
+    RESET = "Reset"  # sensor timing restarts on each trigger
+
+
+class OutputLine(StrEnum):
+    LINE_3 = "Line3"  # Output 1: Hirose pin 3 (+) / pin 4 (-)
+    LINE_4 = "Line4"  # Output 2: Hirose pin 7 (+) / pin 8 (-)
+
+    def to_register(self) -> int:
+        return 2 if self == self.LINE_3 else 3
+
+
+class OutputEventType(StrEnum):
+    START_OF_TRIGGER = "StartOfTrigger"
+    START_OF_EXPOSURE = "StartOfExposure"
+    START_OF_READOUT = "StartOfReadout"
+    END_OF_READOUT = "EndOfReadout"
+
+    def to_register(self) -> int:
+        return {
+            self.START_OF_TRIGGER: OutputEvent.START_OF_TRIGGER,
+            self.START_OF_EXPOSURE: OutputEvent.START_OF_EXPOSURE,
+            self.START_OF_READOUT: OutputEvent.START_OF_READOUT,
+            self.END_OF_READOUT: OutputEvent.END_OF_READOUT,
+        }[self].value
+
+
+class TestPattern(StrEnum):
+    OFF = "Off"
+    HORIZONTAL_WEDGE = "HorizontalWedge"
+    VERTICAL_WEDGE = "VerticalWedge"
+    DIAGONAL_MOVING_WEDGE = "DiagonalMovingWedge"
+    PURITY = "Purity"
+
+    def to_register(self) -> int:
+        return {
+            self.OFF: TestImage.OFF,
+            self.HORIZONTAL_WEDGE: TestImage.HORIZONTAL_WEDGE,
+            self.VERTICAL_WEDGE: TestImage.VERTICAL_WEDGE,
+            self.DIAGONAL_MOVING_WEDGE: TestImage.DIAGONAL_MOVING_WEDGE,
+            self.PURITY: TestImage.PURITY,
+        }[self].value
 
 
 # ----------------------------------------------------------------------
