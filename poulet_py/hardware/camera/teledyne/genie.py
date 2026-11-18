@@ -19,9 +19,7 @@ try:
         TRIGGERED_EXPOSURE_MAX_US,
         AcquisitionMode,
         ExposureAlignment,
-        ExposureAlignmentType,
         ExposureMode,
-        ExposureModeType,
         OutputEventType,
         OutputLine,
         PixelType,
@@ -63,8 +61,11 @@ class GenieCamera(BaseHardware):
     heartbeat_ms: int = Field(default=3000, ge=500, le=65000)
     trigger_source: TriggerSource = Field(default=TriggerSource.INTERNAL)
     trigger_activation: TriggerActivation = Field(default=TriggerActivation.RISING_EDGE)
-    trigger_delay: int | None = Field(
-        default=None, description="Delay from hardware trigger to exposure, us (100..4e6)"
+    trigger_delay: int = Field(
+        default=TRIGGER_DELAY_MIN_US,
+        ge=TRIGGER_DELAY_MIN_US,
+        le=TRIGGER_DELAY_MAX_US,
+        description="Delay from hardware trigger to exposure, us (100..4e6)",
     )
     timeout: int = Field(default=5000, description="frame wait timeout in ms")
     fps: float = Field(default=30, gt=0, description="Frame rate in Hz (free-run only)")
@@ -82,9 +83,9 @@ class GenieCamera(BaseHardware):
     reverse_x: bool = Field(default=False, description="Horizontal flip (mono models only)")
     test_pattern: TestPattern = Field(default=TestPattern.OFF)
     exposure: float = Field(default=10000, ge=1, description="Exposure time in us")
-    exposure_mode: ExposureModeType = Field(default=ExposureModeType.TIMED)
-    exposure_alignment: ExposureAlignmentType = Field(default=ExposureAlignmentType.SYNCHRONOUS)
-    gain: float = Field(default=0.0, ge=0, le=12, description="Digital gain in dB")
+    exposure_mode: ExposureMode = Field(default=ExposureMode.TIMED)
+    exposure_alignment: ExposureAlignment = Field(default=ExposureAlignment.SYNCHRONOUS)
+    gain: float = Field(default=0.0, ge=0, le=GAIN_RAW_MAX / 10, description="Digital gain in dB")
     black_level: int = Field(
         default=0, ge=0, le=4092, description="Raw black level (step 1 in 8-bit, 4 in 10-bit)"
     )
@@ -281,8 +282,14 @@ class GenieCamera(BaseHardware):
         self._set_pixel_format()
         self._set_roi()
         self._write(Reg.TEST_IMAGE, self.test_pattern.to_register())
-        # TODO for single sample?
-        self._write(Reg.ACQUISITION_MODE, AcquisitionMode.CONTINUOUS)
+
+        mode = (
+            AcquisitionMode.CONTINUOUS
+            if self.acquisition_type == AcquisitionType.CONTINUOUS
+            else AcquisitionMode.SINGLE_FRAME
+        )
+        self._write(Reg.ACQUISITION_MODE, mode)
+
         self._set_trigger()
         self._set_exposure()
         self._set_gain_black_level()
@@ -307,7 +314,6 @@ class GenieCamera(BaseHardware):
 
         self._write(Reg.PIXEL_FORMAT, self.pixel_type.to_register())
 
-    # TODO
     def _set_roi(self) -> None:
         hb, vb = self.binning
         if not (hb in (1, 2) and vb in (1, 2)):
@@ -342,7 +348,6 @@ class GenieCamera(BaseHardware):
         if off_x + width > max_w or off_y + height > max_h:
             raise ValueError("ROI plus offset exceeds the sensor area")
 
-        # Zero the offsets first so a bigger window is never rejected.
         self._write(Reg.AOI_LEFT, 0)
         self._write(Reg.AOI_TOP, 0)
         self._write(Reg.AOI_WIDTH, width)
@@ -350,11 +355,6 @@ class GenieCamera(BaseHardware):
         self._write(Reg.AOI_LEFT, off_x)
         self._write(Reg.AOI_TOP, off_y)
 
-    @property
-    def _is_hardware_trigger(self) -> bool:
-        return self.trigger_source in (TriggerSource.LINE_1, TriggerSource.LINE_2)
-
-    # TODO
     def _set_trigger(self) -> None:
         if self.trigger_source == TriggerSource.INTERNAL:
             self._write(Reg.TRIGGER_MODE, 0)
@@ -363,37 +363,19 @@ class GenieCamera(BaseHardware):
         self._write(Reg.TRIGGER_MODE, 1)
         self._write(Reg.TRIGGER_SOURCE, self.trigger_source.to_register())
 
-        if self._is_hardware_trigger:
+        if self.trigger_source in (TriggerSource.LINE_1, TriggerSource.LINE_2):
             line = 0 if self.trigger_source == TriggerSource.LINE_1 else 1
             self._write(input_line_polarity(line), self.trigger_activation.to_register())
-            if self.trigger_delay is not None:
-                if not TRIGGER_DELAY_MIN_US <= self.trigger_delay <= TRIGGER_DELAY_MAX_US:
-                    raise ValueError(
-                        f"trigger_delay must be {TRIGGER_DELAY_MIN_US}..{TRIGGER_DELAY_MAX_US} us"
-                    )
-                self._write(Reg.TRIGGER_DELAY, self.trigger_delay)
+            self._write(Reg.TRIGGER_DELAY, self.trigger_delay)
 
-    # TODO
     def _set_exposure(self) -> None:
-        # Timing modes only exist with a hardware trigger; otherwise the camera is Timed.
-        if self._is_hardware_trigger:
-            mode = (
-                ExposureMode.TRIGGER_WIDTH
-                if self.exposure_mode == ExposureModeType.TRIGGER_WIDTH
-                else ExposureMode.TIMED
-            )
-            self._write(Reg.EXPOSURE_MODE, mode)
-            if mode == ExposureMode.TIMED:
-                align = (
-                    ExposureAlignment.RESET
-                    if self.exposure_alignment == ExposureAlignmentType.RESET
-                    else ExposureAlignment.SYNCHRONOUS
-                )
-                self._write(Reg.EXPOSURE_ALIGNMENT, align)
-        elif self.exposure_mode == ExposureModeType.TRIGGER_WIDTH:
-            raise ValueError("TRIGGER_WIDTH exposure needs trigger_source LINE_1 or LINE_2")
+        if self.trigger_source in (TriggerSource.LINE_1, TriggerSource.LINE_2):
+            self._write(Reg.EXPOSURE_MODE, self.exposure_mode.to_register())
 
-        # Free-run: frame rate is in mHz and limits depend on ROI, so set it before exposure.
+            if self.exposure_mode == ExposureMode.TIMED:
+                self._write(Reg.EXPOSURE_ALIGNMENT, self.exposure_alignment.to_register())
+        elif self.exposure_mode == ExposureMode.TRIGGER_WIDTH:
+            raise ValueError("TRIGGER_WIDTH exposure needs trigger_source LINE_1 or LINE_2")
         if self.trigger_source == TriggerSource.INTERNAL:
             lo, hi = self._read(Reg.FRAME_RATE_MIN), self._read(Reg.FRAME_RATE_MAX)
             target = round(self.fps * 1000)
@@ -401,7 +383,7 @@ class GenieCamera(BaseHardware):
                 raise ValueError(f"fps {self.fps} out of range {lo / 1000:.3f}..{hi / 1000:.3f} Hz")
             self._write(Reg.FRAME_RATE, target)
 
-        if self.exposure_mode == ExposureModeType.TIMED:
+        if self.exposure_mode == ExposureMode.TIMED:
             lo = self._read(Reg.EXPOSURE_MIN)
             hi = (
                 TRIGGERED_EXPOSURE_MAX_US

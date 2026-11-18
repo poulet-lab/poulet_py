@@ -156,12 +156,12 @@ class TriggerActivationReg(IntEnum):
     FALLING_EDGE = 1
 
 
-class ExposureMode(IntEnum):
+class ExposureModeReg(IntEnum):
     TIMED = 1
     TRIGGER_WIDTH = 2
 
 
-class ExposureAlignment(IntEnum):
+class ExposureAlignmentReg(IntEnum):
     SYNCHRONOUS = 0
     RESET = 1
 
@@ -262,14 +262,26 @@ class TriggerActivation(StrEnum):
         }[self]
 
 
-class ExposureModeType(StrEnum):
+class ExposureMode(StrEnum):
     TIMED = "Timed"
     TRIGGER_WIDTH = "TriggerWidth"  # exposure = trigger pulse width, needs Line1/Line2
 
+    def to_register(self) -> int:
+        return {
+            self.TIMED: ExposureModeReg.TIMED,
+            self.TRIGGER_WIDTH: ExposureModeReg.TRIGGER_WIDTH,
+        }[self]
 
-class ExposureAlignmentType(StrEnum):
+
+class ExposureAlignment(StrEnum):
     SYNCHRONOUS = "Synchronous"  # readout overlaps exposure, fastest
     RESET = "Reset"  # sensor timing restarts on each trigger
+
+    def to_register(self) -> int:
+        return {
+            self.SYNCHRONOUS: ExposureAlignmentReg.SYNCHRONOUS,
+            self.RESET: ExposureAlignmentReg.RESET,
+        }[self]
 
 
 class OutputLine(StrEnum):
