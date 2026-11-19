@@ -3,6 +3,7 @@ from .config import LOGGER, SETTINGS, Settings, setup_logging
 from .converters import Seq
 from .hardware import (
     TCS,
+    GenieCamera,
     Arduino,
     BaseTrigger,
     BaslerCamera,
@@ -46,6 +47,7 @@ from .io import (
     ThermocoupleType,
     StimuliMetadataSource,
     DCAMSource,
+    HardwareSource,
     LeptonSource,
     DRV2605Source,
     BaslerSource,
@@ -87,6 +89,7 @@ __all__ = [
     "BaseSink",
     "BaseSource",
     "BaseStimulus",
+    "GenieCamera",
     "BaseTrigger",
     "BaslerCamera",
     "DRV2605Source",
@@ -100,6 +103,7 @@ __all__ = [
     "EventBus",
     "ThermocoupleType",
     "EventHandler",
+    "HardwareSource",
     "GPIOTrigger",
     "precise_sleep",
     "NIAnalogCompositeStimulus",
