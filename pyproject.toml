@@ -70,7 +70,6 @@ seq = [
 ]
 # Hardware
 camera = [
-  "cv2_enumerate_cameras<=1.4.0",
   "pypylon<=26.10",
   "opencv-python<=5.0.0.93",
   "numpy<=2.5.4",
@@ -80,7 +79,6 @@ camera = [
   "keyboard<=0.13.5",
   "pywin32<=312; platform_system == 'Windows'",
   "pythonnet<=3.1.0; platform_system == 'Windows'",
-  "pyGigEVision<=0.2.3",
 ]
 daq = ["poulet_py[nidaq]"]
 nidaq = ["nidaqmx<=1.7.0"]
@@ -127,23 +125,19 @@ docs = [
   "pydata-sphinx-theme<=0.23.0",
   "sphinx-autodoc-typehints<=3.13.10",
   "ipython<=9.17.1",
+  "myst_parser<=5.2.0",
 ]
 
 [tool.hatch.envs.docs]
 dependencies = ["poulet_py[all,docs]"]
 
 [tool.hatch.envs.docs.scripts]
-api = """
-poulet_py --force --separate \
---templatedir docs/_templates/apidoc \
--M -H "API reference"
-"""
-
 build = """
 rm -rf docs/build && 
 hatch run docs:api && 
 sphinx-build -b html docs/source docs/build -j auto
 """
+
 serve = """
 hatch run docs:build && 
 python -m http.server --directory docs/build 8000
