@@ -12,8 +12,11 @@ from .sources import (
     ThermocoupleType,
     StimuliMetadataSource,
     INA228Source,
+    BaslerSource,
     DCAMSource,
     HardwareSource,
+    LeptonSource,
+    DRV2605Source,
 )
 
 __all__ = [
@@ -36,4 +39,7 @@ __all__ = [
     "TCSSource",
     "OpenEphysSource",
     "DCAMSource",
+    "LeptonSource",
+    "DRV2605Source",
+    "BaslerSource",
 ]

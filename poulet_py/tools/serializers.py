@@ -2,7 +2,7 @@ try:
     from pathlib import Path
     from typing import Any
 
-    from orjson import OPT_INDENT_2, OPT_SERIALIZE_NUMPY, JSONEncodeError, dumps
+
 except ImportError as e:
     raise ImportError("""
 Missing 'tools' module. Install options:
@@ -10,8 +10,41 @@ Missing 'tools' module. Install options:
 - Full:         pip install poulet_py[all]
 """) from e
 
+try:
+    from orjson import (
+        OPT_INDENT_2,
+        OPT_SERIALIZE_DATACLASS,
+        OPT_SERIALIZE_NUMPY,
+        OPT_SERIALIZE_UUID,
+    )
+    from orjson import dumps as jdumps
 
-_SERIALIZATION_OPTIONS = OPT_SERIALIZE_NUMPY | OPT_INDENT_2
+    def dumps(obj: Any) -> bytes:
+        return jdumps(
+            obj,
+            option=OPT_SERIALIZE_NUMPY
+            | OPT_INDENT_2
+            | OPT_SERIALIZE_DATACLASS
+            | OPT_SERIALIZE_UUID,
+        )
+except ImportError:
+    from json import JSONEncoder
+    from json import dumps as jdumps
+
+    from numpy import floating, integer, ndarray
+
+    class JEncoder(JSONEncoder):
+        def default(self, o):
+            if isinstance(o, ndarray):
+                return o.tolist()
+            if isinstance(o, integer):
+                return int(o)
+            if isinstance(o, floating):
+                return float(o)
+            return super().default(o)
+
+    def dumps(obj: Any) -> bytes:
+        return jdumps(obj, cls=JEncoder).encode("utf-8")
 
 
 def json_serializer(
@@ -21,8 +54,6 @@ def json_serializer(
     """Serialize data to JSON.
 
     Features:
-    - Efficient serialization using orjson (faster than standard json module)
-    - Built-in numpy array support via orjson's native serialization
     - Returns bytes if no file provided, writes to file otherwise
 
     Args:
@@ -47,11 +78,7 @@ def json_serializer(
         >>> # Get bytes
         >>> json_bytes = json_serializer(data)
     """
-    try:
-        serialized = dumps(data, option=_SERIALIZATION_OPTIONS)
-    except JSONEncodeError as e:
-        raise TypeError("Failed to serialize data to JSON") from e
-
+    serialized = dumps(data)
     if file is not None:
         path = Path(file) if isinstance(file, str) else file
 

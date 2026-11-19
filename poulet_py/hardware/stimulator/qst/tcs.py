@@ -8,16 +8,15 @@ and calibration functionality.
 
 try:
     from collections import deque
-    from re import Match, Pattern, compile, search
+    from re import Match, Pattern, compile
     from threading import Condition, Event, Thread
     from time import monotonic_ns
 
     from numpy import ndarray, zeros
-    from numpy.typing import ArrayLike
     from pydantic import BaseModel, Field, PrivateAttr
     from serial import Serial
 
-    from poulet_py import LOGGER, TCSCommand, TCSStimulus, precise_sleep
+    from poulet_py import LOGGER, AcquisitionType, TCSCommand, TCSStimulus, precise_sleep
 except ImportError as e:
     raise ImportError("""
 Missing 'qst' module. Install options:
@@ -113,9 +112,9 @@ class TCS(BaseModel, validate_assignment=True):
         Circular buffer for temperature samples.
     _acquisition_thread : Thread
         Background thread for continuous data acquisition.
-    _stop_acquisition_event : Event
+    _stop_acquisition_thread : Event
         Event to signal acquisition thread termination.
-    _sampling_cond : Condition
+    _acquisition_cond : Condition
         Condition variable for coordinating buffer access.
     _stimulus_running : bool
         Flag indicating if a stimulus is currently running.
@@ -139,6 +138,9 @@ class TCS(BaseModel, validate_assignment=True):
         description="Serial port to which the TCS device is connected",
         pattern=r"^(COM\d+|(/dev/)tty(USB\d+|\.usb[a-zA-Z0-9]+))$",
     )
+    acquisition_type: AcquisitionType = Field(
+        default=AcquisitionType.FINITE, description="Type of data acquisition, continuous or finite"
+    )  # TODO stop thread when finite
     buffer_size: int = Field(default=100, description="Size of the internal sampling queue", ge=1)
     maximum_temperature: float = Field(
         default=40.0, description="Maximum allowed temperature in °C"
@@ -160,10 +162,16 @@ class TCS(BaseModel, validate_assignment=True):
     _tcs_buffer_idx: int = PrivateAttr(0)
     _tcs_buffer_needle: int = PrivateAttr(0)
     _tcs_buffer: ndarray = PrivateAttr()
+
+    _stimulus: TCSStimulus = PrivateAttr()
+    _done_trigger: Event = PrivateAttr(default_factory=Event)
+    _start_trigger: Event = PrivateAttr(default_factory=Event)
+    _stop_trigger_thread: Event = PrivateAttr(default_factory=Event)
+    _trigger_thread: Thread = PrivateAttr()
+
+    _stop_acquisition_thread: Event = PrivateAttr(default_factory=Event)
     _acquisition_thread: Thread = PrivateAttr()
-    _stop_acquisition_event: Event = PrivateAttr(default_factory=Event)
-    _sampling_cond: Condition = PrivateAttr(default_factory=Condition)
-    _stimulus_running: bool = PrivateAttr(default=False)
+    _acquisition_cond: Condition = PrivateAttr(default_factory=Condition)
 
     _temperature_line_pattern: Pattern[bytes] = PrivateAttr(
         default=compile(
@@ -174,8 +182,7 @@ class TCS(BaseModel, validate_assignment=True):
 
     @property
     def stimulus_running(self) -> bool:
-        """Check if a stimulus is currently running."""
-        return self._stimulus_running
+        return not self._done_trigger.is_set()
 
     def open(self):
         """
@@ -192,15 +199,18 @@ class TCS(BaseModel, validate_assignment=True):
         """
         if self._is_open:
             return
-
         self._tcs_open_serial()
         self._tcs_set_buffer()
+
+        self._done_trigger.set()
+        self._tcs_start_trigger_thread()
         self._tcs_start_acquisition_thread()
 
         self.execute_command(TCSCommand.SET_MAX_TEMPERATURE, int(self.maximum_temperature * 10))
+        self.execute_command(TCSCommand.DISPLAY_TEMPERATURES_DURING_STIMULATION)
 
         info = self.info()
-        match = search(compile(r"Firmware:(.*)\nProbe ID:(.*)\nProbe TYPE:(.*)\n"), info)
+        match = compile(r"Firmware:(.*)\nProbe ID:(.*)\nProbe TYPE:(.*)\n").search(info)
         battery_info = self.battery_info()
 
         LOGGER.info(
@@ -219,6 +229,7 @@ class TCS(BaseModel, validate_assignment=True):
     def close(self):
         """Close the serial connection and clean up resources."""
         self._tcs_stop_acquisition_thread()
+        self._tcs_stop_trigger_thread()
         self._tcs_close_serial()
         self._tcs_delete_buffer()
         self._is_open = False
@@ -358,14 +369,14 @@ class TCS(BaseModel, validate_assignment=True):
         event = request.event
 
         if expected_pattern is not None:
-            with self._sampling_cond:
+            with self._acquisition_cond:
                 self._serial_search_queue.append(request)
 
         self.write(command.format(*args))
 
         if expected_pattern is not None:
             if not event.wait(timeout=timeout or self.response_timeout):
-                with self._sampling_cond:
+                with self._acquisition_cond:
                     if request in self._serial_search_queue:
                         self._serial_search_queue.remove(request)
                 LOGGER.warning("Device response timed out")
@@ -373,7 +384,7 @@ class TCS(BaseModel, validate_assignment=True):
 
         return request.result
 
-    def trigger(self, stimulus: TCSStimulus):
+    def trigger(self, stimulus: TCSStimulus, *, wait: bool = False):
         """
         Trigger a thermal stimulation protocol.
 
@@ -394,27 +405,23 @@ class TCS(BaseModel, validate_assignment=True):
         This method starts a timer thread for stimulus duration and optionally
         activates buzzer and trigger output.
         """
-        self._tcs_ensure_open()
+        if self.stimulus_running:
+            raise RuntimeError("Trigger already running")
 
+        self._tcs_ensure_open()
         self._tcs_validate_stimulus(stimulus)
 
-        for command in stimulus.build():
-            self.write(command)
+        self._stimulus = stimulus
 
-        self.execute_command(TCSCommand.TRIGGER_STIMULATION)
+        self._done_trigger.clear()
+        self._start_trigger.set()
 
-        Thread(
-            target=self._tcs_stimulus_timer, args=(stimulus.duration,), name="TCS-stimulus-timer"
-        ).start()
+        if wait:
+            self.trigger_wait()
 
-        if self.beep:
-            self.execute_command(TCSCommand.BUZZER, min(999, stimulus.duration // 10), 44)
-
-        self.execute_command(
-            TCSCommand.TRIGGER_CHANNEL_DURATION,
-            self.trigger_out_channel,
-            max(1, min(999, stimulus.duration // 10)),
-        )
+    def trigger_wait(self) -> bool:
+        self._done_trigger.wait()
+        return True
 
     def calibration(self, timeout: float = 30.0) -> float:
         """
@@ -461,7 +468,7 @@ class TCS(BaseModel, validate_assignment=True):
         self.execute_command(TCSCommand.RESET)
         LOGGER.info("Reset successfully")
 
-    def read_last_sample(self) -> ArrayLike:
+    def read_sample(self, timeout: float | None = None) -> ndarray | None:
         """
         Read the most recent temperature sample.
 
@@ -482,16 +489,19 @@ class TCS(BaseModel, validate_assignment=True):
         's0' through 's4' (float64) for the 5 temperature channels.
         """
         self._tcs_ensure_open()
+        sample = None
 
-        with self._sampling_cond:
-            if self._tcs_buffer_idx == 0:
-                raise RuntimeError("No samples collected yet")
+        with self._acquisition_cond:
+            if self._tcs_buffer_needle == self._tcs_buffer_idx:
+                self._acquisition_cond.wait(timeout)
 
             idx = (self._tcs_buffer_idx - 1) % self.buffer_size
+            sample = self._tcs_buffer[idx]
             self._tcs_buffer_needle = self._tcs_buffer_idx
-            return self._tcs_buffer[idx]
 
-    def read_many_sample(self, data: ndarray, n: int, timeout: float = 10.0) -> int:
+        return sample
+
+    def read_many_sample(self, data: ndarray, n: int = -1, timeout: float = -1) -> int:
         """
         Read multiple temperature samples into a pre-allocated array.
 
@@ -502,7 +512,7 @@ class TCS(BaseModel, validate_assignment=True):
             and at least `n` rows.
         n : int
             Number of samples to read.
-        timeout : float, default=10.0
+        timeout : float, default=-1
             Maximum time in seconds to wait for samples to become available.
 
         Returns
@@ -528,47 +538,56 @@ class TCS(BaseModel, validate_assignment=True):
         if data.shape[0] < n:
             raise ValueError(f"Provided array has {data.shape[0]} rows, need at least {n}")
 
-        deadline = monotonic_ns() + timeout
+        deadline = monotonic_ns() + int(timeout * 1e9) if timeout >= 0 else None
 
-        with self._sampling_cond:
-            while self._tcs_buffer_idx == 0:
-                remaining = deadline - monotonic_ns()
-                if remaining <= 0:
-                    return 0
-                self._sampling_cond.wait(timeout=remaining / 1e9)
+        count = 0
+        with self._acquisition_cond:
+            if n == -1 and deadline is None:
+                pass
+            elif n == -1 and deadline is not None:
+                remaining = (deadline - monotonic_ns()) / 1e9
+                self._acquisition_cond.wait(remaining)
+            elif n != -1 and deadline is None:
+                while self._tcs_buffer_idx - self._tcs_buffer_needle < n:
+                    self._acquisition_cond.wait()
+            elif n != -1 and deadline is not None:
+                remaining = (deadline - monotonic_ns()) / 1e9
+                while self._tcs_buffer_idx - self._tcs_buffer_needle < n and remaining > 0:
+                    self._acquisition_cond.wait(remaining)
+                    remaining = (deadline - monotonic_ns()) / 1e9
 
-            total_samples = self._tcs_buffer_idx
-            available = min(total_samples, self.buffer_size)
-            count = min(n, available)
+            avail = self._tcs_buffer_idx - self._tcs_buffer_needle
+            if avail <= 0:
+                return 0
 
-            start_idx = (total_samples - count) % self.buffer_size
-            first_chunk = min(self.buffer_size - start_idx, count)
-            second_chunk = count - first_chunk
+            count = avail if n < 0 else min(avail, n)
 
-            data[0:first_chunk] = self._tcs_buffer[start_idx : start_idx + first_chunk]
+            size = self.buffer_size
+            buffer = self._tcs_buffer
+            needle = self._tcs_buffer_needle
 
-            if second_chunk > 0:
-                data[first_chunk:count] = self._tcs_buffer[0:second_chunk]
+            if avail > size:
+                LOGGER.warning("Dropped %d samples", avail - size)
 
-            self._tcs_buffer_needle += count
+            if count > size:
+                needle = self._tcs_buffer_idx - size
+                count = size
 
-            return count
+            start = needle % size
+            end = start + count
+
+            if end <= size:
+                data[:count] = buffer[start:end]
+            else:
+                first = size - start
+                data[:first] = buffer[start:]
+                data[first:count] = buffer[: count - first]
+
+            self._tcs_buffer_needle = needle + count
+
+        return count
 
     def _tcs_validate_stimulus(self, stimulus: TCSStimulus) -> None:
-        """
-        Validate stimulus parameters.
-
-        Parameters
-        ----------
-        stimulus : TCSStimulus
-            Stimulus to validate.
-
-        Raises
-        ------
-        ValueError
-            If stimulus is not a TCSStimulus instance or if temperatures
-            exceed maximum_temperature.
-        """
         if not isinstance(stimulus, TCSStimulus):
             raise ValueError(f"Stimulus must be a TCSStimulus instance, got {type(stimulus)}")
 
@@ -584,42 +603,11 @@ class TCS(BaseModel, validate_assignment=True):
                 f"maximum temperature {self.maximum_temperature}"
             )
 
-    def _tcs_stimulus_timer(self, duration_ms: int):
-        """
-        Timer function for stimulus duration.
-
-        Parameters
-        ----------
-        duration_ms : int
-            Stimulus duration in milliseconds.
-        """
-        try:
-            self._stimulus_running = True
-            precise_sleep(duration_ms / 1000.0)
-        finally:
-            self._stimulus_running = False
-
     def _tcs_ensure_open(self):
-        """
-        Check if serial connection is open.
-
-        Raises
-        ------
-        RuntimeError
-            If serial connection is not open.
-        """
         if not self._serial.is_open:
             raise RuntimeError("TCS serial connection is not open. Call open() first.")
 
     def _tcs_open_serial(self):
-        """
-        Open serial connection with TCS-specific parameters.
-
-        Raises
-        ------
-        RuntimeError
-            If serial initialization fails.
-        """
         try:
             self._serial = Serial(
                 port=self.port,
@@ -628,28 +616,17 @@ class TCS(BaseModel, validate_assignment=True):
                 parity="N",
                 stopbits=1,
                 timeout=self.read_timeout,
-                write_timeout=2,
             )
         except Exception as e:
             raise RuntimeError("Serial initialization failed") from e
 
     def _tcs_close_serial(self):
-        """
-        Close serial connection safely.
-
-        Raises
-        ------
-        RuntimeError
-            If error occurs while closing serial connection.
-        """
-
         if self._serial.is_open:
             self._serial.reset_input_buffer()
             self._serial.reset_output_buffer()
             self._serial.close()
 
     def _tcs_set_buffer(self):
-        """Initialize the circular buffer for temperature samples."""
         try:
             self._tcs_buffer = zeros(
                 self.buffer_size,
@@ -661,75 +638,115 @@ class TCS(BaseModel, validate_assignment=True):
             raise RuntimeError("Buffer initialization failed") from e
 
     def _tcs_delete_buffer(self):
-        """Delete the circular buffer and reset index."""
         del self._tcs_buffer
 
-    def _tcs_start_acquisition_thread(self):
-        """Start the background acquisition thread."""
-        try:
-            self.execute_command(TCSCommand.DISPLAY_TEMPERATURES_DURING_STIMULATION)
+    def _tcs_trigger(self):
+        for command in self._stimulus.build():
+            self.write(command)
 
-            self._acquisition_thread = Thread(
-                target=self._tcs_acquisition_thread_func, name="TCS Acquisition Thread", daemon=True
+        precise_sleep(self._stimulus.pre_delay / 1000.0)
+        self.execute_command(TCSCommand.TRIGGER_STIMULATION)
+        now = monotonic_ns()
+
+        if self.beep:
+            self.execute_command(TCSCommand.BUZZER, min(999, self._stimulus.duration // 10), 44)
+
+        self.execute_command(
+            TCSCommand.TRIGGER_CHANNEL_DURATION,
+            self.trigger_out_channel,
+            max(1, min(999, self._stimulus.duration // 10)),
+        )
+
+        precise_sleep(
+            (
+                self._stimulus.duration
+                + self._stimulus.post_delay
+                - ((monotonic_ns() - now) / 1_000_000)
             )
-            self._acquisition_thread.start()
-        except Exception as e:
-            raise RuntimeError("Acquisition thread failed to start") from e
+            / 1000.0
+        )
+
+        self._done_trigger.set()
+
+    def _tcs_start_trigger_thread(self):
+        self._trigger_thread = Thread(
+            target=self._tcs_trigger_thread_func, daemon=True, name="TCS Trigger Thread"
+        )
+        self._trigger_thread.start()
+
+    def _tcs_stop_trigger_thread(self):
+        self._stop_trigger_thread.set()
+        self._start_trigger.set()
+
+        if self._trigger_thread.is_alive():
+            self._trigger_thread.join()
+
+        del self._trigger_thread
+
+        self._stop_trigger_thread.clear()
+
+    def _tcs_trigger_thread_func(self):
+        while not self._stop_trigger_thread.is_set():
+            self._start_trigger.wait()
+            self._start_trigger.clear()
+
+            if self._stop_trigger_thread.is_set():
+                break
+
+            self._tcs_trigger()
+
+    def _tcs_start_acquisition_thread(self):
+        self._acquisition_thread = Thread(
+            target=self._tcs_acquisition_thread_func, name="TCS Acquisition Thread", daemon=True
+        )
+        self._acquisition_thread.start()
 
     def _tcs_stop_acquisition_thread(self):
-        """Stop the background acquisition thread."""
-        self._stop_acquisition_event.set()
-        self._acquisition_thread.join(timeout=5)
+        self._stop_acquisition_thread.set()
 
         if self._acquisition_thread.is_alive():
-            LOGGER.warning("Streaming thread did not stop gracefully")
+            self._acquisition_thread.join()
 
         del self._acquisition_thread
 
-        self._stop_acquisition_event.clear()
+        self._stop_acquisition_thread.clear()
 
     def _tcs_acquisition_thread_func(self):
-        """
-        Background thread function for continuous data acquisition.
-
-        This function continuously reads temperature data from the serial port,
-        parses temperature values, stores them in the circular buffer, and
-        processes pattern search requests.
-        """
         try:
-            while not self._stop_acquisition_event.is_set():
+            while not self._stop_acquisition_thread.is_set():
                 line = self._serial.read_until(b"\n")
                 LOGGER.debug(f"Read line: {line}")
 
-                with self._sampling_cond:
+                with self._acquisition_cond:
                     if self._serial_search_queue:
                         request = self._serial_search_queue[0]
 
                         if request.pattern is not None:
-                            if match := search(request.pattern, line):
+                            if match := request.pattern.search(line):
                                 request.result = (monotonic_ns(), match)
                                 request.event.set()
                                 self._serial_search_queue.popleft()
 
-                if match := search(self._temperature_line_pattern, line):
-                    idx = self._tcs_buffer_idx % self.buffer_size
-                    timestamp = monotonic_ns()
-                    values = tuple(map(float, match.groups()))
-                    self._tcs_buffer[idx] = (timestamp, *values)
+                if self.acquisition_type == AcquisitionType.CONTINUOUS or (
+                    self.acquisition_type == AcquisitionType.FINITE and self.stimulus_running
+                ):
+                    if match := self._temperature_line_pattern.search(line):
+                        with self._acquisition_cond:
+                            idx = self._tcs_buffer_idx % self.buffer_size
+                            timestamp = monotonic_ns()
+                            values = tuple(map(float, match.groups()))
+                            self._tcs_buffer[idx] = (timestamp, *values)
 
-                    with self._sampling_cond:
-                        self._tcs_buffer_idx += 1
-                        self._sampling_cond.notify_all()
+                            self._tcs_buffer_idx += 1
+                            self._acquisition_cond.notify_all()
 
         except Exception as e:
             LOGGER.exception(f"Read loop failed: {e}")
-            self._stop_acquisition_event.set()
+            self._stop_acquisition_thread.set()
 
     def __enter__(self):
-        """Context manager entry: open the connection."""
         self.open()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit: close the connection."""
         self.close()

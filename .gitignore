@@ -38,3 +38,5 @@ docs/source/_static/switcher.json
 *.h5
 *.ipynb
 *.csv
+
+.exclude

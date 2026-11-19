@@ -1,8 +1,8 @@
 # ruff: noqa TID252
 from .basler import BaslerCamera
-from .thermal_camera import ThermalCamera
+from .flir import Lepton
 from .hamamatzu import DCAM, DCAMPROP
 from .generic_usb_camera import GenericUSBCamera
 from .teledyne import GenieCamera
 
-__all__ = ["BaslerCamera", "GenieCamera", "ThermalCamera", "DCAM", "DCAMPROP", "GenericUSBCamera"]
+__all__ = ["BaslerCamera", "Lepton", "DCAM", "DCAMPROP", "GenericUSBCamera","GenieCamera",]

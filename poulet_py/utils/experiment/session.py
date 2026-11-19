@@ -1,21 +1,9 @@
-"""
-Stimulator management classes for defining and running experimental protocols.
-
-Classes
--------
-StimulatorTrial
-    Container for a single trial.
-StimulatorBlock
-    Container for a block of trials with repetition and ordering controls.
-StimulatorRuntime
-    Main experiment orchestrator managing blocks, sources, sinks, and execution.
-"""
-
 try:
     from collections.abc import Sequence
     from secrets import choice
     from threading import Barrier, Event
     from time import time_ns
+    from types import TracebackType
     from typing import Literal, Self
 
     from prompt_toolkit import HTML
@@ -25,16 +13,8 @@ try:
     from prompt_toolkit.shortcuts.progress_bar import ProgressBar
     from pydantic import BaseModel, Field, PrivateAttr, model_validator
 
-    from poulet_py import (
-        LOGGER,
-        BaseSink,
-        BaseSource,
-        BaseStimulus,
-        BaseTrigger,
-        EventBus,
-        precise_sleep,
-        repeat,
-    )
+    from poulet_py import LOGGER, BaseSink, BaseSource, EventBus, precise_sleep, repeat
+    from poulet_py.utils.stimulator import BaseMonitor, Block, MonitorCommands, Trial
 
 except ImportError as e:
     raise ImportError("""
@@ -45,66 +25,7 @@ Missing 'stimulator' module. Install options:
 """) from e
 
 
-class StimulatorTrial(BaseModel):
-    """
-    Represents a single trial within an experiment block.
-
-    A trial consists of one or more stimuli that are presented simultaneously
-    during the trial execution.
-    """
-
-    name: str | None = Field(default=None, description="Name of the trial")
-    stimuli: BaseStimulus | Sequence[BaseStimulus] = Field(..., description="Stimuli for the trial")
-    isi: int | Sequence[int] = Field(default=0, description="Inter-stimulus interval")
-
-    @model_validator(mode="after")
-    def validate_stimuli(self):
-        if not isinstance(self.stimuli, Sequence):
-            self.stimuli = [self.stimuli]
-
-        if isinstance(self.isi, range):
-            self.isi = list(self.isi)
-        return self
-
-
-class StimulatorBlock(BaseModel):
-    """
-    Represents a block of trials within an experiment.
-
-    A block contains one or more trials that are repeated and ordered according
-    to specified parameters. ISI and trigger behavior can be configured per block.
-
-    Notes
-    -----
-    ISI values provided as a range will be converted to a list for random selection.
-    """
-
-    name: str | None = Field(default=None, description="Name of the block")
-    trials: Sequence[StimulatorTrial] = Field(..., description="Trials in the block")
-
-    trial_repetitions: int = Field(
-        default=1, ge=1, description="Number of times to repeat each trial"
-    )
-    trial_order: Literal["random", "sequential"] = Field(
-        default="random", description="Order of trials"
-    )
-
-    trigger: BaseTrigger | None = Field(default=None, description="Trigger for the trial")
-    trigger_policy: Literal["abort", "skip"] = Field(
-        default="abort",
-        description="Policy for handling triggers, abort the current trial or skip it",
-    )
-
-    isi: int | Sequence[int] = Field(default=0, description="Inter-stimulus interval")
-
-    @model_validator(mode="after")
-    def validate_isi(self) -> Self:
-        if isinstance(self.isi, range):
-            self.isi = list(self.isi)
-        return self
-
-
-class StimulatorRuntime(BaseModel):
+class Session(BaseModel):
     """
     Main experiment orchestrator managing execution, data sources, and sinks.
 
@@ -114,15 +35,13 @@ class StimulatorRuntime(BaseModel):
 
     Examples
     --------
-    >>> stm = StimulatorRuntime(
-    ...     name="My Stimulator", blocks=[my_block], sources=[my_source], sinks=[my_sink]
-    ... )
+    >>> stm = Runtime(name="My Stimulator", blocks=[my_block], sources=[my_source], sinks=[my_sink])
     >>> with stm:
     ...     stm.run()
     """
 
     name: str = Field(..., description="Name of the stimulator")
-    blocks: Sequence[StimulatorBlock] = Field(..., description="Blocks in the stimulator")
+    blocks: Sequence[Block] = Field(..., description="Blocks in the stimulator")
     block_repetitions: int = Field(
         default=1, ge=1, description="Number of times to repeat each block"
     )
@@ -133,6 +52,7 @@ class StimulatorRuntime(BaseModel):
 
     sources: Sequence[BaseSource] = Field(..., description="Sources for the stimulator")
     sinks: Sequence[BaseSink] = Field(..., description="Sinks for the stimulator")
+    monitor: BaseMonitor | None = Field(default=None)
 
     _bus: EventBus = PrivateAttr(default_factory=EventBus)
     _external_bus: bool = PrivateAttr(default=False)
@@ -142,6 +62,7 @@ class StimulatorRuntime(BaseModel):
     _paused: Event = PrivateAttr(default_factory=Event)
     _aborted: Event = PrivateAttr(default_factory=Event)
     _stopped: Event = PrivateAttr(default_factory=Event)
+    _barrier: Barrier | None = PrivateAttr(default=None)
 
     _key_bindings: KeyBindings = PrivateAttr()
     _start_time_of_experiment: int = PrivateAttr(default_factory=time_ns)
@@ -153,7 +74,7 @@ class StimulatorRuntime(BaseModel):
         return self
 
     @staticmethod
-    def get_isi(isi):
+    def get_isi(isi: Sequence[int] | int) -> int:
         """
         Get inter-stimulus interval value.
 
@@ -179,14 +100,14 @@ class StimulatorRuntime(BaseModel):
         return self._bus
 
     @bus.setter
-    def bus(self, value: EventBus):
+    def bus(self, value: EventBus) -> None:
         if self._is_open:
             raise RuntimeError("Cannot change bus while stimulator is open")
 
         self._bus = value
         self._external_bus = True
 
-    def open(self):
+    def open(self) -> None:
         """
         Open all connections and prepare stimulator for execution.
 
@@ -205,19 +126,26 @@ class StimulatorRuntime(BaseModel):
         if not self._external_bus:
             self.bus.open()
 
+        self._barrier = Barrier(len(self.sources))
+
         for source in self.sources:
             source.bus = self.bus
             source.open()
+            source.barrier = self._barrier
 
         for sink in self.sinks:
             sink.bus = self.bus
             sink.open()
 
+        if self.monitor:
+            self.monitor.bus = self.bus
+            self.monitor.open()
+
         self._key_bindings = self._create_key_bindings()
 
         self._is_open = True
 
-    def close(self):
+    def close(self) -> None:
         """
         Close all connections and clean up stimulator resources.
 
@@ -236,16 +164,20 @@ class StimulatorRuntime(BaseModel):
         self._aborted.clear()
         self._stopped.clear()
 
+        if self.monitor:
+            self.monitor.close()
+
         for sink in self.sinks:
             sink.close()
 
         for source in self.sources:
+            source.barrier = None
             source.close()
 
         if not self._external_bus:
             self.bus.close()
 
-    def run(self):
+    def run(self) -> None:
         """
         Execute the stimulator protocol.
 
@@ -269,10 +201,6 @@ class StimulatorRuntime(BaseModel):
 
         blocks = self._expand_trials()
 
-        barrier = Barrier(len(self.sources))
-        for s in self.sources:
-            s.barrier = barrier
-
         with ProgressBar(
             key_bindings=self._key_bindings, bottom_toolbar=self._generate_bottom_toolbar
         ) as pb:
@@ -283,45 +211,53 @@ class StimulatorRuntime(BaseModel):
                     for trial_idx, trial in pb(
                         enumerate(trials), total=len(trials), label="Trials"
                     ):
+                        current_trial = trial
+
                         if self._aborted.is_set():
                             break
+
+                        if self.monitor:
+                            current_trial = self.monitor.check_trial(current_trial)
+
+                        if not current_trial:
+                            continue
 
                         if block.trigger and not block.trigger.wait():
                             if block.trigger_policy == "skip":
                                 LOGGER.warning(
-                                    f"Trigger failed for trial {trial.name} in block {block.name}, skipping trial."
+                                    f"Trigger failed for trial {current_trial.name} in block {block.name}, skipping trial."
                                 )
                                 continue
 
                             raise RuntimeError(
-                                f"Trigger failed for trial {trial.name} in block {block.name}"
+                                f"Trigger failed for trial {current_trial.name} in block {block.name}"
                             )
 
-                        isi = trial.isi
-                        trial.isi = self.get_isi(trial.isi or block.isi or self.isi)
+                        current_trial.isi = self.get_isi(current_trial.isi or block.isi or self.isi)
 
-                        trial_info = trial.model_dump(exclude_unset=True, exclude_none=True)
+                        trial_info = current_trial.model_dump(exclude_unset=True, exclude_none=True)
                         LOGGER.info("Trial %d: %s", trial_idx, trial_info)
 
                         for s in self.sources:
-                            s.fire(trial.stimuli)
+                            if s.has_crashed:
+                                # TODO gracefully close the rest
+                                raise RuntimeError(
+                                    f"Source {s.name} has crashed, Stopping Experiment"
+                                )
+                            s.fire(current_trial.stimuli)
 
                         for s in self.sources:
                             s.wait()
 
-                        precise_sleep(trial.isi / 1000.0)
-                        trial.isi = isi
-
+                        precise_sleep(current_trial.isi / 1000.0)
+                        self._monitor_control()
                         self._wait_paused()
 
-        for s in self.sources:
-            s.barrier = None
-
-    def _ensure_open(self):
+    def _ensure_open(self) -> None:
         if not self._is_open:
             raise RuntimeError(f"{type(self).__name__} need to be opened first")
 
-    def _generate_bottom_toolbar(self):
+    def _generate_bottom_toolbar(self) -> HTML:
         shortcuts = "<b>[ctrl-x]</b> Abort"
         status = "Idle"
 
@@ -342,12 +278,12 @@ class StimulatorRuntime(BaseModel):
         kb = KeyBindings()
 
         @kb.add(Keys.Enter, eager=True)
-        def _(event):
+        def _(event) -> None:
             if not self._started.is_set():
                 self._started.set()
 
         @kb.add(Keys.Escape, eager=True)
-        def _(event):
+        def _(event) -> None:
             if self._started.is_set():
                 if self._paused.is_set():
                     self._paused.clear()
@@ -355,20 +291,20 @@ class StimulatorRuntime(BaseModel):
                     self._paused.set()
 
         @kb.add(Keys.ControlX, eager=True)
-        def _(event):
+        def _(event) -> None:
             self._aborted.set()
 
         return kb
 
-    def _wait_not_started(self):
+    def _wait_not_started(self) -> None:
         while not self._started.is_set() and not self._aborted.is_set():
             self._started.wait(0.1)
 
-    def _wait_paused(self):
+    def _wait_paused(self) -> None:
         while self._paused.is_set() and not self._aborted.is_set():
             self._paused.wait(0.1)
 
-    def _expand_trials(self):
+    def _expand_trials(self) -> Sequence[tuple[Block, Sequence[Trial]]]:
         blocks = repeat(self.blocks, self.block_repetitions, mode=self.block_order)
 
         return [
@@ -376,9 +312,27 @@ class StimulatorRuntime(BaseModel):
             for block in blocks
         ]
 
-    def __enter__(self):
+    def _monitor_control(self) -> None:
+        if not self.monitor:
+            return
+
+        if self.monitor.command == MonitorCommands.START:
+            self._started.set()
+        if self.monitor.command == MonitorCommands.STOP:
+            self._aborted.set()
+        if self.monitor.command == MonitorCommands.PAUSE:
+            self._paused.set()
+        if self.monitor.command == MonitorCommands.RESUME:
+            self._paused.clear()
+
+    def __enter__(self) -> Self:
         self.open()
         return self
 
-    def __exit__(self, exc_type, exc, tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         self.close()

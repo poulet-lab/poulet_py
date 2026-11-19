@@ -24,7 +24,7 @@ from .hardware import (
     NIDigitalOutputChannel,
     NIDigitalOutputTask,
     TCSCommand,
-    ThermalCamera,
+    Lepton,
     Soho,
     DCAM,
     DCAMPROP,
@@ -48,6 +48,9 @@ from .io import (
     StimuliMetadataSource,
     DCAMSource,
     HardwareSource,
+    LeptonSource,
+    DRV2605Source,
+    BaslerSource,
 )
 from .stimulus import (
     BaseStimulus,
@@ -71,9 +74,9 @@ from .stimulus import (
     NITriangleAnalogStimulus,
     NIWhiteNoiseAnalogStimulus,
     TCSStimulus,
+    DRV2605Stimulus,
 )
-from .tools import go_to, json_serializer, repeat, sanitize_path, precise_sleep
-from .utils import StimulatorBlock, StimulatorRuntime, StimulatorTrial, Oscilloscope
+from .tools import go_to, json_serializer, repeat, sanitize_path, precise_sleep, dumps
 
 __all__ = [
     "LOGGER",
@@ -89,17 +92,17 @@ __all__ = [
     "GenieCamera",
     "BaseTrigger",
     "BaslerCamera",
+    "DRV2605Source",
+    "dumps",
     "Max31856Source",
     "INA228Source",
     "CounterSource",
     "OpenEphysSource",
     "EmptyStimulus",
+    "BaslerSource",
     "EventBus",
     "ThermocoupleType",
     "EventHandler",
-    "StimulatorBlock",
-    "StimulatorRuntime",
-    "StimulatorTrial",
     "HardwareSource",
     "GPIOTrigger",
     "precise_sleep",
@@ -139,14 +142,14 @@ __all__ = [
     "NISteppedAnalogStimulus",
     "NITriangleAnalogStimulus",
     "NIWhiteNoiseAnalogStimulus",
-    "Oscilloscope",
     "Seq",
     "Settings",
     "SinkEvent",
     "TCSCommand",
     "TCSSource",
     "TCSStimulus",
-    "ThermalCamera",
+    "Lepton",
+    "DRV2605Stimulus",
     "go_to",
     "json_serializer",
     "repeat",
@@ -156,4 +159,5 @@ __all__ = [
     "DCAM",
     "DCAMPROP",
     "DCAMSource",
+    "LeptonSource",
 ]
