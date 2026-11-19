@@ -1,7 +1,7 @@
 try:
     from collections.abc import Sequence
     from random import shuffle
-    from typing import Any, Literal
+    from typing import Literal, TypeVar
 except ImportError as e:
     raise ImportError("""
 Missing 'tools' module. Install options:
@@ -9,10 +9,12 @@ Missing 'tools' module. Install options:
 - Full:         pip install poulet_py[all]
 """) from e
 
+T = TypeVar("T")
+
 
 def repeat(
-    l: Sequence[Any], n: int, *, mode: Literal["random", "sequential"] = "random"
-) -> Sequence[Any]:
+    l: Sequence[T], n: int, *, mode: Literal["random", "sequential"] = "random"
+) -> Sequence[T]:
     """
     Generate a list of trials with specified stimuli distribution.
 
