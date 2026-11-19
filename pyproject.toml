@@ -25,7 +25,7 @@ classifiers = [
 
 dependencies = [
   "lazy_loader<=0.6",
-  "pydantic<=2.14.1",
+  "pydantic<=2.14.3",
   "pydantic-settings<=2.16.0",
   "python-dotenv<=1.2.4",
   "rich<=15.0.0",
@@ -70,7 +70,7 @@ seq = [
 ]
 # Hardware
 camera = [
-  "pypylon<=26.8",
+  "pypylon<=26.10",
   "opencv-python<=5.0.0.93",
   "numpy<=2.5.4",
   "scipy<=1.18.1",
@@ -81,7 +81,7 @@ camera = [
   "pythonnet<=3.1.0; platform_system == 'Windows'",
 ]
 daq = ["poulet_py[nidaq]"]
-nidaq = ["nidaqmx<=1.6.0"]
+nidaq = ["nidaqmx<=1.7.0"]
 arduino = ["pyserial<=3.5"]
 julabo = ["pyserial<=3.5"]
 qst = ["pandas<=3.0.6", "pyserial<=3.5"]
@@ -132,10 +132,9 @@ dependencies = ["poulet_py[all,docs]"]
 
 [tool.hatch.envs.docs.scripts]
 api = """
-sphinx-apidoc -o docs/source/api \
 poulet_py --force --separate \
 --templatedir docs/_templates/apidoc \
---module-first -M -H "API reference"
+-M -H "API reference"
 """
 
 build = """
