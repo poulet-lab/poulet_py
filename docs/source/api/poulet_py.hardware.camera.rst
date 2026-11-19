@@ -6,6 +6,14 @@ poulet\_py.hardware.camera package
    :show-inheritance:
    :undoc-members:
 
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 4
+
+   poulet_py.hardware.camera.hamamatzu
+
 Submodules
 ----------
 

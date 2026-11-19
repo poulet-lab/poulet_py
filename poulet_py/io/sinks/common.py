@@ -4,7 +4,8 @@ try:
     from queue import Full, Queue
     from threading import Thread
     from time import monotonic_ns, time_ns
-    from typing import Any, Literal
+    from types import TracebackType
+    from typing import Any, Literal, Self
 
     from numpy import ndarray
     from pydantic import Field, PrivateAttr
@@ -22,7 +23,9 @@ Missing 'sinks' module. Install options:
 class BaseSink(EventHandler):
     name: str | None = Field(default=None, description="Name of the sink")
     queue_size: int = Field(default=1000, description="Size of the internal queue")
-    convert_timestamp: Literal["datetime", "index"] | Callable | None = Field(default=None)
+    convert_timestamp: Literal["datetime", "index"] | Callable[[ndarray], ndarray] | None = Field(
+        default=None
+    )
     meta: dict[str, Any] = Field(
         default_factory=dict, description="Additional metadata for the data packet"
     )
@@ -33,18 +36,18 @@ class BaseSink(EventHandler):
     _bus: EventBus = PrivateAttr(default_factory=EventBus)
     _external_bus: bool = PrivateAttr(default=False)
 
-    _queue: Queue = PrivateAttr()
-    _thread: Thread = PrivateAttr()
+    _sink_queue: Queue[BaseEvent | None] = PrivateAttr()
+    _sink_thread: Thread = PrivateAttr()
     _is_open: bool = PrivateAttr(default=False)
 
     @abstractmethod
-    def _open(self): ...
+    def _open(self) -> None: ...
 
     @abstractmethod
-    def _close(self): ...
+    def _close(self) -> None: ...
 
     @abstractmethod
-    def _on_event(self, event: BaseEvent): ...
+    def _on_event(self, event: BaseEvent) -> None: ...
 
     def _keyboard_controls(self) -> dict[str, tuple[str, Callable]]:
         """
@@ -54,11 +57,11 @@ class BaseSink(EventHandler):
         """
         ...
 
-    def on_event(self, event: BaseEvent):
+    def on_event(self, event: BaseEvent) -> None:
         self._ensure_open()
 
         try:
-            self._queue.put_nowait(event)
+            self._sink_queue.put_nowait(event)
         except Full:
             LOGGER.warning("Sink queue full — dropping packet")
 
@@ -67,14 +70,14 @@ class BaseSink(EventHandler):
         return self._bus
 
     @bus.setter
-    def bus(self, value: EventBus):
+    def bus(self, value: EventBus) -> None:
         if self._is_open:
             raise RuntimeError(f"Cannot change bus while {self.name} is open")
 
         self._bus = value
         self._external_bus = True
 
-    def open(self):
+    def open(self) -> None:
         if self._is_open:
             return
 
@@ -83,21 +86,23 @@ class BaseSink(EventHandler):
 
         self.bus.subscribe(self)
 
-        self._queue = Queue(maxsize=self.queue_size)
+        self._sink_queue = Queue(maxsize=self.queue_size)
 
         self._open()
 
-        self._thread = Thread(target=self._run, name=f"{type(self).__name__}Thread", daemon=True)
-        self._thread.start()
+        self._sink_thread = Thread(
+            target=self._run, name=f"{type(self).__name__}Thread", daemon=True
+        )
+        self._sink_thread.start()
 
         self._is_open = True
 
-    def close(self):
+    def close(self) -> None:
         if not self._is_open:
             return
 
-        self._queue.put(None)
-        self._thread.join()
+        self._sink_queue.put(None)
+        self._sink_thread.join()
         self._close()
 
         if not self._external_bus:
@@ -105,12 +110,12 @@ class BaseSink(EventHandler):
 
         self._is_open = False
 
-    def _run(self):
+    def _run(self) -> None:
         while True:
-            event: SinkEvent | None = self._queue.get()
+            event: BaseEvent | None = self._sink_queue.get()
 
             if event is None:
-                self._queue.task_done()
+                self._sink_queue.task_done()
                 break
 
             if not isinstance(event, SinkEvent):
@@ -122,9 +127,9 @@ class BaseSink(EventHandler):
             except Exception as e:
                 LOGGER.exception("Error while writing packet: %s", e)
             finally:
-                self._queue.task_done()
+                self._sink_queue.task_done()
 
-    def _ensure_open(self):
+    def _ensure_open(self) -> None:
         if not self._is_open:
             raise RuntimeError(f"{type(self)} need to be opened first")
 
@@ -137,13 +142,18 @@ class BaseSink(EventHandler):
             elif self.convert_timestamp == "index":
                 event.payload["timestamp"][:] = event.payload["timestamp"][:] - self._mono_ns
             elif isinstance(self.convert_timestamp, Callable):
-                self.convert_timestamp(event.payload["timestamp"])
+                event.payload["timestamp"][:] = self.convert_timestamp(event.payload["timestamp"])
 
         return event
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         self.open()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         self.close()
