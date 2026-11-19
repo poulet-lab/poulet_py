@@ -23,7 +23,7 @@ from .hardware import (
     NIDigitalOutputChannel,
     NIDigitalOutputTask,
     TCSCommand,
-    ThermalCamera,
+    Lepton,
     Soho,
     DCAM,
     DCAMPROP,
@@ -46,6 +46,7 @@ from .io import (
     ThermocoupleType,
     StimuliMetadataSource,
     DCAMSource,
+    LeptonSource,
     DRV2605Source,
     BaslerSource,
 )
@@ -147,6 +148,7 @@ __all__ = [
     "TCSCommand",
     "TCSSource",
     "TCSStimulus",
+    "Lepton",
     "DRV2605Stimulus",
     "ThermalCamera",
     "go_to",
@@ -158,4 +160,5 @@ __all__ = [
     "DCAM",
     "DCAMPROP",
     "DCAMSource",
+    "LeptonSource",
 ]

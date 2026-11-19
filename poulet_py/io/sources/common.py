@@ -143,7 +143,6 @@ class BaseSource(BaseModel, ABC):
 
         if not self._external_bus:
             self.bus.close()
-
         self._is_open = False
 
     def fire(self, stimuli: tuple[BaseStimulus, ...]) -> bool:

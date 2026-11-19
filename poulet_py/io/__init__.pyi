@@ -14,6 +14,7 @@ from .sources import (
     INA228Source,
     BaslerSource,
     DCAMSource,
+    LeptonSource,
     DRV2605Source,
 )
 
@@ -36,6 +37,7 @@ __all__ = [
     "TCSSource",
     "OpenEphysSource",
     "DCAMSource",
+    "LeptonSource",
     "DRV2605Source",
     "BaslerSource",
 ]
