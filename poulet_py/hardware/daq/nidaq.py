@@ -28,12 +28,11 @@ try:
     from typing import Self
 
     from nidaqmx import Task
-    from nidaqmx.constants import (
-        AcquisitionType as NIAcquisitionType,
-    )
+    from nidaqmx.constants import AcquisitionType as NIAcquisitionType
     from nidaqmx.constants import (
         Edge,
         LineGrouping,
+        OverwriteMode,
         TaskMode,
         TerminalConfiguration,
     )
@@ -156,16 +155,7 @@ class NIBaseTask(BaseModel, ABC):
     _clock: NIClockHandle = PrivateAttr()
     _task: Task = PrivateAttr(default_factory=Task)
     _is_open: bool = PrivateAttr(default=False)
-
-    @model_validator(mode="after")
-    def validate_task(self) -> Self:
-        if self._requires_clock and not self.clock:
-            raise RuntimeError(f"{type(self)} requires a clock")
-
-        if self.clock:
-            self._clock = self.clock
-
-        return self
+    _has_started: bool = PrivateAttr(default=False)
 
     @property
     def requires_clock(self) -> bool:
@@ -180,6 +170,10 @@ class NIBaseTask(BaseModel, ABC):
         return self._is_open
 
     @property
+    def has_started(self) -> bool:
+        return self._has_started
+
+    @property
     def task(self) -> Task | None:
         return self._task
 
@@ -189,16 +183,15 @@ class NIBaseTask(BaseModel, ABC):
     def open(self) -> None:
         """
         Open the task with the given clock configuration.
-
-        Parameters
-        ----------
-        clock : NIClockHandle | None, optional
-            Clock configuration for task synchronization. Required for tasks
-            that require a clock.
-
         """
         if self._is_open:
             return
+
+        if self._requires_clock and not self.clock:
+            raise RuntimeError(f"{type(self).__name__} requires a clock")
+
+        if self.clock:
+            self._clock = self.clock
 
         self._open()
         self._is_open = True
@@ -221,14 +214,16 @@ class NIBaseTask(BaseModel, ABC):
         self._ensure_open()
         self._task.control(TaskMode.TASK_VERIFY)
         self._task.start()
+        self._has_started = True
 
     def stop(self) -> None:
         self._ensure_open()
         self._task.stop()
+        self._has_started = False
 
     def _ensure_open(self) -> None:
         if not self._is_open:
-            raise RuntimeError("{type(self).__name__} needs to be opened first")
+            raise RuntimeError(f"{type(self).__name__} needs to be opened first")
 
     def __enter__(self):
         self.open()
@@ -259,8 +254,12 @@ class NIClockTask(NIBaseTask):
 
     _requires_clock: bool = PrivateAttr(default=False)
 
-    @model_validator(mode="after")
-    def validate_fields(self) -> Self:
+    def _open(self) -> None:
+        """
+        open the clock task.
+
+        Creates a counter output channel configured as a pulse train.
+        """
         if not self.clock:
             self.clock = NIClockHandle(
                 terminal=f"/{self.device}/Ctr{self.line}InternalOutput",
@@ -270,14 +269,6 @@ class NIClockTask(NIBaseTask):
             )
             self._clock = self.clock
 
-        return self
-
-    def _open(self) -> None:
-        """
-        open the clock task.
-
-        Creates a counter output channel configured as a pulse train.
-        """
         self._task.co_channels.add_co_pulse_chan_freq(
             f"{self.device}/ctr{self.line}", freq=self.rate
         )
@@ -328,6 +319,7 @@ class NIAnalogInputTask(NIBaseTask):
             sample_mode=self._clock.to_ni_acquisition_type(),
             samps_per_chan=self._clock.samps_per_chan,
         )
+        self._task.in_stream.overwrite = OverwriteMode.OVERWRITE_UNREAD_SAMPLES
 
         self._ai_buffer = zeros((len(self.channels), self._clock.samps_per_chan), dtype="float64")
         self._buffer = zeros(
@@ -336,34 +328,36 @@ class NIAnalogInputTask(NIBaseTask):
         )
         self._reader = AnalogMultiChannelReader(self._task.in_stream)
 
-    def read(self, samples: int = -1, timeout: float = 10.0) -> ndarray:
+    def read(self, samples: int = -1, timeout: float = 0.0) -> ndarray | None:
         """
-        Read analog input data.
+        Read analog input samples as a timestamped structured array.
 
         Parameters
         ----------
-        data : ndarray
-            Pre-allocated numpy array to store the read data.
-            Shape should be (num_channels, num_samples).
         samples : int, optional
             Number of samples to read per channel. Use -1 to read all available samples.
-            Defaults to -1.
         timeout : float, optional
-            Timeout in seconds to wait for data. Defaults to 10.0.
-
-        Raises
-        ------
-        RuntimeError
-            If the task has not been opened.
+            Timeout in seconds to wait for data. Use -1 to wait indefinitely.
         """
         self._ensure_open()
-        self._ensure_buffer(samples)
-        n = self._reader.read_many_sample(self._ai_buffer, samples, timeout)
+
+        if not self.has_started:
+            return None
+
+        n = self._reader._in_stream.avail_samp_per_chan
+
+        if n == 0:
+            return None
+
+        n = self._reader.read_many_sample(
+            self._ai_buffer,
+            number_of_samples_per_channel=samples,
+            timeout=timeout,
+        )
 
         if n > 0:
-            data = self._ai_buffer[:, :n]
             for idx, col in enumerate(self._buffer.dtype.names[1:]):
-                self._buffer[col][:n] = data[idx]
+                self._buffer[col][:n] = self._ai_buffer[idx, :n]
 
             t_read = monotonic_ns()
             dt = uint64(1e9 / self._clock.rate)
@@ -373,20 +367,9 @@ class NIAnalogInputTask(NIBaseTask):
             timestamp[:] = t0
             timestamp += dt * arange(n, dtype="uint64")
 
-        return self._buffer[:n].copy()
+            return self._buffer[:n]
 
-    def _ensure_buffer(self, samples: int):
-        capacity = self._ai_buffer.shape[1]
-
-        if samples > capacity:
-            new_capacity = max(samples, capacity * 2)
-
-            self._ai_buffer = zeros((len(self.channels), new_capacity), dtype="float64")
-
-            self._buffer = zeros(
-                new_capacity,
-                dtype=[("timestamp", "uint64"), *((ch.name, "float64") for ch in self.channels)],
-            )
+        return None
 
 
 class NIAnalogOutputTask(NIBaseTask):
@@ -479,6 +462,7 @@ class NIDigitalInputTask(NIBaseTask):
             sample_mode=self._clock.to_ni_acquisition_type(),
             samps_per_chan=self._clock.samps_per_chan,
         )
+        self._task.in_stream.overwrite = OverwriteMode.OVERWRITE_UNREAD_SAMPLES
 
         self._di_buffer = zeros((len(self.channels), self._clock.samps_per_chan), dtype="uint32")
         self._buffer = zeros(
@@ -488,35 +472,32 @@ class NIDigitalInputTask(NIBaseTask):
 
         self._reader = DigitalMultiChannelReader(self._task.in_stream)
 
-    def read(self, samples: int = -1, timeout: float = 10.0) -> ndarray:
+    def read(self, samples: int = -1, timeout: float = 0) -> ndarray:
         """
         Read digital input data.
 
         Parameters
         ----------
-        data : ndarray
-            Pre-allocated numpy array to store the read data.
-            Shape depends on line_grouping configuration.
         samples : int, optional
             Number of samples to read per channel. Use -1 to read all available samples.
-            Defaults to -1.
         timeout : float, optional
-            Timeout in seconds to wait for data. Defaults to 10.0.
-
-        Raises
-        ------
-        RuntimeError
-            If the task has not been opened.
+            Timeout in seconds to wait for data. Use -1 to wait indefinitely.
         """
         self._ensure_open()
-        self._ensure_buffer(samples)
+
+        if not self.has_started:
+            return None
+
+        n = self._reader._in_stream.avail_samp_per_chan
+
+        if n == 0:
+            return None
 
         n = self._reader.read_many_sample_port_uint32(self._di_buffer, samples, timeout)
 
         if n > 0:
-            data = self._di_buffer[:, :n]
             for idx, col in enumerate(self._buffer.dtype.names[1:]):
-                self._buffer[col][:n] = data[idx]
+                self._buffer[col][:n] = self._di_buffer[idx, :n]
 
             t_read = monotonic_ns()
             dt = uint64(1e9 / self._clock.rate)
@@ -526,20 +507,9 @@ class NIDigitalInputTask(NIBaseTask):
             timestamp[:] = t0
             timestamp += dt * arange(n, dtype="uint64")
 
-        return self._buffer[:n].copy()
+            return self._buffer[:n]
 
-    def _ensure_buffer(self, samples: int):
-        capacity = self._di_buffer.shape[1]
-
-        if samples > capacity:
-            new_capacity = max(samples, capacity * 2)
-
-            self._di_buffer = zeros((len(self.channels), new_capacity), dtype="uint32")
-
-            self._buffer = zeros(
-                new_capacity,
-                dtype=[("timestamp", "uint64"), *((ch.name, "uint32") for ch in self.channels)],
-            )
+        return None
 
 
 class NIDigitalOutputTask(NIBaseTask):
@@ -641,7 +611,7 @@ class NIDaQ(BaseModel):
                 raise ValueError("Task device mismatch")
 
             if isinstance(t, NIClockTask):
-                if self._clock_task:
+                if hasattr(self, "_clock_task"):
                     raise ValueError("Only one NIClockTask allowed")
 
                 t.acquisition_type = self.acquisition_type
@@ -658,12 +628,8 @@ class NIDaQ(BaseModel):
 
             names.append(t.name)
 
-        if not self._clock_task:
+        if not hasattr(self, "_clock_task"):
             raise RuntimeError("No NIClockTask registered")
-
-        for task in self.tasks:
-            if task != self._clock_task:
-                task.clock = self._clock_task.clock
 
         return self
 
@@ -686,6 +652,7 @@ class NIDaQ(BaseModel):
 
         for task in self.tasks:
             if task != self._clock_task:
+                task.clock = self._clock_task.clock
                 task.open()
 
         if self._read_tasks:
@@ -705,7 +672,7 @@ class NIDaQ(BaseModel):
         for task in self.tasks:
             task.close()
 
-        if self._executor:
+        if hasattr(self, "_executor"):
             self._executor.shutdown(wait=True)
             del self._executor
 
@@ -777,7 +744,9 @@ class NIDaQ(BaseModel):
 
             for future in as_completed(future_map):
                 task = future_map[future]
-                ret[task.name] = future.result()
+                result = future.result()
+                if result is not None:
+                    ret[task.name] = result
         else:
             self._clock_task._task.wait_until_done(-1)
         return ret
@@ -789,7 +758,7 @@ class NIDaQ(BaseModel):
 
     def _ensure_open(self) -> None:
         if not self._is_open:
-            raise RuntimeError("{type(self).__name__} needs to be opened first")
+            raise RuntimeError(f"{type(self).__name__} needs to be opened first")
 
     def __enter__(self):
         self.open()

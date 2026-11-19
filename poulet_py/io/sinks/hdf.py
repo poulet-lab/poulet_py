@@ -4,10 +4,9 @@ try:
 
     from h5py import Dataset, File, Group
     from numpy import ndarray
-    from orjson import OPT_SERIALIZE_DATACLASS, OPT_SERIALIZE_NUMPY, OPT_SERIALIZE_UUID, dumps
     from pydantic import Field, PrivateAttr
 
-    from poulet_py import BaseEvent, BaseSink, SinkEvent
+    from poulet_py import BaseEvent, BaseSink, SinkEvent, dumps
 
 except ImportError as e:
     raise ImportError("""
@@ -56,10 +55,7 @@ class HDFSink(BaseSink):
 
     def _write_meta(self, part: File | Group | Dataset, meta: dict[str, Any]):
         for k, v in meta.items():
-            part.attrs[k] = dumps(
-                v,
-                option=OPT_SERIALIZE_DATACLASS | OPT_SERIALIZE_NUMPY | OPT_SERIALIZE_UUID,
-            ).decode("utf-8")
+            part.attrs[k] = dumps(v)
 
     def _init_source(self, event: SinkEvent):
         name = event.name

@@ -1,5 +1,5 @@
 # ruff: noqa TID252
-from .camera import BaslerCamera, ThermalCamera, DCAM, DCAMPROP
+from .camera import BaslerCamera, Lepton, DCAM, DCAMPROP
 from .daq import (
     NIAnalogInputChannel,
     NIAnalogInputTask,
@@ -41,7 +41,7 @@ __all__ = [
     "NIDigitalOutputChannel",
     "NIDigitalOutputTask",
     "TCSCommand",
-    "ThermalCamera",
+    "Lepton",
     "Soho",
     "DCAM",
     "DCAMPROP",
