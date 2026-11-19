@@ -13,4 +13,4 @@ Submodules
    :maxdepth: 4
 
    poulet_py.utils.oscilloscope
-   poulet_py.utils.qst
+   poulet_py.utils.stimulator
