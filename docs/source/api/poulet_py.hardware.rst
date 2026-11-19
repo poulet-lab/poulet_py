@@ -13,5 +13,7 @@ Subpackages
    :maxdepth: 4
 
    poulet_py.hardware.camera
+   poulet_py.hardware.daq
+   poulet_py.hardware.sensor
    poulet_py.hardware.stimulator
    poulet_py.hardware.triggers
