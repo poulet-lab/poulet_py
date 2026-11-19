@@ -132,10 +132,9 @@ dependencies = ["poulet_py[all,docs]"]
 
 [tool.hatch.envs.docs.scripts]
 api = """
-sphinx-apidoc -o docs/source/api \
 poulet_py --force --separate \
 --templatedir docs/_templates/apidoc \
---module-first -M -H "API reference"
+-M -H "API reference"
 """
 
 build = """

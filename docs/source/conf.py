@@ -2,19 +2,16 @@ from datetime import UTC, datetime
 from json import dumps
 from os import environ
 from pathlib import Path
-from sys import setrecursionlimit
 
 from requests import get
 from tomllib import load
 
-setrecursionlimit(5000)
 
-
-def get_rtd_versions(project):
+def get_rtd_versions(project: str) -> list[dict[str, str | bool]]:
     """Fetch and format versions from Read the Docs API v3"""
-    api_url = f"https://readthedocs.org/api/v3/projects/{project}/versions/?active=true"
+    api_url = f"https://readthedocs.org/api/v3/projects/{project}/versions/"
     try:
-        response = get(api_url, timeout=15)
+        response = get(api_url, params={"active": "true"}, timeout=15)
         response.raise_for_status()
         versions = response.json()
 
@@ -47,14 +44,17 @@ versions = [
     },
 ]
 
-if environ.get("READTHEDOCS") == "True":
+if environ.get("READTHEDOCS", "").lower() == "true":
     rtd_project = environ.get("READTHEDOCS_PROJECT")
-    # Generate proper version data
-    versions = get_rtd_versions(rtd_project)
+
+    if rtd_project:
+        rtd_versions = get_rtd_versions(rtd_project)
+        if rtd_versions:
+            versions = rtd_versions
 
 static_dir = Path("_static")
 static_dir.mkdir(exist_ok=True)
-(static_dir / "switcher.json").write_text(dumps(versions))
+(static_dir / "switcher.json").write_text(dumps(versions), encoding="utf-8")
 
 project = "Poulet Py"
 copyright = f"{datetime.now(UTC).year}, Poulet Lab"
@@ -72,7 +72,10 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.autosummary",
     "sphinx_autodoc_typehints",
+    "myst_parser",
 ]
+
+source_suffix = {".rst": "restructuredtext", ".md": "markdown"}
 
 # Autodoc settings
 add_module_names = False
@@ -87,7 +90,7 @@ autodoc_default_options = {
     "noindex": False,
 }
 autosummary_generate = True
-napoleon_google_docstring = False
+napoleon_google_docstring = True
 napoleon_numpy_docstring = True
 napoleon_include_init_with_doc = True
 
@@ -105,6 +108,9 @@ html_theme_options = {
     "navbar_end": ["theme-switcher", "navbar-icon-links"],
     "navbar_persistent": ["search-button"],
     "secondary_sidebar_items": ["page-toc", "edit-this-page", "sourcelink"],
+    "navigation_depth": 2,
+    "show_nav_level": 1,
+    "collapse_navigation": True,
     "switcher": {
         "json_url": "_static/switcher.json",
         "version_match": environ.get("READTHEDOCS_VERSION", "latest"),
@@ -115,4 +121,3 @@ html_context = {"default_mode": "auto"}
 # Static Files
 html_static_path = ["_static"]
 templates_path = ["_templates"]
-html_css_files = ["_static/custom.css"]
