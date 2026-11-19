@@ -127,23 +127,19 @@ docs = [
   "pydata-sphinx-theme<=0.23.0",
   "sphinx-autodoc-typehints<=3.13.10",
   "ipython<=9.17.1",
+  "myst_parser<=5.2.0",
 ]
 
 [tool.hatch.envs.docs]
 dependencies = ["poulet_py[all,docs]"]
 
 [tool.hatch.envs.docs.scripts]
-api = """
-poulet_py --force --separate \
---templatedir docs/_templates/apidoc \
--M -H "API reference"
-"""
-
 build = """
 rm -rf docs/build && 
 hatch run docs:api && 
 sphinx-build -b html docs/source docs/build -j auto
 """
+
 serve = """
 hatch run docs:build && 
 python -m http.server --directory docs/build 8000
