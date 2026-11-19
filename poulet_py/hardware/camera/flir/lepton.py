@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from queue import Empty, Full, Queue
 from time import monotonic_ns
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
 try:
     import numpy as np
@@ -70,7 +70,7 @@ def _load_uvctypes() -> Any:
     """Load the frozen ctypes/libuvc compatibility module on demand."""
 
     try:
-        uvc = importlib.import_module("poulet_py.hardware.camera.thermal.uvctypes")
+        uvc = importlib.import_module("poulet_py.hardware.camera.flir.uvctypes")
     except Exception as e:
         raise RuntimeError("Failed to load the libuvc compatibility layer") from e
 
@@ -79,7 +79,7 @@ def _load_uvctypes() -> Any:
     return uvc
 
 
-class Lepton3_5(BaseModel):
+class Lepton(BaseModel):
     """Hardware interface for a PureThermal-attached FLIR Lepton 3.5.
 
     Frames remain raw TLinear Y16 values. With the camera's expected 0.01 K
@@ -127,7 +127,7 @@ class Lepton3_5(BaseModel):
     _frames: Queue[ThermalFrame] = PrivateAttr()
     _flux_linear_params: LeptonRadFluxLinearParams | None = PrivateAttr(default=None)
     _windows_camera: Any = PrivateAttr(default=None)
-    _frame_rate: float = PrivateAttr(default=None)
+    _frame_rate: float | None = PrivateAttr(default=None)
 
     _is_windows: bool = PrivateAttr(default=False)
     _is_open: bool = PrivateAttr(default=False)
@@ -136,7 +136,7 @@ class Lepton3_5(BaseModel):
     _width: int = PrivateAttr(default=160)
     _height: int = PrivateAttr(default=120)
 
-    _windows_sequence = PrivateAttr(default=0)
+    _windows_sequence: int = PrivateAttr(default=0)
     _LIBUVC_FRAME_FORMAT_GREY16: int = PrivateAttr(default=10)
 
     def model_post_init(self, __context: Any) -> None:
@@ -545,7 +545,7 @@ class Lepton3_5(BaseModel):
         if not self._is_streaming:
             raise RuntimeError("ThermalCamera needs to be streaming first")
 
-    def __enter__(self) -> ThermalCamera:
+    def __enter__(self) -> Self:
         self.open()
         return self
 
