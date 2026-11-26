@@ -44,9 +44,6 @@ class BaseHardware(BaseModel, ABC):
     def _close(self) -> None: ...
 
     @abstractmethod
-    def _acquisition_thread_func(self) -> None: ...
-
-    @abstractmethod
     def _start_capture(self) -> None: ...
 
     @abstractmethod
@@ -62,26 +59,28 @@ class BaseHardware(BaseModel, ABC):
     def open(self) -> None:
         if self._is_open:
             return
+        try:
+            self._open()
+            self._set_buffer()
 
-        self._open()
-        self._set_buffer()
+            if self.acquisition_type == AcquisitionType.CONTINUOUS:
+                self._start_capture()
+                self._start_acquisition_thread()
 
-        if self.acquisition_type == AcquisitionType.CONTINUOUS:
-            self._start_acquisition_thread()
-
-        self._is_open = True
+            self._is_open = True
+        except Exception as e:
+            self.close()
+            raise RuntimeError(f"{type(self).__name__} Failed to open") from e
 
     def close(self) -> None:
-        if not self._is_open:
-            return
-
         self._is_open = False
 
         if self.acquisition_type == AcquisitionType.CONTINUOUS:
             self._stop_acquisition_thread()
+            self._stop_capture()
 
-        self._release_buffer()
         self._close()
+        self._release_buffer()
 
     def read_sample(self, timeout: float | None = None) -> ndarray | None:
         self._ensure_open()
@@ -120,7 +119,10 @@ class BaseHardware(BaseModel, ABC):
             self._start_capture()
 
             if n < 0 and timeout < 0:
-                raise ValueError("For finite acquisition, either n or timeout must be specified.")
+                raise ValueError(
+                    f"{type(self).__name__} For finite acquisition, "
+                    "either n or timeout must be specified."
+                )
 
             acquired = 0
             while (
@@ -185,7 +187,8 @@ class BaseHardware(BaseModel, ABC):
         self._buffer_needle = 0
 
     def _release_buffer(self) -> None:
-        del self._buffer
+        if hasattr(self, "_buffer"):
+            del self._buffer
         self._buffer_idx = 0
 
     def _sample_to_buffer(self, sample: ndarray, timestamp: int) -> None:
@@ -212,18 +215,39 @@ class BaseHardware(BaseModel, ABC):
             )
             self._acquisition_thread.start()
         except Exception as e:
-            raise RuntimeError("Acquisition thread failed to start") from e
+            raise RuntimeError(f"{type(self).__name__} Acquisition thread failed to start") from e
 
     def _stop_acquisition_thread(self) -> None:
         self._stop_acquisition_event.set()
-        self._acquisition_thread.join(timeout=5)
 
-        if self._acquisition_thread.is_alive():
-            LOGGER.warning("Streaming thread did not stop gracefully")
+        if hasattr(self, "_acquisition_thread"):
+            self._acquisition_thread.join(timeout=5)
 
-        del self._acquisition_thread
+            if self._acquisition_thread.is_alive():
+                LOGGER.warning(f"{type(self).__name__} Streaming thread did not stop gracefully")
+
+            del self._acquisition_thread
 
         self._stop_acquisition_event.clear()
+
+    def _acquisition_thread_func(self) -> None:
+        try:
+            while not self._stop_acquisition_event.is_set():
+                start = monotonic_ns()
+                sample = self._acquire_sample()
+                end = monotonic_ns()
+
+                if sample is None:
+                    continue
+
+                self._sample_to_buffer(sample=sample, timestamp=(end + start) // 2)
+        except Exception as e:
+            LOGGER.exception(e)
+            self._close()
+            self._release_buffer()
+        finally:
+            with self._acquisition_condition:
+                self._acquisition_condition.notify_all()
 
     def __enter__(self) -> Self:
         self.open()

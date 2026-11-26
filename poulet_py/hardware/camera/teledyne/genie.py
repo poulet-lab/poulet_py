@@ -1,6 +1,6 @@
 try:
     from contextlib import suppress
-    from time import monotonic, monotonic_ns, sleep
+    from time import monotonic, sleep
     from typing import Literal
 
     from numpy import ndarray
@@ -140,7 +140,9 @@ class GenieCamera(BaseHardware):
         self._ensure_open()
 
         if self.trigger_source == TriggerSource.INTERNAL:
-            raise RuntimeError("Software trigger needs a trigger_source other than INTERNAL")
+            raise RuntimeError(
+                f"{type(self).__name__} Software trigger needs a trigger_source other than INTERNAL"
+            )
 
         self._write(Reg.SOFTWARE_TRIGGER, 1)
 
@@ -150,15 +152,10 @@ class GenieCamera(BaseHardware):
         ]
 
     def _open(self) -> None:
-        try:
-            self._discover_camera()
-            self._connect()
-            self._configure()
-            self._set_stream_channel()
-
-        except Exception as e:
-            self._close()
-            raise RuntimeError("Failed to open Genie") from e
+        self._discover_camera()
+        self._connect()
+        self._configure()
+        self._set_stream_channel()
 
     def _close(self) -> None:
         if hasattr(self, "_client"):
@@ -178,51 +175,6 @@ class GenieCamera(BaseHardware):
                 self._client.disconnect()
             del self._client
 
-    def _start_capture(self) -> None:
-        if self._capturing:
-            return
-
-        if self.acquisition_type == AcquisitionType.FINITE:
-            self._receiver.stop()
-            self._receiver.flush()
-            self._receiver.start()
-
-        self._write(Reg.ACQUISITION_START, 1)
-        self._capturing = True
-
-    def _stop_capture(self) -> None:
-        if not self._capturing:
-            return
-
-        self._capturing = False
-        self._write(Reg.ACQUISITION_STOP, 1)
-
-    def _acquire_sample(self) -> ndarray | None:
-        if self.trigger_source == TriggerSource.SOFTWARE:
-            self._write(Reg.SOFTWARE_TRIGGER, 1)
-
-        return self._receiver.get_frame(timeout=self.timeout / 1000)
-
-    def _acquisition_thread_func(self) -> None:
-        try:
-            self._start_capture()
-
-            while not self._stop_acquisition_event.is_set():
-                start = monotonic_ns()
-                sample = self._acquire_sample()
-                end = monotonic_ns()
-
-                if sample is None:
-                    continue
-
-                self._sample_to_buffer(sample=sample, timestamp=(end + start) // 2)
-        except Exception as e:
-            LOGGER.exception(e)
-            self._close()
-        finally:
-            with self._acquisition_condition:
-                self._acquisition_condition.notify_all()
-
     def _read(self, addr: int) -> int:
         return self._client.read_reg(addr)
 
@@ -237,7 +189,7 @@ class GenieCamera(BaseHardware):
         end = monotonic() + timeout
         while self._read(addr) == 1:
             if monotonic() > end:
-                raise TimeoutError(f"Camera still busy: {what}")
+                raise TimeoutError(f"{type(self).__name__} Camera still busy: {what}")
             sleep(0.02)
 
     def _discover_camera(self) -> None:
@@ -296,32 +248,38 @@ class GenieCamera(BaseHardware):
         self._set_output()
 
         if not self._read(Reg.REGS_VALID):
-            LOGGER.warning("Camera reports an inconsistent register set after configuration")
+            LOGGER.warning(
+                f"{type(self).__name__} Camera reports an inconsistent register set after configuration"
+            )
 
         self._resolution = (self._read(Reg.AOI_WIDTH), self._read(Reg.AOI_HEIGHT))
 
     def _set_pixel_format(self) -> None:
         if self.pixel_type.is_bayer != self._is_color:
             raise ValueError(
-                f"Pixel type {self.pixel_type.value} does not match a "
+                f"{type(self).__name__} Pixel type {self.pixel_type.value} does not match a "
                 f"{'colour' if self._is_color else 'mono'} camera"
             )
 
         if self.pixel_type in (PixelType.MONO_10, PixelType.BAYER_GR_10) and not (
             self._read(Reg.TEN_BIT_IMPLEMENTED) & 1
         ):
-            raise ValueError("This camera/firmware does not support 10-bit output")
+            raise ValueError(
+                f"{type(self).__name__} This camera/firmware does not support 10-bit output"
+            )
 
         self._write(Reg.PIXEL_FORMAT, self.pixel_type.to_register())
 
     def _set_roi(self) -> None:
         hb, vb = self.binning
         if not (hb in (1, 2) and vb in (1, 2)):
-            raise ValueError("Binning must be 1 or 2 in each direction")
+            raise ValueError(f"{type(self).__name__} Binning must be 1 or 2 in each direction")
 
         if self._is_color:
             if self.binning != (1, 1) or self.reverse_x:
-                raise ValueError("Binning and reverse_x are only available on mono models")
+                raise ValueError(
+                    f"{type(self).__name__} Binning and reverse_x are only available on mono models"
+                )
         else:
             self._write(Reg.BINNING_H, hb)
             self._write(Reg.BINNING_V, vb)
@@ -334,9 +292,13 @@ class GenieCamera(BaseHardware):
 
         width, height = self.resolution or (max_w, max_h)
         if not (inc_x <= width <= max_w and inc_y <= height <= max_h):
-            raise ValueError(f"Resolution {(width, height)} out of limits, max {(max_w, max_h)}")
+            raise ValueError(
+                f"{type(self).__name__} Resolution {(width, height)} out of limits, max {(max_w, max_h)}"
+            )
         if width % inc_x or height % inc_y:
-            raise ValueError(f"Width must be a multiple of {inc_x} and height of {inc_y}")
+            raise ValueError(
+                f"{type(self).__name__} Width must be a multiple of {inc_x} and height of {inc_y}"
+            )
 
         if self.offset == "center":
             off_x = (max_w - width) // 2 // inc_x * inc_x
@@ -344,9 +306,11 @@ class GenieCamera(BaseHardware):
         else:
             off_x, off_y = self.offset
             if off_x % inc_x or off_y % inc_y:
-                raise ValueError(f"Offset X must be a multiple of {inc_x} and Y of {inc_y}")
+                raise ValueError(
+                    f"{type(self).__name__} Offset X must be a multiple of {inc_x} and Y of {inc_y}"
+                )
         if off_x + width > max_w or off_y + height > max_h:
-            raise ValueError("ROI plus offset exceeds the sensor area")
+            raise ValueError(f"{type(self).__name__} ROI plus offset exceeds the sensor area")
 
         self._write(Reg.AOI_LEFT, 0)
         self._write(Reg.AOI_TOP, 0)
@@ -375,12 +339,16 @@ class GenieCamera(BaseHardware):
             if self.exposure_mode == ExposureMode.TIMED:
                 self._write(Reg.EXPOSURE_ALIGNMENT, self.exposure_alignment.to_register())
         elif self.exposure_mode == ExposureMode.TRIGGER_WIDTH:
-            raise ValueError("TRIGGER_WIDTH exposure needs trigger_source LINE_1 or LINE_2")
+            raise ValueError(
+                f"{type(self).__name__} TRIGGER_WIDTH exposure needs trigger_source LINE_1 or LINE_2"
+            )
         if self.trigger_source == TriggerSource.INTERNAL:
             lo, hi = self._read(Reg.FRAME_RATE_MIN), self._read(Reg.FRAME_RATE_MAX)
             target = round(self.fps * 1000)
             if not lo <= target <= hi:
-                raise ValueError(f"fps {self.fps} out of range {lo / 1000:.3f}..{hi / 1000:.3f} Hz")
+                raise ValueError(
+                    f"{type(self).__name__} fps {self.fps} out of range {lo / 1000:.3f}..{hi / 1000:.3f} Hz"
+                )
             self._write(Reg.FRAME_RATE, target)
 
         if self.exposure_mode == ExposureMode.TIMED:
@@ -392,19 +360,23 @@ class GenieCamera(BaseHardware):
             )
             target = round(self.exposure)
             if not lo <= target <= hi:
-                raise ValueError(f"exposure {self.exposure} us out of range {lo}..{hi} us")
+                raise ValueError(
+                    f"{type(self).__name__} exposure {self.exposure} us out of range {lo}..{hi} us"
+                )
             self._write(Reg.SHUTTER, target)
 
     def _set_gain_black_level(self) -> None:
         raw_gain = round(self.gain * 10)
         if not 0 <= raw_gain <= GAIN_RAW_MAX:
-            raise ValueError("gain must be 0..12 dB")
+            raise ValueError(f"{type(self).__name__} gain must be 0..12 dB")
 
         self._write(Reg.GAIN, raw_gain)
 
         step = black_level_increment(self.pixel_type.to_register())
         if self.black_level % step or self.black_level > 1023 * step:
-            raise ValueError(f"black_level must be a multiple of {step}, max {1023 * step}")
+            raise ValueError(
+                f"{type(self).__name__} black_level must be a multiple of {step}, max {1023 * step}"
+            )
 
         self._write(Reg.BLACK_LEVEL, self.black_level // step)
 
@@ -426,7 +398,9 @@ class GenieCamera(BaseHardware):
     def _set_stream_channel(self) -> None:
         size = self.packet_size
         if size % PACKET_SIZE_STEP:
-            raise ValueError(f"packet_size must be a multiple of {PACKET_SIZE_STEP}")
+            raise ValueError(
+                f"{type(self).__name__} packet_size must be a multiple of {PACKET_SIZE_STEP}"
+            )
 
         self._receiver = GVSPReceiver(
             local_ip=str(self._device_info.local_ip),
@@ -443,3 +417,28 @@ class GenieCamera(BaseHardware):
         current = self._read(Reg.SC_PACKET_SIZE)
         self._write(Reg.SC_PACKET_SIZE, (current & 0xFFFF0000) | size)
         self._write(Reg.SC_PACKET_DELAY, self.packet_delay)
+
+    def _start_capture(self) -> None:
+        if self._capturing:
+            return
+
+        if self.acquisition_type == AcquisitionType.FINITE:
+            self._receiver.stop()
+            self._receiver.flush()
+            self._receiver.start()
+
+        self._write(Reg.ACQUISITION_START, 1)
+        self._capturing = True
+
+    def _stop_capture(self) -> None:
+        if not self._capturing:
+            return
+
+        self._capturing = False
+        self._write(Reg.ACQUISITION_STOP, 1)
+
+    def _acquire_sample(self) -> ndarray | None:
+        if self.trigger_source == TriggerSource.SOFTWARE:
+            self._write(Reg.SOFTWARE_TRIGGER, 1)
+
+        return self._receiver.get_frame(timeout=self.timeout / 1000)

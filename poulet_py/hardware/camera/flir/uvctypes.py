@@ -1,28 +1,47 @@
 try:
-    import platform
-    from ctypes import *
+    from ctypes import (
+        POINTER,
+        Structure,
+        byref,
+        c_bool,
+        c_char,
+        c_int,
+        c_long,
+        c_size_t,
+        c_ubyte,
+        c_uint,
+        c_uint8,
+        c_uint16,
+        c_uint32,
+        c_ulong,
+        c_ushort,
+        c_void_p,
+        cdll,
+        create_string_buffer,
+    )
+    from enum import IntEnum
+    from platform import system
+    from typing import Any
+
+    from poulet_py import LOGGER
 except ImportError as e:
-    msg = """
+    raise ImportError("""
 Missing 'camera' module. Install options:
 - Dedicated:    pip install poulet_py[camera]
 - Module:       pip install poulet_py[hardware]
 - Full:         pip install poulet_py[all]
-"""
-    raise ImportError(msg) from e
-
-try:
-    if platform.system() == "Darwin":
-        libuvc = cdll.LoadLibrary("libuvc.dylib")
-    elif platform.system() == "Linux":
-        libuvc = cdll.LoadLibrary("libuvc.so")
-    else:
-        libuvc = cdll.LoadLibrary("libuvc")
-except OSError:
-    print("Error: could not find libuvc!")
-    # sys.exit(1)
+""") from e
 
 
-class uvc_context(Structure):
+if system() == "Darwin":
+    libuvc = cdll.LoadLibrary("libuvc.dylib")
+elif system() == "Linux":
+    libuvc = cdll.LoadLibrary("libuvc.so")
+else:
+    libuvc = cdll.LoadLibrary("libuvc")
+
+
+class UvcContext(Structure):
     _fields_ = [
         ("usb_ctx", c_void_p),
         ("own_usb_ctx", c_uint8),
@@ -32,15 +51,15 @@ class uvc_context(Structure):
     ]
 
 
-class uvc_device(Structure):
+class UvcDevice(Structure):
     _fields_ = [
-        ("ctx", POINTER(uvc_context)),
+        ("ctx", POINTER(UvcContext)),
         ("ref", c_int),
         ("usb_dev", c_void_p),
     ]
 
 
-class uvc_stream_ctrl(Structure):
+class UVCStreamCtrl(Structure):
     _fields_ = [
         ("bmHint", c_uint16),
         ("bFormatIndex", c_uint8),
@@ -62,18 +81,18 @@ class uvc_stream_ctrl(Structure):
     ]
 
 
-class uvc_format_desc(Structure):
+class UvcFormatDesc(Structure):
     pass
 
 
-class uvc_frame_desc(Structure):
+class UvcFrameDesc(Structure):
     pass
 
 
-uvc_frame_desc._fields_ = [
-    ("parent", POINTER(uvc_format_desc)),
-    ("prev", POINTER(uvc_frame_desc)),
-    ("next", POINTER(uvc_frame_desc)),
+UvcFrameDesc._fields_ = [
+    ("parent", POINTER(UvcFormatDesc)),
+    ("prev", POINTER(UvcFrameDesc)),
+    ("next", POINTER(UvcFrameDesc)),
     # /** Type of frame, such as JPEG frame or uncompressed frme */
     (
         "bDescriptorSubtype",
@@ -108,10 +127,10 @@ uvc_frame_desc._fields_ = [
     ("intervals", POINTER(c_uint32)),
 ]
 
-uvc_format_desc._fields_ = [
+UvcFormatDesc._fields_ = [
     ("parent", c_void_p),
-    ("prev", POINTER(uvc_format_desc)),
-    ("next", POINTER(uvc_format_desc)),
+    ("prev", POINTER(UvcFormatDesc)),
+    ("next", POINTER(UvcFormatDesc)),
     # /** Type of image stream, such as JPEG or uncompressed. */
     (
         "bDescriptorSubtype",
@@ -135,15 +154,15 @@ uvc_format_desc._fields_ = [
     ("bCopyProtect", c_uint8),
     ("bVariableSize", c_uint8),
     # /** Available frame specifications for this format */
-    ("frame_descs", POINTER(uvc_frame_desc)),
+    ("frame_descs", POINTER(UvcFrameDesc)),
 ]
 
 
-class timeval(Structure):
+class TimeVal(Structure):
     _fields_ = [("tv_sec", c_long), ("tv_usec", c_long)]
 
 
-class uvc_frame(Structure):
+class UvcFrame(Structure):
     _fields_ = [  # /** Image data for this frame */
         ("data", POINTER(c_uint8)),
         # /** Size of image data buffer */
@@ -159,10 +178,10 @@ class uvc_frame(Structure):
         # /** Frame number (may skip, but is strictly monotonically increasing) */
         ("sequence", c_uint32),
         # /** Estimate of system time when the device started capturing the image */
-        ("capture_time", timeval),
+        ("capture_time", TimeVal),
         # /** Handle on the device that produced the image.
         #  * @warning You must not call any uvc_* functions during a callback. */
-        ("source", POINTER(uvc_device)),
+        ("source", POINTER(UvcDevice)),
         # /** Is the data buffer owned by the library?
         #  * If 1, the data buffer can be arbitrarily reallocated by frame conversion
         #  * functions.
@@ -173,9 +192,9 @@ class uvc_frame(Structure):
     ]
 
 
-class uvc_device_handle(Structure):
+class UvcDeviceHandle(Structure):
     _fields_ = [
-        ("dev", POINTER(uvc_device)),
+        ("dev", POINTER(UvcDevice)),
         ("prev", c_void_p),
         ("next", c_void_p),
         ("usb_devh", c_void_p),
@@ -191,7 +210,7 @@ class uvc_device_handle(Structure):
     ]
 
 
-class lep_oem_sw_version(Structure):
+class LepOemSwVersion(Structure):
     _fields_ = [
         ("gpp_major", c_ubyte),
         ("gpp_minor", c_ubyte),
@@ -203,7 +222,7 @@ class lep_oem_sw_version(Structure):
     ]
 
 
-class lep_sys_shutter_mode(Structure):
+class LepSysShutterMode(Structure):
     _fields_ = [
         ("shutterMode", c_uint32),
         ("tempLockoutState", c_uint32),
@@ -267,7 +286,7 @@ explicitCmdToOpenVal = 1
 desiredFfcTempDeltaVal = 0
 imminentDelayVal = 150  # If the camera temperature has changed by more than a specified value (default of 1.5 Celsius degrees) since the last FFC
 
-sysShutterManual = lep_sys_shutter_mode(
+sysShutterManual = LepSysShutterMode(
     0,
     0,
     1,
@@ -278,7 +297,7 @@ sysShutterManual = lep_sys_shutter_mode(
     desiredFfcTempDeltaVal,
     imminentDelayVal,
 )
-sysShutterAuto = lep_sys_shutter_mode(
+sysShutterAuto = LepSysShutterMode(
     1,
     0,
     1,
@@ -289,7 +308,7 @@ sysShutterAuto = lep_sys_shutter_mode(
     desiredFfcTempDeltaVal,
     imminentDelayVal,
 )
-sysShutterExternal = lep_sys_shutter_mode(
+sysShutterExternal = LepSysShutterMode(
     2,
     0,
     1,
@@ -302,14 +321,14 @@ sysShutterExternal = lep_sys_shutter_mode(
 )
 
 
-def call_extension_unit(devh, unit, control, data, size):
+def call_extension_unit(devh: UvcDeviceHandle, unit, control, data, size) -> Any:
     """
     Function to fetch data from System Control (Sys Ctrl) Module in Lepton
     """
     return libuvc.uvc_get_ctrl(devh, unit, control, data, size, 0x81)
 
 
-def set_extension_unit(devh, unit, control, data, size):
+def set_extension_unit(devh: UvcDeviceHandle, unit, control, data, size) -> Any:
     """
     Function to fetch data from System Control (Sys Ctrl) Module in Lepton
     """
@@ -349,14 +368,14 @@ VS_FMT_GUID_RGB565 = create_string_buffer(
     b"RGBP\x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71", 16
 )
 
-libuvc.uvc_get_format_descs.restype = POINTER(uvc_format_desc)
+libuvc.uvc_get_format_descs.restype = POINTER(UvcFormatDesc)
 
 
-def print_device_info(devh):
+def print_device_info(devh: UvcDeviceHandle) -> None:
     """
     Function to print FLIR information: the version, the serial number and the part number
     """
-    vers = lep_oem_sw_version()
+    vers = LepOemSwVersion()
     call_extension_unit(devh, OEM_UNIT_ID, 9, byref(vers), 8)
     print(
         f"Version gpp: {vers.gpp_major}.{vers.gpp_minor}.{vers.gpp_build} dsp: {vers.dsp_major}.{vers.dsp_minor}.{vers.dsp_build}"
@@ -371,21 +390,21 @@ def print_device_info(devh):
     print(f"FLIR serial #: {flir_sn.raw!r}")
 
 
-def uvc_iter_formats(devh):
+def uvc_iter_formats(devh: UvcDeviceHandle) -> Any:
     p_format_desc = libuvc.uvc_get_format_descs(devh)
     while p_format_desc:
         yield p_format_desc.contents
         p_format_desc = p_format_desc.contents.next
 
 
-def uvc_iter_frames_for_format(devh, format_desc):
+def uvc_iter_frames_for_format(devh: UvcDeviceHandle, format_desc) -> Any:
     p_frame_desc = format_desc.frame_descs
     while p_frame_desc:
         yield p_frame_desc.contents
         p_frame_desc = p_frame_desc.contents.next
 
 
-def print_device_formats(devh):
+def print_device_formats(devh: UvcDeviceHandle) -> None:
     for format_desc in uvc_iter_formats(devh):
         print(f"format: {format_desc.guidFormat[0:4]}")
         for frame_desc in uvc_iter_frames_for_format(devh, format_desc):
@@ -394,53 +413,17 @@ def print_device_formats(devh):
             )
 
 
-def uvc_get_frame_formats_by_guid(devh, vs_fmt_guid):
+def uvc_get_frame_formats_by_guid(devh: UvcDeviceHandle, vs_fmt_guid) -> list[Any]:
     for format_desc in uvc_iter_formats(devh):
         if vs_fmt_guid[0:4] == format_desc.guidFormat[0:4]:
-            return [fmt for fmt in uvc_iter_frames_for_format(devh, format_desc)]
+            return list(uvc_iter_frames_for_format(devh, format_desc))
     return []
 
 
-def set_manual_ffc(devh):
-    """
-    Not recommended to call this
-    """
-    sizeData = 32
-    # shutter_mode = (c_uint16)(0)
-    getSDK = 0x3D
-    controlID = (getSDK >> 2) + 1  # formula from Kurt Kiefer
-    print("controlID: " + str(controlID))
-    set_extension_unit(
-        devh, SYS_UNIT_ID, controlID, byref(sysShutterManual), sizeData
-    )  # set_extension_unit(devh, unit, control, data, size)
-    # print('MANUAL')
-    # print((c_uint16)(0))
+shutter = LepSysShutterMode()
 
 
-def set_auto_ffc(devh):
-    sizeData = 32
-    # shutter_mode = (c_uint16)(1)
-    getSDK = 0x3D
-    controlID = (getSDK >> 2) + 1  # formula from Kurt Kiefer
-    print("controlID: " + str(controlID))
-    set_extension_unit(devh, SYS_UNIT_ID, controlID, byref(sysShutterAuto), sizeData)
-    print("AUTO")
-    # print((c_uint16)(1))
-
-
-def set_external_ffc(devh):
-    sizeData = 32
-    # shutter_mode = (c_uint16)(2) #2 = external
-    getSDK = 0x3D
-    controlID = (getSDK >> 2) + 1  # formula from Kurt Kiefer
-    print("controlID: " + str(controlID))
-    set_extension_unit(devh, SYS_UNIT_ID, controlID, byref(sysShutterExternal), sizeData)
-
-
-shutter = lep_sys_shutter_mode()
-
-
-def print_shutter_info(devh):
+def print_shutter_info(devh: UvcDeviceHandle) -> None:
     getSDK = 0x3C
     controlID = (getSDK >> 2) + 1
     call_extension_unit(devh, SYS_UNIT_ID, controlID, byref(shutter), 32)
@@ -451,7 +434,7 @@ def print_shutter_info(devh):
     )
 
 
-def perform_manual_ffc(devh):
+def perform_manual_ffc(devh: UvcDeviceHandle) -> None:
     sizeData = 1
     shutter_mode = create_string_buffer(sizeData)
     # 0x200 Module ID VID
@@ -466,37 +449,69 @@ def perform_manual_ffc(devh):
     )  # set_extension_unit(devh, unit, control, data, size)
 
 
-def set_gain_low(devh):
-    sizeData = 4
-    gain_mode = (c_uint16)(1)  # 0=HIGH, 1=LOW, 2=AUTO
-    setGainSDK = 0x49
-    controlID = (setGainSDK >> 2) + 1  # formula from Kurt Kiefer
-    print("controlID: " + str(controlID))
-    set_extension_unit(
-        devh, SYS_UNIT_ID, controlID, byref(gain_mode), sizeData
-    )  # set_extension_unit(devh, unit, control, data, size)
-    perform_manual_ffc(devh)
+class Gain(IntEnum):
+    HIGH = 0
+    LOW = 1
+    AUTO = 2
+
+    def set_gain(self, devh: UvcDeviceHandle) -> None:
+        size_data = 4
+        gain_mode = (c_uint16)(self.value)
+        set_gain_sdk = 0x49
+        control_id = (set_gain_sdk >> 2) + 1  # formula from Kurt Kiefer
+        LOGGER.debug("controlID: " + str(control_id))
+
+        set_extension_unit(
+            devh, SYS_UNIT_ID, control_id, byref(gain_mode), size_data
+        )  # set_extension_unit(devh, unit, control, data, size)
+        perform_manual_ffc(devh)
 
 
-def set_gain_high(devh):
-    sizeData = 4
-    gain_mode = (c_uint16)(0)  # 0=HIGH, 1=LOW, 2=AUTO
-    setGainSDK = 0x49
-    controlID = (setGainSDK >> 2) + 1  # formula from Kurt Kiefer
-    print("controlID: " + str(controlID))
-    set_extension_unit(
-        devh, SYS_UNIT_ID, controlID, byref(gain_mode), sizeData
-    )  # set_extension_unit(devh, unit, control, data, size)
-    perform_manual_ffc(devh)
+class FFC:
+    def set_manual_ffc(self, devh: UvcDeviceHandle) -> None:
+        """
+        Not recommended to call this
+        """
+        sizeData = 32
+        # shutter_mode = (c_uint16)(0)
+        getSDK = 0x3D
+        controlID = (getSDK >> 2) + 1  # formula from Kurt Kiefer
+        print("controlID: " + str(controlID))
+        set_extension_unit(
+            devh, SYS_UNIT_ID, controlID, byref(sysShutterManual), sizeData
+        )  # set_extension_unit(devh, unit, control, data, size)
+        # print('MANUAL')
+        # print((c_uint16)(0))
+
+    def set_auto_ffc(self, devh: UvcDeviceHandle) -> None:
+        sizeData = 32
+        # shutter_mode = (c_uint16)(1)
+        getSDK = 0x3D
+        controlID = (getSDK >> 2) + 1  # formula from Kurt Kiefer
+        print("controlID: " + str(controlID))
+        set_extension_unit(devh, SYS_UNIT_ID, controlID, byref(sysShutterAuto), sizeData)
+        print("AUTO")
+        # print((c_uint16)(1))
+
+    def set_external_ffc(self, devh: UvcDeviceHandle) -> None:
+        sizeData = 32
+        # shutter_mode = (c_uint16)(2) #2 = external
+        getSDK = 0x3D
+        controlID = (getSDK >> 2) + 1  # formula from Kurt Kiefer
+        print("controlID: " + str(controlID))
+        set_extension_unit(devh, SYS_UNIT_ID, controlID, byref(sysShutterExternal), sizeData)
 
 
-def set_gain_auto(devh):
-    sizeData = 4
-    gain_mode = (c_uint16)(2)  # 0=HIGH, 1=LOW, 2=AUTO
-    setGainSDK = 0x49
-    controlID = (setGainSDK >> 2) + 1  # formula from Kurt Kiefer
-    print("controlID: " + str(controlID))
-    set_extension_unit(
-        devh, SYS_UNIT_ID, controlID, byref(gain_mode), sizeData
-    )  # set_extension_unit(devh, unit, control, data, size)
-    perform_manual_ffc(devh)
+class RadFluxLinearParams(Structure):
+    """Lepton RAD Flux Linear Parameters (eight 16-bit words)."""
+
+    _fields_ = [
+        ("sceneEmissivity", c_uint16),
+        ("TBkgK", c_uint16),
+        ("tauWindow", c_uint16),
+        ("TWindowK", c_uint16),
+        ("tauAtm", c_uint16),
+        ("TAtmK", c_uint16),
+        ("reflWindow", c_uint16),
+        ("TReflK", c_uint16),
+    ]

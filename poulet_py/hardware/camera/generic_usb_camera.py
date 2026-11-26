@@ -1,5 +1,4 @@
 try:
-    from time import monotonic_ns
     from typing import ClassVar, Literal
 
     from cv2 import (
@@ -96,8 +95,9 @@ class GenericUSBCamera(BaseHardware):
             raise RuntimeError(f"{type(self).__name__} Could not open camera")
 
     def _release_capture(self) -> None:
-        self._cap.release()
-        del self._cap
+        if hasattr(self, "_cap"):
+            self._cap.release()
+            del self._cap
 
     def _set_parameter(
         self,
@@ -116,7 +116,9 @@ class GenericUSBCamera(BaseHardware):
         cam_val = self._cap.get(param_id)
         if not isclose(cam_val, value):
             if on_error:
-                LOGGER.warning(f"Requested value for {name}: {value}, camera set {cam_val}")
+                LOGGER.warning(
+                    f"{type(self).__name__} Requested value for {name}: {value}, camera set {cam_val}"
+                )
 
     def _set_parameters(self) -> None:
         self._set_parameter(
@@ -144,7 +146,9 @@ class GenericUSBCamera(BaseHardware):
     def _set_exposure(self) -> None:
         modes = self._AUTO_EXPOSURE.get(self._cam.backend)
         if modes is None:
-            LOGGER.warning(f"Exposure control not supported on backend {self._cam.backend}")
+            LOGGER.warning(
+                f"{type(self).__name__} Exposure control not supported on backend {self._cam.backend}"
+            )
             return
 
         if self.exposure == "auto":
@@ -197,31 +201,3 @@ class GenericUSBCamera(BaseHardware):
             return
 
         return frame
-
-    def _acquisition_thread_func(self) -> None:
-        cap, stop, misses = self._cap, self._stop_acquisition_event, 0
-
-        try:
-            while not stop.is_set():
-                if not cap.grab():
-                    misses += 1
-                    if misses > 10:
-                        raise RuntimeError(
-                            f"{type(self).__name__} Camera stopped delivering frames"
-                        )
-                    stop.wait(0.005)
-                    continue
-
-                ts = monotonic_ns()
-
-                ok, frame = cap.retrieve()
-                if not ok:
-                    continue
-
-                misses = 0
-                self._sample_to_buffer(frame, ts)
-        except Exception as e:
-            LOGGER.exception(e)
-        finally:
-            with self._acquisition_condition:
-                self._acquisition_condition.notify_all()

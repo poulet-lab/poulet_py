@@ -1,5 +1,6 @@
 # ruff: noqa TID252
-from .camera import BaslerCamera, Lepton, DCAM, DCAMPROP, GenericUSBCamera, GenieCamera
+from .camera import DCAM, DCAMPROP, BaslerCamera, GenericUSBCamera, GenieCamera, Lepton
+from .common import BaseHardware
 from .daq import (
     NIAnalogInputChannel,
     NIAnalogInputTask,
@@ -15,22 +16,24 @@ from .daq import (
     NIDigitalOutputChannel,
     NIDigitalOutputTask,
 )
+from .sensor import Soho
 from .stimulator import TCS, Arduino, JulaboChiller, TCSCommand
 from .triggers import BaseTrigger, GPIOTrigger, KeyboardTrigger
-from .sensor import Soho
-from .common import BaseHardware
 
 __all__ = [
-    "GenericUSBCamera",
-    "BaseHardware",
+    "DCAM",
+    "DCAMPROP",
     "TCS",
     "Arduino",
+    "BaseHardware",
     "BaseTrigger",
-    "GenieCamera",
     "BaslerCamera",
     "GPIOTrigger",
+    "GenericUSBCamera",
+    "GenieCamera",
     "JulaboChiller",
     "KeyboardTrigger",
+    "Lepton",
     "NIAnalogInputChannel",
     "NIAnalogInputTask",
     "NIAnalogOutputChannel",
@@ -44,9 +47,6 @@ __all__ = [
     "NIDigitalInputTask",
     "NIDigitalOutputChannel",
     "NIDigitalOutputTask",
-    "TCSCommand",
-    "Lepton",
     "Soho",
-    "DCAM",
-    "DCAMPROP",
+    "TCSCommand",
 ]
